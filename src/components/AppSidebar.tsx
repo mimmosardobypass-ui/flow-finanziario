@@ -1,5 +1,7 @@
 import { LayoutDashboard, Receipt, LogOut, Wallet } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -10,7 +12,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
 } from "@/components/ui/sidebar";
 
 const navItems = [
@@ -19,6 +20,17 @@ const navItems = [
 ];
 
 export function AppSidebar() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
+  };
+
+  const userInitial = user?.email?.charAt(0).toUpperCase() || "U";
+  const userEmail = user?.email || "utente@email.com";
+
   return (
     <Sidebar className="border-r border-border">
       <SidebarHeader className="p-4 border-b border-border">
@@ -60,13 +72,16 @@ export function AppSidebar() {
       <SidebarFooter className="p-4 border-t border-border">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
-            <span className="text-sm font-medium text-foreground">U</span>
+            <span className="text-sm font-medium text-foreground">{userInitial}</span>
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground truncate">Utente</p>
-            <p className="text-xs text-muted-foreground truncate">utente@email.com</p>
+            <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
           </div>
-          <button className="p-2 rounded-lg hover:bg-sidebar-accent text-muted-foreground hover:text-foreground transition-colors">
+          <button 
+            onClick={handleLogout}
+            className="p-2 rounded-lg hover:bg-sidebar-accent text-muted-foreground hover:text-foreground transition-colors"
+          >
             <LogOut className="h-4 w-4" />
           </button>
         </div>

@@ -1,19 +1,46 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Wallet, Mail, Lock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Wallet, Mail, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { signIn, user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (user) {
+      navigate("/", { replace: true });
+    }
+  }, [user, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement actual login with Supabase
-    console.log("Login attempt:", { email, password });
+    setIsLoading(true);
+
+    const { error } = await signIn(email, password);
+
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Errore di accesso",
+        description: error.message === "Invalid login credentials" 
+          ? "Email o password non validi" 
+          : error.message,
+      });
+    } else {
+      navigate("/", { replace: true });
+    }
+
+    setIsLoading(false);
   };
 
   return (
@@ -46,6 +73,7 @@ export default function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground"
                   required
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -61,11 +89,12 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground"
                   required
+                  disabled={isLoading}
                 />
               </div>
             </div>
-            <Button type="submit" className="w-full">
-              Accedi
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accedi"}
             </Button>
           </form>
           <div className="mt-6 text-center text-sm text-muted-foreground">
