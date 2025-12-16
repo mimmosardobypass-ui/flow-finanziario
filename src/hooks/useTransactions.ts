@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect, useState } from "react";
 
 export interface Transaction {
   id: string;
@@ -35,36 +34,8 @@ export interface UpdateTransactionInput extends CreateTransactionInput {
   id: string;
 }
 
-async function seedUserData(userId: string) {
-  const { error } = await supabase.rpc("seed_user_data", { user_uuid: userId });
-  if (error) console.error("Seed error:", error);
-}
-
 export function useTransactions() {
   const { user } = useAuth();
-  const [hasSeeded, setHasSeeded] = useState(false);
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    async function checkAndSeed() {
-      if (!user || hasSeeded) return;
-
-      // Check if user has any categories
-      const { data } = await supabase
-        .from("categories")
-        .select("id")
-        .limit(1);
-
-      if (!data || data.length === 0) {
-        await seedUserData(user.id);
-        queryClient.invalidateQueries({ queryKey: ["transactions"] });
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
-      }
-      setHasSeeded(true);
-    }
-
-    checkAndSeed();
-  }, [user, hasSeeded, queryClient]);
 
   return useQuery({
     queryKey: ["transactions", user?.id],
@@ -87,7 +58,7 @@ export function useTransactions() {
       if (error) throw error;
       return data as TransactionWithCategory[];
     },
-    enabled: !!user && hasSeeded,
+    enabled: !!user,
   });
 }
 
