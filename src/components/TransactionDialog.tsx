@@ -51,6 +51,7 @@ export function TransactionDialog({
   const [type, setType] = useState<"income" | "expense">("expense");
   const [categoryId, setCategoryId] = useState<string>("");
   const [date, setDate] = useState<Date>(new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const { data: categories = [] } = useCategories();
   const createMutation = useCreateTransaction();
@@ -211,7 +212,7 @@ export function TransactionDialog({
 
           <div className="space-y-2">
             <Label>Data</Label>
-            <Popover>
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -228,7 +229,12 @@ export function TransactionDialog({
                 <Calendar
                   mode="single"
                   selected={date}
-                  onSelect={(d) => d && setDate(d)}
+                  onSelect={(d) => {
+                    if (d) {
+                      setDate(d);
+                      setCalendarOpen(false);
+                    }
+                  }}
                   initialFocus
                   className="pointer-events-auto"
                 />
