@@ -87,7 +87,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      seed_user_data: { Args: { user_uuid: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
