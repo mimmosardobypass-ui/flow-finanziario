@@ -14,6 +14,8 @@ interface DeleteConfirmDialogProps {
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   isLoading?: boolean;
+  title?: string;
+  description?: string;
 }
 
 export function DeleteConfirmDialog({
@@ -21,16 +23,15 @@ export function DeleteConfirmDialog({
   onOpenChange,
   onConfirm,
   isLoading,
+  title = "Eliminare questa transazione?",
+  description = "Questa azione non può essere annullata. La transazione verrà rimossa definitivamente.",
 }: DeleteConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Eliminare questa transazione?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Questa azione non può essere annullata. La transazione verrà rimossa
-            definitivamente.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>Annulla</AlertDialogCancel>
