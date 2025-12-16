@@ -70,3 +70,49 @@
     background: linear-gradient(145deg, hsl(0 0% 8%) 0%, hsl(0 0% 6%) 100%);
   }
 }
+
+/* Stili per stampa */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  .print\\:hidden {
+    display: none !important;
+  }
+  
+  .print\\:block {
+    display: block !important;
+  }
+  
+  .print\\:table-cell {
+    display: table-cell !important;
+  }
+  
+  .text-success {
+    color: #10b981 !important;
+  }
+  
+  .text-destructive {
+    color: #ef4444 !important;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+  }
+  
+  th {
+    background-color: #f5f5f5 !important;
+    font-weight: bold;
+  }
+}
