@@ -1,5 +1,19 @@
 import React, { useMemo, useState } from "react";
-import { startOfMonth, endOfMonth, isWithinInterval, getMonth, getYear } from "date-fns";
+import { 
+  startOfMonth, 
+  endOfMonth, 
+  isWithinInterval, 
+  getMonth, 
+  getYear,
+  subMonths,
+  eachDayOfInterval,
+  eachMonthOfInterval,
+  startOfYear,
+  endOfYear,
+  isSameDay,
+  isSameMonth,
+  differenceInDays
+} from "date-fns";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import {
@@ -8,6 +22,7 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
+  CalendarIcon,
 } from "lucide-react";
 import {
   LineChart,
@@ -21,6 +36,13 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -29,8 +51,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTransactions } from "@/hooks/useTransactions";
+import { cn } from "@/lib/utils";
 
-// Custom Tooltip for the annual chart
+type PeriodType = "thisMonth" | "threeMonths" | "year" | "custom";
+
+// Custom Tooltip for the chart
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
@@ -54,6 +79,14 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export default function Dashboard() {
   const { data: transactions = [], isLoading } = useTransactions();
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [periodType, setPeriodType] = useState<PeriodType>("thisMonth");
+  const [customDateRange, setCustomDateRange] = useState<{
+    from: Date | undefined;
+    to: Date | undefined;
+  }>({
+    from: undefined,
+    to: undefined,
+  });
 
   // Get available years from transactions
   const availableYears = useMemo(() => {
@@ -65,33 +98,92 @@ export default function Dashboard() {
     return Array.from(years).sort((a, b) => b - a);
   }, [transactions]);
 
-  // Calculate monthly data for the chart
-  const monthlyChartData = useMemo(() => {
-    const monthNames = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
-    
-    return monthNames.map((monthName, monthIndex) => {
-      let income = 0;
-      let expenses = 0;
+  // Calculate chart data based on selected period
+  const chartData = useMemo(() => {
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date;
+    let groupByDay = true;
 
-      transactions.forEach((t) => {
-        const txDate = new Date(t.date);
-        if (getYear(txDate) === selectedYear && getMonth(txDate) === monthIndex) {
-          if (t.type === "income") {
-            income += t.amount;
-          } else {
-            expenses += t.amount;
-          }
+    switch (periodType) {
+      case "thisMonth":
+        startDate = startOfMonth(now);
+        endDate = endOfMonth(now);
+        groupByDay = true;
+        break;
+      case "threeMonths":
+        startDate = startOfMonth(subMonths(now, 2));
+        endDate = endOfMonth(now);
+        groupByDay = true;
+        break;
+      case "year":
+        startDate = startOfYear(new Date(selectedYear, 0, 1));
+        endDate = endOfYear(new Date(selectedYear, 0, 1));
+        groupByDay = false;
+        break;
+      case "custom":
+        if (!customDateRange.from || !customDateRange.to) {
+          return [];
         }
-      });
+        startDate = customDateRange.from;
+        endDate = customDateRange.to;
+        const daysDiff = differenceInDays(endDate, startDate);
+        groupByDay = daysDiff <= 60;
+        break;
+      default:
+        return [];
+    }
 
-      return {
-        month: monthName,
-        entrate: income,
-        uscite: expenses,
-        saldo: income - expenses,
-      };
-    });
-  }, [transactions, selectedYear]);
+    if (groupByDay) {
+      const days = eachDayOfInterval({ start: startDate, end: endDate });
+      return days.map((day) => {
+        let income = 0;
+        let expenses = 0;
+
+        transactions.forEach((t) => {
+          const txDate = new Date(t.date);
+          if (isSameDay(txDate, day)) {
+            if (t.type === "income") {
+              income += t.amount;
+            } else {
+              expenses += t.amount;
+            }
+          }
+        });
+
+        return {
+          label: format(day, "dd MMM", { locale: it }),
+          entrate: income,
+          uscite: expenses,
+          saldo: income - expenses,
+        };
+      });
+    } else {
+      const months = eachMonthOfInterval({ start: startDate, end: endDate });
+      return months.map((month) => {
+        let income = 0;
+        let expenses = 0;
+
+        transactions.forEach((t) => {
+          const txDate = new Date(t.date);
+          if (isSameMonth(txDate, month) && getYear(txDate) === getYear(month)) {
+            if (t.type === "income") {
+              income += t.amount;
+            } else {
+              expenses += t.amount;
+            }
+          }
+        });
+
+        return {
+          label: format(month, "MMM yyyy", { locale: it }),
+          entrate: income,
+          uscite: expenses,
+          saldo: income - expenses,
+        };
+      });
+    }
+  }, [transactions, periodType, selectedYear, customDateRange]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -118,7 +210,6 @@ export default function Dashboard() {
         if (t.type === "income") {
           monthlyIncome += t.amount;
 
-          // Track category income
           if (t.categories) {
             const catId = t.categories.id;
             if (!incomeCategoryTotals[catId]) {
@@ -129,7 +220,6 @@ export default function Dashboard() {
         } else {
           monthlyExpenses += t.amount;
 
-          // Track category spending
           if (t.categories) {
             const catId = t.categories.id;
             if (!categoryTotals[catId]) {
@@ -141,7 +231,6 @@ export default function Dashboard() {
       }
     });
 
-    // Colors for expense categories
     const expenseColors = [
       "bg-primary",
       "bg-warning", 
@@ -153,7 +242,6 @@ export default function Dashboard() {
       "bg-destructive/70",
     ];
 
-    // Colors for income categories (only positive colors: green/blue)
     const incomeColors = [
       "bg-success",
       "bg-primary",
@@ -446,73 +534,166 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Annual Trend Chart */}
+      {/* Financial Trend Chart */}
       <Card className="bg-card border-border">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-foreground">Andamento Annuale</CardTitle>
-          <Select
-            value={selectedYear.toString()}
-            onValueChange={(value) => setSelectedYear(parseInt(value))}
-          >
-            <SelectTrigger className="w-[100px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableYears.map((year) => (
-                <SelectItem key={year} value={year.toString()}>
-                  {year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <CardHeader className="space-y-4">
+          <div className="flex flex-row items-center justify-between">
+            <CardTitle className="text-foreground">Andamento Finanziario</CardTitle>
+            
+            {periodType === "year" && (
+              <Select
+                value={selectedYear.toString()}
+                onValueChange={(value) => setSelectedYear(parseInt(value))}
+              >
+                <SelectTrigger className="w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableYears.map((year) => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          
+          {/* Period Selection Buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-1">
+              <Button
+                variant={periodType === "thisMonth" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPeriodType("thisMonth")}
+              >
+                Questo mese
+              </Button>
+              <Button
+                variant={periodType === "threeMonths" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPeriodType("threeMonths")}
+              >
+                3 mesi
+              </Button>
+              <Button
+                variant={periodType === "year" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPeriodType("year")}
+              >
+                Anno
+              </Button>
+              <Button
+                variant={periodType === "custom" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPeriodType("custom")}
+              >
+                Personalizzato
+              </Button>
+            </div>
+            
+            {/* Custom Date Pickers */}
+            {periodType === "custom" && (
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <CalendarIcon className="h-4 w-4" />
+                      {customDateRange.from 
+                        ? format(customDateRange.from, "dd/MM/yyyy") 
+                        : "Data inizio"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={customDateRange.from}
+                      onSelect={(date) => setCustomDateRange(prev => ({ ...prev, from: date }))}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <span className="text-muted-foreground">→</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <CalendarIcon className="h-4 w-4" />
+                      {customDateRange.to 
+                        ? format(customDateRange.to, "dd/MM/yyyy") 
+                        : "Data fine"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={customDateRange.to}
+                      onSelect={(date) => setCustomDateRange(prev => ({ ...prev, to: date }))}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyChartData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 12 }}
-                  className="text-muted-foreground"
-                />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => `€${value}`}
-                  className="text-muted-foreground"
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="entrate"
-                  name="Entrate"
-                  stroke="hsl(var(--success))"
-                  strokeWidth={2}
-                  dot={{ fill: "hsl(var(--success))", r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="uscite"
-                  name="Uscite"
-                  stroke="hsl(var(--destructive))"
-                  strokeWidth={2}
-                  dot={{ fill: "hsl(var(--destructive))", r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="saldo"
-                  name="Saldo"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot={{ fill: "hsl(var(--primary))", r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {chartData.length === 0 ? (
+            <p className="text-muted-foreground text-center py-16">
+              {periodType === "custom" && (!customDateRange.from || !customDateRange.to)
+                ? "Seleziona un periodo personalizzato"
+                : "Nessun dato per il periodo selezionato"}
+            </p>
+          ) : (
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 11 }}
+                    className="text-muted-foreground"
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => `€${value}`}
+                    className="text-muted-foreground"
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="entrate"
+                    name="Entrate"
+                    stroke="hsl(var(--success))"
+                    strokeWidth={2}
+                    dot={{ fill: "hsl(var(--success))", r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="uscite"
+                    name="Uscite"
+                    stroke="hsl(var(--destructive))"
+                    strokeWidth={2}
+                    dot={{ fill: "hsl(var(--destructive))", r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="saldo"
+                    name="Saldo"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    dot={{ fill: "hsl(var(--primary))", r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
