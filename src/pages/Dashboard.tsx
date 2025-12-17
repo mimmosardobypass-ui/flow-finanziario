@@ -25,6 +25,7 @@ export default function Dashboard() {
     let monthlyIncome = 0;
     let monthlyExpenses = 0;
     const categoryTotals: Record<string, { name: string; amount: number }> = {};
+    const incomeCategoryTotals: Record<string, { name: string; amount: number }> = {};
 
     transactions.forEach((t) => {
       const amount = t.type === "income" ? t.amount : -t.amount;
@@ -39,6 +40,15 @@ export default function Dashboard() {
       if (isThisMonth) {
         if (t.type === "income") {
           monthlyIncome += t.amount;
+
+          // Track category income
+          if (t.categories) {
+            const catId = t.categories.id;
+            if (!incomeCategoryTotals[catId]) {
+              incomeCategoryTotals[catId] = { name: t.categories.name, amount: 0 };
+            }
+            incomeCategoryTotals[catId].amount += t.amount;
+          }
         } else {
           monthlyExpenses += t.amount;
 
@@ -54,17 +64,30 @@ export default function Dashboard() {
       }
     });
 
-    // Convert category totals to sorted array with percentages
-    const colors = [
+    // Colors for expense categories
+    const expenseColors = [
       "bg-primary",
       "bg-warning", 
       "bg-destructive",
-      "bg-success",
       "bg-accent",
       "bg-muted-foreground",
       "bg-primary/70",
       "bg-warning/70",
+      "bg-destructive/70",
     ];
+
+    // Colors for income categories (only positive colors: green/blue)
+    const incomeColors = [
+      "bg-success",
+      "bg-primary",
+      "bg-success/70",
+      "bg-primary/70",
+      "bg-accent",
+      "bg-success/50",
+      "bg-primary/50",
+      "bg-accent/70",
+    ];
+
     const sortedCategories = Object.values(categoryTotals)
       .sort((a, b) => b.amount - a.amount)
       .map((cat, index) => ({
@@ -73,7 +96,18 @@ export default function Dashboard() {
           monthlyExpenses > 0
             ? Math.round((cat.amount / monthlyExpenses) * 100)
             : 0,
-        color: colors[index % colors.length],
+        color: expenseColors[index % expenseColors.length],
+      }));
+
+    const sortedIncomeCategories = Object.values(incomeCategoryTotals)
+      .sort((a, b) => b.amount - a.amount)
+      .map((cat, index) => ({
+        ...cat,
+        percentage:
+          monthlyIncome > 0
+            ? Math.round((cat.amount / monthlyIncome) * 100)
+            : 0,
+        color: incomeColors[index % incomeColors.length],
       }));
 
     return {
@@ -82,6 +116,7 @@ export default function Dashboard() {
       monthlyExpenses,
       netSavings: monthlyIncome - monthlyExpenses,
       spendingByCategory: sortedCategories,
+      incomeByCategory: sortedIncomeCategories,
       recentTransactions: transactions.slice(0, 5),
     };
   }, [transactions]);
@@ -201,7 +236,7 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom Section */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Recent Transactions */}
         <Card className="bg-card border-border">
           <CardHeader>
@@ -282,6 +317,41 @@ export default function Dashboard() {
                         {item.name}
                       </span>
                       <span className="text-xs text-muted-foreground">
+                        €{item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${item.color} rounded-full transition-all`}
+                        style={{ width: `${item.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Income by Category */}
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-foreground">Entrate per Categoria</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {stats.incomeByCategory.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">
+                Nessuna entrata questo mese
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {stats.incomeByCategory.map((item) => (
+                  <div key={item.name} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-foreground truncate max-w-[60%]">
+                        {item.name}
+                      </span>
+                      <span className="text-xs text-success">
                         €{item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
                       </span>
                     </div>
