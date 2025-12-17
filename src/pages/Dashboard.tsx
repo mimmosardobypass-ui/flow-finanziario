@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
+import { useMemo, useState } from "react";
+import { startOfMonth, endOfMonth, isWithinInterval, getMonth, getYear } from "date-fns";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import {
@@ -9,12 +9,89 @@ import {
   ArrowUpRight,
   ArrowDownRight,
 } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useTransactions } from "@/hooks/useTransactions";
+
+// Custom Tooltip for the annual chart
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
+        <p className="font-semibold text-foreground mb-2">{label}</p>
+        <p className="text-success text-sm">
+          Entrate: €{payload[0]?.value?.toLocaleString("it-IT", { minimumFractionDigits: 2 }) || "0,00"}
+        </p>
+        <p className="text-destructive text-sm">
+          Uscite: €{payload[1]?.value?.toLocaleString("it-IT", { minimumFractionDigits: 2 }) || "0,00"}
+        </p>
+        <p className="text-primary text-sm font-medium">
+          Saldo: €{payload[2]?.value?.toLocaleString("it-IT", { minimumFractionDigits: 2 }) || "0,00"}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
 
 export default function Dashboard() {
   const { data: transactions = [], isLoading } = useTransactions();
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  // Get available years from transactions
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    transactions.forEach((t) => {
+      years.add(getYear(new Date(t.date)));
+    });
+    years.add(new Date().getFullYear());
+    return Array.from(years).sort((a, b) => b - a);
+  }, [transactions]);
+
+  // Calculate monthly data for the chart
+  const monthlyChartData = useMemo(() => {
+    const monthNames = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+    
+    return monthNames.map((monthName, monthIndex) => {
+      let income = 0;
+      let expenses = 0;
+
+      transactions.forEach((t) => {
+        const txDate = new Date(t.date);
+        if (getYear(txDate) === selectedYear && getMonth(txDate) === monthIndex) {
+          if (t.type === "income") {
+            income += t.amount;
+          } else {
+            expenses += t.amount;
+          }
+        }
+      });
+
+      return {
+        month: monthName,
+        entrate: income,
+        uscite: expenses,
+        saldo: income - expenses,
+      };
+    });
+  }, [transactions, selectedYear]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -368,6 +445,76 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Annual Trend Chart */}
+      <Card className="bg-card border-border">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-foreground">Andamento Annuale</CardTitle>
+          <Select
+            value={selectedYear.toString()}
+            onValueChange={(value) => setSelectedYear(parseInt(value))}
+          >
+            <SelectTrigger className="w-[100px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableYears.map((year) => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={monthlyChartData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: 12 }}
+                  className="text-muted-foreground"
+                />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(value) => `€${value}`}
+                  className="text-muted-foreground"
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="entrate"
+                  name="Entrate"
+                  stroke="hsl(var(--success))"
+                  strokeWidth={2}
+                  dot={{ fill: "hsl(var(--success))", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="uscite"
+                  name="Uscite"
+                  stroke="hsl(var(--destructive))"
+                  strokeWidth={2}
+                  dot={{ fill: "hsl(var(--destructive))", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="saldo"
+                  name="Saldo"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
