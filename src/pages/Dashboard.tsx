@@ -185,14 +185,67 @@ export default function Dashboard() {
     }
   }, [transactions, periodType, selectedYear, customDateRange]);
 
-  const stats = useMemo(() => {
+  // Calculate period date range based on periodType
+  const periodDateRange = useMemo(() => {
     const now = new Date();
-    const monthStart = startOfMonth(now);
-    const monthEnd = endOfMonth(now);
+    let startDate: Date;
+    let endDate: Date;
+
+    switch (periodType) {
+      case "thisMonth":
+        startDate = startOfMonth(now);
+        endDate = endOfMonth(now);
+        break;
+      case "threeMonths":
+        startDate = startOfMonth(subMonths(now, 2));
+        endDate = endOfMonth(now);
+        break;
+      case "year":
+        startDate = startOfYear(new Date(selectedYear, 0, 1));
+        endDate = endOfYear(new Date(selectedYear, 0, 1));
+        break;
+      case "custom":
+        if (customDateRange.from && customDateRange.to) {
+          startDate = customDateRange.from;
+          endDate = customDateRange.to;
+        } else {
+          startDate = new Date(0);
+          endDate = new Date(0);
+        }
+        break;
+      default:
+        startDate = startOfMonth(now);
+        endDate = endOfMonth(now);
+    }
+
+    return { startDate, endDate };
+  }, [periodType, selectedYear, customDateRange]);
+
+  // Get period label for display
+  const periodLabel = useMemo(() => {
+    switch (periodType) {
+      case "thisMonth":
+        return "Questo mese";
+      case "threeMonths":
+        return "Ultimi 3 mesi";
+      case "year":
+        return `Anno ${selectedYear}`;
+      case "custom":
+        if (customDateRange.from && customDateRange.to) {
+          return `${format(customDateRange.from, "dd/MM")} - ${format(customDateRange.to, "dd/MM/yyyy")}`;
+        }
+        return "Periodo personalizzato";
+      default:
+        return "";
+    }
+  }, [periodType, selectedYear, customDateRange]);
+
+  const stats = useMemo(() => {
+    const { startDate, endDate } = periodDateRange;
 
     let totalBalance = 0;
-    let monthlyIncome = 0;
-    let monthlyExpenses = 0;
+    let periodIncome = 0;
+    let periodExpenses = 0;
     const categoryTotals: Record<string, { name: string; amount: number }> = {};
     const incomeCategoryTotals: Record<string, { name: string; amount: number }> = {};
 
@@ -201,14 +254,14 @@ export default function Dashboard() {
       totalBalance += amount;
 
       const txDate = new Date(t.date);
-      const isThisMonth = isWithinInterval(txDate, {
-        start: monthStart,
-        end: monthEnd,
+      const isInPeriod = isWithinInterval(txDate, {
+        start: startDate,
+        end: endDate,
       });
 
-      if (isThisMonth) {
+      if (isInPeriod) {
         if (t.type === "income") {
-          monthlyIncome += t.amount;
+          periodIncome += t.amount;
 
           if (t.categories) {
             const catId = t.categories.id;
@@ -218,7 +271,7 @@ export default function Dashboard() {
             incomeCategoryTotals[catId].amount += t.amount;
           }
         } else {
-          monthlyExpenses += t.amount;
+          periodExpenses += t.amount;
 
           if (t.categories) {
             const catId = t.categories.id;
@@ -258,8 +311,8 @@ export default function Dashboard() {
       .map((cat, index) => ({
         ...cat,
         percentage:
-          monthlyExpenses > 0
-            ? Math.round((cat.amount / monthlyExpenses) * 100)
+          periodExpenses > 0
+            ? Math.round((cat.amount / periodExpenses) * 100)
             : 0,
         color: expenseColors[index % expenseColors.length],
       }));
@@ -269,22 +322,22 @@ export default function Dashboard() {
       .map((cat, index) => ({
         ...cat,
         percentage:
-          monthlyIncome > 0
-            ? Math.round((cat.amount / monthlyIncome) * 100)
+          periodIncome > 0
+            ? Math.round((cat.amount / periodIncome) * 100)
             : 0,
         color: incomeColors[index % incomeColors.length],
       }));
 
     return {
       totalBalance,
-      monthlyIncome,
-      monthlyExpenses,
-      netSavings: monthlyIncome - monthlyExpenses,
+      periodIncome,
+      periodExpenses,
+      netSavings: periodIncome - periodExpenses,
       spendingByCategory: sortedCategories,
       incomeByCategory: sortedIncomeCategories,
       recentTransactions: transactions.slice(0, 5),
     };
-  }, [transactions]);
+  }, [transactions, periodDateRange]);
 
   if (isLoading) {
     return (
@@ -351,9 +404,9 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-success">
-              €{stats.monthlyIncome.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+              €{stats.periodIncome.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Questo mese</p>
+            <p className="text-xs text-muted-foreground mt-1">{periodLabel}</p>
           </CardContent>
         </Card>
 
@@ -367,9 +420,9 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">
-              €{stats.monthlyExpenses.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+              €{stats.periodExpenses.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Questo mese</p>
+            <p className="text-xs text-muted-foreground mt-1">{periodLabel}</p>
           </CardContent>
         </Card>
 
@@ -394,7 +447,7 @@ export default function Dashboard() {
               €{stats.netSavings.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {stats.netSavings >= 0 ? "Risparmiato" : "Perdita"} questo mese
+              {stats.netSavings >= 0 ? "Risparmiato" : "Perdita"} - {periodLabel}
             </p>
           </CardContent>
         </Card>
@@ -467,11 +520,12 @@ export default function Dashboard() {
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-foreground">Spese per Categoria</CardTitle>
+            <p className="text-xs text-muted-foreground">{periodLabel}</p>
           </CardHeader>
           <CardContent>
             {stats.spendingByCategory.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
-                Nessuna spesa questo mese
+                Nessuna spesa nel periodo selezionato
               </p>
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -502,11 +556,12 @@ export default function Dashboard() {
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-foreground">Entrate per Categoria</CardTitle>
+            <p className="text-xs text-muted-foreground">{periodLabel}</p>
           </CardHeader>
           <CardContent>
             {stats.incomeByCategory.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
-                Nessuna entrata questo mese
+                Nessuna entrata nel periodo selezionato
               </p>
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto">
