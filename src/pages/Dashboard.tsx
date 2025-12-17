@@ -55,16 +55,25 @@ export default function Dashboard() {
     });
 
     // Convert category totals to sorted array with percentages
+    const colors = [
+      "bg-primary",
+      "bg-warning", 
+      "bg-destructive",
+      "bg-success",
+      "bg-accent",
+      "bg-muted-foreground",
+      "bg-primary/70",
+      "bg-warning/70",
+    ];
     const sortedCategories = Object.values(categoryTotals)
       .sort((a, b) => b.amount - a.amount)
-      .slice(0, 4)
       .map((cat, index) => ({
         ...cat,
         percentage:
           monthlyExpenses > 0
             ? Math.round((cat.amount / monthlyExpenses) * 100)
             : 0,
-        color: ["bg-primary", "bg-warning", "bg-destructive", "bg-muted-foreground"][index],
+        color: colors[index % colors.length],
       }));
 
     return {
@@ -265,18 +274,18 @@ export default function Dashboard() {
                 Nessuna spesa questo mese
               </p>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-2 max-h-64 overflow-y-auto">
                 {stats.spendingByCategory.map((item) => (
-                  <div key={item.name} className="space-y-2">
+                  <div key={item.name} className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-foreground">
+                      <span className="text-xs font-medium text-foreground truncate max-w-[60%]">
                         {item.name}
                       </span>
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         €{item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
                       </span>
                     </div>
-                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                       <div
                         className={`h-full ${item.color} rounded-full transition-all`}
                         style={{ width: `${item.percentage}%` }}
