@@ -59,11 +59,6 @@ export function useFilteredTransactions(filters: TransactionFilters) {
         query = query.lte("amount", filters.amountMax);
       }
 
-      // Filtro per testo nella descrizione
-      if (filters.searchText && filters.searchText.trim()) {
-        query = query.ilike("description", `%${filters.searchText.trim()}%`);
-      }
-
       const { data, error } = await query.order("date", { ascending: false });
 
       if (error) throw error;
