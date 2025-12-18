@@ -23,6 +23,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   CalendarIcon,
+  FileDown,
 } from "lucide-react";
 import {
   LineChart,
@@ -52,6 +53,8 @@ import {
 } from "@/components/ui/select";
 import { useTransactions } from "@/hooks/useTransactions";
 import { cn } from "@/lib/utils";
+import { exportDashboardToPdf } from "@/utils/exportDashboardPdf";
+import { toast } from "sonner";
 
 type PeriodType = "thisMonth" | "threeMonths" | "year" | "custom";
 
@@ -365,13 +368,35 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-          Dashboard
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Panoramica delle tue finanze
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+            Dashboard
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Panoramica delle tue finanze
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => {
+            exportDashboardToPdf({
+              periodLabel,
+              totalBalance: stats.totalBalance,
+              periodIncome: stats.periodIncome,
+              periodExpenses: stats.periodExpenses,
+              netSavings: stats.netSavings,
+              spendingByCategory: stats.spendingByCategory,
+              incomeByCategory: stats.incomeByCategory,
+              dateFrom: periodDateRange.startDate,
+              dateTo: periodDateRange.endDate,
+            });
+            toast.success("Report Dashboard esportato in PDF!");
+          }}
+        >
+          <FileDown className="h-4 w-4 mr-2" />
+          Esporta PDF
+        </Button>
       </div>
 
       {/* Summary Cards */}
