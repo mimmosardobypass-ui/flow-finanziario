@@ -208,12 +208,6 @@ export function TransactionDialog({
             </Select>
           </div>
 
-          <QuickCategoryDialog
-            open={quickCategoryOpen}
-            onOpenChange={setQuickCategoryOpen}
-            type={type}
-            onCategoryCreated={(newId) => setCategoryId(newId)}
-          />
 
           <div className="space-y-2">
             <Label>Data</Label>
@@ -260,6 +254,13 @@ export function TransactionDialog({
             </Button>
           </div>
         </form>
+
+        <QuickCategoryDialog
+          open={quickCategoryOpen}
+          onOpenChange={setQuickCategoryOpen}
+          type={type}
+          onCategoryCreated={(newId) => setCategoryId(newId)}
+        />
       </DialogContent>
     </Dialog>
   );
