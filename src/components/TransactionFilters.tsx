@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Search, Filter, X, Calendar, DollarSign, Tag } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -36,6 +36,14 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
 
   const { data: categories = [] } = useCategories();
 
+  // Filtra le categorie in base al tipo selezionato
+  const filteredCategories = useMemo(() => {
+    if (!filters.type || filters.type === "all") {
+      return categories; // Mostra tutte le categorie
+    }
+    return categories.filter((cat) => cat.type === filters.type);
+  }, [categories, filters.type]);
+
   // Debounce per la ricerca
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -45,9 +53,21 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
   }, [searchInput]);
 
   const handleTypeChange = (value: string) => {
+    const newType = value as "all" | "income" | "expense";
+
+    // Reset categoria se non è più valida per il nuovo tipo
+    let newCategoryId = filters.categoryId;
+    if (newCategoryId && newType !== "all") {
+      const currentCategory = categories.find((c) => c.id === newCategoryId);
+      if (currentCategory && currentCategory.type !== newType) {
+        newCategoryId = undefined; // Reset a "Tutte le categorie"
+      }
+    }
+
     onFiltersChange({
       ...filters,
-      type: value as "all" | "income" | "expense",
+      type: newType,
+      categoryId: newCategoryId,
     });
   };
 
@@ -150,7 +170,7 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
           </SelectTrigger>
           <SelectContent className="bg-popover border-border">
             <SelectItem value="all">Tutte le categorie</SelectItem>
-            {categories.map((cat) => (
+            {filteredCategories.map((cat) => (
               <SelectItem key={cat.id} value={cat.id}>
                 {cat.name}
               </SelectItem>
