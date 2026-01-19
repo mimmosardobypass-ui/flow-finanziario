@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, AlertCircle } from "lucide-react";
-import { Link } from "react-router-dom";
+import { CalendarIcon, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -26,7 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCategories } from "@/hooks/useCategories";
 import {
   useCreateTransaction,
@@ -34,6 +32,7 @@ import {
   TransactionWithCategory,
 } from "@/hooks/useTransactions";
 import { toast } from "@/hooks/use-toast";
+import { QuickCategoryDialog } from "@/components/QuickCategoryDialog";
 
 interface TransactionDialogProps {
   open: boolean;
@@ -52,6 +51,7 @@ export function TransactionDialog({
   const [categoryId, setCategoryId] = useState<string>("");
   const [date, setDate] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [quickCategoryOpen, setQuickCategoryOpen] = useState(false);
 
   const { data: categories = [] } = useCategories();
   const createMutation = useCreateTransaction();
@@ -181,34 +181,39 @@ export function TransactionDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Categoria</Label>
-            {filteredCategories.length === 0 ? (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription className="flex items-center justify-between">
-                  <span>Nessuna categoria {type === "income" ? "di entrata" : "di uscita"}</span>
-                  <Button variant="link" size="sm" className="p-0 h-auto" asChild>
-                    <Link to="/categories" onClick={() => onOpenChange(false)}>
-                      Crea categoria
-                    </Link>
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredCategories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <div className="flex items-center justify-between">
+              <Label>Categoria</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto py-1 px-2 text-xs"
+                onClick={() => setQuickCategoryOpen(true)}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Nuova
+              </Button>
+            </div>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger>
+                <SelectValue placeholder={filteredCategories.length === 0 ? "Nessuna categoria" : "Seleziona categoria"} />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredCategories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          <QuickCategoryDialog
+            open={quickCategoryOpen}
+            onOpenChange={setQuickCategoryOpen}
+            type={type}
+            onCategoryCreated={(newId) => setCategoryId(newId)}
+          />
 
           <div className="space-y-2">
             <Label>Data</Label>
