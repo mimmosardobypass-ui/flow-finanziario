@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,6 +28,7 @@ export function QuickCategoryDialog({
 }: QuickCategoryDialogProps) {
   const [name, setName] = useState("");
   const createMutation = useCreateCategory();
+  const queryClient = useQueryClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +48,9 @@ export function QuickCategoryDialog({
         name: trimmedName,
         type,
       });
+      
+      // Attendere esplicitamente che la lista categorie sia aggiornata
+      await queryClient.refetchQueries({ queryKey: ["categories"] });
       
       toast({ title: "Categoria creata" });
       onCategoryCreated(newCategory.id);
