@@ -83,6 +83,14 @@ const INCOME_COLORS = [
   "bg-accent/70",
 ];
 
+export function getMonthDateRange(month: number, year: number): DateRange {
+  const date = new Date(year, month, 1);
+  return {
+    startDate: startOfDay(startOfMonth(date)),
+    endDate: endOfDay(endOfMonth(date)),
+  };
+}
+
 export function getPeriodDateRange(
   periodType: PeriodType,
   selectedYear: number,
