@@ -40,7 +40,11 @@ export function useFilteredTransactions(filters: TransactionFilters) {
 
       // Filtro per categoria
       if (filters.categoryId) {
-        query = query.eq("category_id", filters.categoryId);
+        if (filters.categoryId === "uncategorized") {
+          query = query.is("category_id", null);
+        } else {
+          query = query.eq("category_id", filters.categoryId);
+        }
       }
 
       // Filtro per data
