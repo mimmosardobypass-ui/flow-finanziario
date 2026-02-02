@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Receipt, Plus, Pencil, Trash2 } from "lucide-react";
@@ -29,13 +30,40 @@ import {
 import { toast } from "@/hooks/use-toast";
 
 export default function Transactions() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] =
     useState<TransactionWithCategory | null>(null);
-  const [filters, setFilters] = useState<FiltersType>({
-    type: "all",
+  
+  // Initialize filters from URL params
+  const [filters, setFilters] = useState<FiltersType>(() => {
+    const type = searchParams.get("type");
+    const categoryId = searchParams.get("categoryId");
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
+    
+    return {
+      type: type === "income" || type === "expense" ? type : "all",
+      categoryId: categoryId || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+    };
   });
+
+  // Update URL when filters change
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filters.type && filters.type !== "all") params.set("type", filters.type);
+    if (filters.categoryId) params.set("categoryId", filters.categoryId);
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    if (filters.searchText) params.set("search", filters.searchText);
+    if (filters.amountMin) params.set("amountMin", filters.amountMin.toString());
+    if (filters.amountMax) params.set("amountMax", filters.amountMax.toString());
+    
+    setSearchParams(params, { replace: true });
+  }, [filters, setSearchParams]);
 
   const { data: transactions = [], isLoading } = useFilteredTransactions(filters);
   const deleteMutation = useDeleteTransaction();

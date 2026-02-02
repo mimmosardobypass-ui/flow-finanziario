@@ -1,18 +1,17 @@
-import React, { useMemo, useState } from "react";
+import React, { useState, useMemo } from "react";
 import { 
-  startOfMonth, 
-  endOfMonth, 
-  isWithinInterval, 
-  getMonth, 
   getYear,
-  subMonths,
   eachDayOfInterval,
   eachMonthOfInterval,
+  startOfMonth,
+  endOfMonth,
   startOfYear,
   endOfYear,
+  subMonths,
   isSameDay,
   isSameMonth,
-  differenceInDays
+  differenceInDays,
+  parseISO
 } from "date-fns";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -21,7 +20,6 @@ import {
   TrendingDown,
   Wallet,
   ArrowUpRight,
-  ArrowDownRight,
   CalendarIcon,
   FileDown,
 } from "lucide-react";
@@ -52,15 +50,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTransactions } from "@/hooks/useTransactions";
+import { 
+  useDashboardStats, 
+  usePeriodComparison,
+  getPeriodDateRange, 
+  getPreviousPeriodRange,
+  getPeriodLabel,
+  PeriodType 
+} from "@/hooks/useDashboardStats";
 import { cn } from "@/lib/utils";
 import { exportDashboardToPdf } from "@/utils/exportDashboardPdf";
 import { toast } from "sonner";
 
-type PeriodType = "thisMonth" | "threeMonths" | "year" | "custom";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { CategoryBreakdownCard } from "@/components/dashboard/CategoryBreakdownCard";
+import { RecentTransactionsCard } from "@/components/dashboard/RecentTransactionsCard";
+import { InsightsCard } from "@/components/dashboard/InsightsCard";
 
 // Custom Tooltip for the chart
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
+    const cumulativo = payload.find((p: any) => p.dataKey === "cumulativo");
     return (
       <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
         <p className="font-semibold text-foreground mb-2">{label}</p>
@@ -73,6 +83,11 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <p className="text-primary text-sm font-medium">
           Saldo: €{payload[2]?.value?.toLocaleString("it-IT", { minimumFractionDigits: 2 }) || "0,00"}
         </p>
+        {cumulativo && (
+          <p className="text-muted-foreground text-sm mt-1 pt-1 border-t border-border">
+            Cumulato: €{cumulativo.value?.toLocaleString("it-IT", { minimumFractionDigits: 2 }) || "0,00"}
+          </p>
+        )}
       </div>
     );
   }
@@ -90,52 +105,60 @@ export default function Dashboard() {
     from: undefined,
     to: undefined,
   });
+  const [showCumulative, setShowCumulative] = useState(false);
 
   // Get available years from transactions
   const availableYears = useMemo(() => {
     const years = new Set<number>();
     transactions.forEach((t) => {
-      years.add(getYear(new Date(t.date)));
+      years.add(getYear(parseISO(t.date)));
     });
     years.add(new Date().getFullYear());
     return Array.from(years).sort((a, b) => b - a);
   }, [transactions]);
 
+  // Calculate period date ranges
+  const periodDateRange = useMemo(
+    () => getPeriodDateRange(periodType, selectedYear, customDateRange),
+    [periodType, selectedYear, customDateRange]
+  );
+
+  const previousPeriodRange = useMemo(
+    () => getPreviousPeriodRange(periodType, periodDateRange, selectedYear),
+    [periodType, periodDateRange, selectedYear]
+  );
+
+  const periodLabel = useMemo(
+    () => getPeriodLabel(periodType, selectedYear, customDateRange),
+    [periodType, selectedYear, customDateRange]
+  );
+
+  // Use the new hooks for stats calculation
+  const stats = useDashboardStats(transactions, periodDateRange);
+  const { incomeComparison, expensesComparison, netComparison } = usePeriodComparison(
+    transactions,
+    periodDateRange,
+    previousPeriodRange
+  );
+
   // Calculate chart data based on selected period
   const chartData = useMemo(() => {
+    const { startDate, endDate } = periodDateRange;
     const now = new Date();
-    let startDate: Date;
-    let endDate: Date;
     let groupByDay = true;
 
-    switch (periodType) {
-      case "thisMonth":
-        startDate = startOfMonth(now);
-        endDate = endOfMonth(now);
-        groupByDay = true;
-        break;
-      case "threeMonths":
-        startDate = startOfMonth(subMonths(now, 2));
-        endDate = endOfMonth(now);
-        groupByDay = true;
-        break;
-      case "year":
-        startDate = startOfYear(new Date(selectedYear, 0, 1));
-        endDate = endOfYear(new Date(selectedYear, 0, 1));
-        groupByDay = false;
-        break;
-      case "custom":
-        if (!customDateRange.from || !customDateRange.to) {
-          return [];
-        }
-        startDate = customDateRange.from;
-        endDate = customDateRange.to;
-        const daysDiff = differenceInDays(endDate, startDate);
-        groupByDay = daysDiff <= 60;
-        break;
-      default:
-        return [];
+    if (periodType === "custom" && (!customDateRange.from || !customDateRange.to)) {
+      return [];
     }
+
+    if (periodType === "year") {
+      groupByDay = false;
+    } else if (periodType === "custom") {
+      const daysDiff = differenceInDays(endDate, startDate);
+      groupByDay = daysDiff <= 60;
+    }
+
+    let cumulativeBalance = 0;
 
     if (groupByDay) {
       const days = eachDayOfInterval({ start: startDate, end: endDate });
@@ -144,7 +167,7 @@ export default function Dashboard() {
         let expenses = 0;
 
         transactions.forEach((t) => {
-          const txDate = new Date(t.date);
+          const txDate = parseISO(t.date);
           if (isSameDay(txDate, day)) {
             if (t.type === "income") {
               income += t.amount;
@@ -154,11 +177,14 @@ export default function Dashboard() {
           }
         });
 
+        cumulativeBalance += income - expenses;
+
         return {
           label: format(day, "dd MMM", { locale: it }),
           entrate: income,
           uscite: expenses,
           saldo: income - expenses,
+          cumulativo: cumulativeBalance,
         };
       });
     } else {
@@ -168,7 +194,7 @@ export default function Dashboard() {
         let expenses = 0;
 
         transactions.forEach((t) => {
-          const txDate = new Date(t.date);
+          const txDate = parseISO(t.date);
           if (isSameMonth(txDate, month) && getYear(txDate) === getYear(month)) {
             if (t.type === "income") {
               income += t.amount;
@@ -178,169 +204,27 @@ export default function Dashboard() {
           }
         });
 
+        cumulativeBalance += income - expenses;
+
         return {
           label: format(month, "MMM yyyy", { locale: it }),
           entrate: income,
           uscite: expenses,
           saldo: income - expenses,
+          cumulativo: cumulativeBalance,
         };
       });
     }
-  }, [transactions, periodType, selectedYear, customDateRange]);
+  }, [transactions, periodType, periodDateRange, customDateRange]);
 
-  // Calculate period date range based on periodType
-  const periodDateRange = useMemo(() => {
-    const now = new Date();
-    let startDate: Date;
-    let endDate: Date;
-
-    switch (periodType) {
-      case "thisMonth":
-        startDate = startOfMonth(now);
-        endDate = endOfMonth(now);
-        break;
-      case "threeMonths":
-        startDate = startOfMonth(subMonths(now, 2));
-        endDate = endOfMonth(now);
-        break;
-      case "year":
-        startDate = startOfYear(new Date(selectedYear, 0, 1));
-        endDate = endOfYear(new Date(selectedYear, 0, 1));
-        break;
-      case "custom":
-        if (customDateRange.from && customDateRange.to) {
-          startDate = customDateRange.from;
-          endDate = customDateRange.to;
-        } else {
-          startDate = new Date(0);
-          endDate = new Date(0);
-        }
-        break;
-      default:
-        startDate = startOfMonth(now);
-        endDate = endOfMonth(now);
-    }
-
-    return { startDate, endDate };
-  }, [periodType, selectedYear, customDateRange]);
-
-  // Get period label for display
-  const periodLabel = useMemo(() => {
-    switch (periodType) {
-      case "thisMonth":
-        return "Questo mese";
-      case "threeMonths":
-        return "Ultimi 3 mesi";
-      case "year":
-        return `Anno ${selectedYear}`;
-      case "custom":
-        if (customDateRange.from && customDateRange.to) {
-          return `${format(customDateRange.from, "dd/MM")} - ${format(customDateRange.to, "dd/MM/yyyy")}`;
-        }
-        return "Periodo personalizzato";
-      default:
-        return "";
-    }
-  }, [periodType, selectedYear, customDateRange]);
-
-  const stats = useMemo(() => {
-    const { startDate, endDate } = periodDateRange;
-
-    let totalBalance = 0;
-    let periodIncome = 0;
-    let periodExpenses = 0;
-    const categoryTotals: Record<string, { name: string; amount: number }> = {};
-    const incomeCategoryTotals: Record<string, { name: string; amount: number }> = {};
-
-    transactions.forEach((t) => {
-      const amount = t.type === "income" ? t.amount : -t.amount;
-      totalBalance += amount;
-
-      const txDate = new Date(t.date);
-      const isInPeriod = isWithinInterval(txDate, {
-        start: startDate,
-        end: endDate,
-      });
-
-      if (isInPeriod) {
-        if (t.type === "income") {
-          periodIncome += t.amount;
-
-          if (t.categories) {
-            const catId = t.categories.id;
-            if (!incomeCategoryTotals[catId]) {
-              incomeCategoryTotals[catId] = { name: t.categories.name, amount: 0 };
-            }
-            incomeCategoryTotals[catId].amount += t.amount;
-          }
-        } else {
-          periodExpenses += t.amount;
-
-          if (t.categories) {
-            const catId = t.categories.id;
-            if (!categoryTotals[catId]) {
-              categoryTotals[catId] = { name: t.categories.name, amount: 0 };
-            }
-            categoryTotals[catId].amount += t.amount;
-          }
-        }
-      }
-    });
-
-    const expenseColors = [
-      "bg-primary",
-      "bg-warning", 
-      "bg-destructive",
-      "bg-accent",
-      "bg-muted-foreground",
-      "bg-primary/70",
-      "bg-warning/70",
-      "bg-destructive/70",
-    ];
-
-    const incomeColors = [
-      "bg-success",
-      "bg-primary",
-      "bg-success/70",
-      "bg-primary/70",
-      "bg-accent",
-      "bg-success/50",
-      "bg-primary/50",
-      "bg-accent/70",
-    ];
-
-    const sortedCategories = Object.values(categoryTotals)
-      .sort((a, b) => b.amount - a.amount)
-      .map((cat, index) => ({
-        ...cat,
-        percentage:
-          periodExpenses > 0
-            ? Math.round((cat.amount / periodExpenses) * 100)
-            : 0,
-        color: expenseColors[index % expenseColors.length],
-      }));
-
-    const sortedIncomeCategories = Object.values(incomeCategoryTotals)
-      .sort((a, b) => b.amount - a.amount)
-      .map((cat, index) => ({
-        ...cat,
-        percentage:
-          periodIncome > 0
-            ? Math.round((cat.amount / periodIncome) * 100)
-            : 0,
-        color: incomeColors[index % incomeColors.length],
-      }));
-
-    return {
-      totalBalance,
-      periodIncome,
-      periodExpenses,
-      netSavings: periodIncome - periodExpenses,
-      spendingByCategory: sortedCategories,
-      incomeByCategory: sortedIncomeCategories,
-      recentTransactions: transactions.slice(0, 5),
-    };
-  }, [transactions, periodDateRange]);
+  // Build navigation links
+  const buildFilterUrl = (type?: "income" | "expense") => {
+    const params = new URLSearchParams();
+    if (type) params.set("type", type);
+    params.set("dateFrom", format(periodDateRange.startDate, "yyyy-MM-dd"));
+    params.set("dateTo", format(periodDateRange.endDate, "yyyy-MM-dd"));
+    return `/transactions?${params.toString()}`;
+  };
 
   if (isLoading) {
     return (
@@ -401,218 +285,83 @@ export default function Dashboard() {
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Total Balance */}
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Saldo Totale
-            </CardTitle>
-            <Wallet className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              €{stats.totalBalance.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Bilancio complessivo
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Income */}
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Entrate
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-success" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-success">
-              €{stats.periodIncome.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">{periodLabel}</p>
-          </CardContent>
-        </Card>
-
-        {/* Expenses */}
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Uscite
-            </CardTitle>
-            <TrendingDown className="h-4 w-4 text-destructive" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">
-              €{stats.periodExpenses.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">{periodLabel}</p>
-          </CardContent>
-        </Card>
-
-        {/* Net */}
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Netto
-            </CardTitle>
+        <StatCard
+          title="Saldo Totale"
+          value={stats.totalBalance}
+          subtitle="Bilancio complessivo"
+          icon={<Wallet className="h-4 w-4 text-primary" />}
+          variant="default"
+        />
+        <StatCard
+          title="Entrate"
+          value={stats.periodIncome}
+          subtitle={periodLabel}
+          icon={<TrendingUp className="h-4 w-4 text-success" />}
+          variant="success"
+          comparison={incomeComparison}
+          linkTo={buildFilterUrl("income")}
+        />
+        <StatCard
+          title="Uscite"
+          value={stats.periodExpenses}
+          subtitle={periodLabel}
+          icon={<TrendingDown className="h-4 w-4 text-destructive" />}
+          variant="destructive"
+          comparison={expensesComparison}
+          linkTo={buildFilterUrl("expense")}
+        />
+        <StatCard
+          title="Netto"
+          value={stats.netSavings}
+          subtitle={`${stats.netSavings >= 0 ? "Risparmiato" : "Perdita"} - ${periodLabel}`}
+          icon={
             <ArrowUpRight
               className={`h-4 w-4 ${
                 stats.netSavings >= 0 ? "text-success" : "text-destructive"
               }`}
             />
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-2xl font-bold ${
-                stats.netSavings >= 0 ? "text-foreground" : "text-destructive"
-              }`}
-            >
-              €{stats.netSavings.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {stats.netSavings >= 0 ? "Risparmiato" : "Perdita"} - {periodLabel}
-            </p>
-          </CardContent>
-        </Card>
+          }
+          variant="neutral"
+          comparison={netComparison}
+          linkTo={buildFilterUrl()}
+        />
       </div>
 
-      {/* Bottom Section */}
+      {/* Middle Section: Category Breakdowns + Insights */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Recent Transactions */}
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle className="text-foreground">Transazioni Recenti</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {stats.recentTransactions.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">
-                Nessuna transazione ancora
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {stats.recentTransactions.map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`h-9 w-9 rounded-full flex items-center justify-center ${
-                          transaction.type === "income"
-                            ? "bg-success/20"
-                            : "bg-destructive/20"
-                        }`}
-                      >
-                        {transaction.type === "income" ? (
-                          <ArrowUpRight className="h-4 w-4 text-success" />
-                        ) : (
-                          <ArrowDownRight className="h-4 w-4 text-destructive" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {transaction.description || "Senza descrizione"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(transaction.date), "dd MMM", {
-                            locale: it,
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                    <span
-                      className={`text-sm font-semibold ${
-                        transaction.type === "income"
-                          ? "text-success"
-                          : "text-destructive"
-                      }`}
-                    >
-                      {transaction.type === "income" ? "+" : "-"}€
-                      {transaction.amount.toLocaleString("it-IT", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Spending by Category */}
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle className="text-foreground">Spese per Categoria</CardTitle>
-            <p className="text-xs text-muted-foreground">{periodLabel}</p>
-          </CardHeader>
-          <CardContent>
-            {stats.spendingByCategory.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">
-                Nessuna spesa nel periodo selezionato
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {stats.spendingByCategory.map((item) => (
-                  <div key={item.name} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-foreground truncate max-w-[60%]">
-                        {item.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        €{item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${item.color} rounded-full transition-all`}
-                        style={{ width: `${item.percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Income by Category */}
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle className="text-foreground">Entrate per Categoria</CardTitle>
-            <p className="text-xs text-muted-foreground">{periodLabel}</p>
-          </CardHeader>
-          <CardContent>
-            {stats.incomeByCategory.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">
-                Nessuna entrata nel periodo selezionato
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {stats.incomeByCategory.map((item) => (
-                  <div key={item.name} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-foreground truncate max-w-[60%]">
-                        {item.name}
-                      </span>
-                      <span className="text-xs text-success">
-                        €{item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${item.color} rounded-full transition-all`}
-                        style={{ width: `${item.percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <CategoryBreakdownCard
+          title="Spese per Categoria"
+          periodLabel={periodLabel}
+          categories={stats.spendingByCategory}
+          total={stats.periodExpenses}
+          type="expense"
+          emptyMessage="Nessuna spesa nel periodo selezionato"
+          dateRange={periodDateRange}
+        />
+        <CategoryBreakdownCard
+          title="Entrate per Categoria"
+          periodLabel={periodLabel}
+          categories={stats.incomeByCategory}
+          total={stats.periodIncome}
+          type="income"
+          emptyMessage="Nessuna entrata nel periodo selezionato"
+          dateRange={periodDateRange}
+        />
+        <InsightsCard
+          topExpenseCategory={stats.topExpenseCategory}
+          topIncomeCategory={stats.topIncomeCategory}
+          savingsRate={stats.savingsRate}
+          avgDailyExpense={stats.avgDailyExpense}
+          periodLabel={periodLabel}
+        />
       </div>
+
+      {/* Recent Transactions */}
+      <RecentTransactionsCard
+        periodTransactions={stats.periodTransactions}
+        allTransactions={transactions}
+        dateRange={periodDateRange}
+      />
 
       {/* Financial Trend Chart */}
       <Card className="bg-card border-border">
@@ -620,23 +369,33 @@ export default function Dashboard() {
           <div className="flex flex-row items-center justify-between">
             <CardTitle className="text-foreground">Andamento Finanziario</CardTitle>
             
-            {periodType === "year" && (
-              <Select
-                value={selectedYear.toString()}
-                onValueChange={(value) => setSelectedYear(parseInt(value))}
+            <div className="flex items-center gap-4">
+              {periodType === "year" && (
+                <Select
+                  value={selectedYear.toString()}
+                  onValueChange={(value) => setSelectedYear(parseInt(value))}
+                >
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableYears.map((year) => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              
+              <Button
+                variant={showCumulative ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowCumulative(!showCumulative)}
               >
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableYears.map((year) => (
-                    <SelectItem key={year} value={year.toString()}>
-                      {year}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+                Saldo cumulato
+              </Button>
+            </div>
           </div>
           
           {/* Period Selection Buttons */}
@@ -770,6 +529,17 @@ export default function Dashboard() {
                     dot={{ fill: "hsl(var(--primary))", r: 3 }}
                     activeDot={{ r: 5 }}
                   />
+                  {showCumulative && (
+                    <Line
+                      type="monotone"
+                      dataKey="cumulativo"
+                      name="Cumulato"
+                      stroke="hsl(var(--muted-foreground))"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                    />
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>
