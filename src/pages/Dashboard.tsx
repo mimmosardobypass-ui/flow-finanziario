@@ -65,6 +65,7 @@ import { toast } from "sonner";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { CategoryBreakdownCard } from "@/components/dashboard/CategoryBreakdownCard";
 import { RecentTransactionsCard } from "@/components/dashboard/RecentTransactionsCard";
+import { PeriodComparisonCard } from "@/components/dashboard/PeriodComparisonCard";
 import { InsightsCard } from "@/components/dashboard/InsightsCard";
 
 // Custom Tooltip for the chart
@@ -326,6 +327,12 @@ export default function Dashboard() {
           linkTo={buildFilterUrl()}
         />
       </div>
+
+      {/* Period Comparison Section */}
+      <PeriodComparisonCard
+        transactions={transactions}
+        availableYears={availableYears}
+      />
 
       {/* Middle Section: Category Breakdowns + Insights */}
       <div className="grid gap-6 lg:grid-cols-3">
