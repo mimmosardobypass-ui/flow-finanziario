@@ -1,74 +1,63 @@
 
+# Fix: Cursore ricerca che si resetta
 
-# Fix: Cursore di ricerca che si resetta
+## Causa radice identificata
 
-## Problema
-Quando digiti nella barra di ricerca, ogni lettera provoca questo ciclo:
+Il problema NON e nel debounce URL (gia corretto), ma in un ciclo di montaggio/smontaggio del componente:
 
-1. Digiti "c" → `searchInput` cambia → dopo 300ms debounce → `onFiltersChange({searchText: "c"})` viene chiamato
-2. `filters` si aggiorna nel componente `Transactions`
-3. Il `useEffect` di sincronizzazione URL rileva il cambio di `filters` e chiama `setSearchParams()`
-4. React Router processa il cambio URL come una "navigazione", causando un re-render che resetta la posizione del cursore nell'input
+1. Quando si digita nella ricerca, `filters.searchText` cambia
+2. `useFilteredTransactions` ha `filters` (incluso `searchText`) nella `queryKey`
+3. Nuova queryKey = nessun dato in cache = `isLoading = true`
+4. In `Transactions.tsx`, il blocco `if (isLoading)` restituisce gli skeleton SENZA il componente `TransactionFilters`
+5. `TransactionFilters` viene SMONTATO, distruggendo lo stato locale `searchInput`
+6. La query si risolve, `isLoading` torna `false`, `TransactionFilters` si RIMONTA
+7. `searchInput` viene reinizializzato dal prop `filters.searchText`, il cursore si resetta
 
-## Soluzione
+Nota chiave: `searchText` viene filtrato LATO CLIENT (righe 73-80 di `useFilteredTransactions.ts`), non viene inviato al server. Non ha senso includerlo nella queryKey.
 
-Modificare `src/pages/Transactions.tsx` per **escludere `searchText` dalla sincronizzazione URL**, oppure debounce anche la scrittura URL. La soluzione piu pulita e semplice:
+## Correzioni (2 file)
 
-### File: `src/pages/Transactions.tsx`
+### File 1: `src/hooks/useFilteredTransactions.ts`
 
-**Cambiamento 1**: Leggere anche `search` dai parametri URL nell'inizializzazione dei filtri (riga 44-48), cosi il filtro si ripristina se l'utente arriva con `?search=...` nel link.
-
-**Cambiamento 2**: Nel `useEffect` di sincronizzazione URL (riga 51-60), **non scrivere `searchText` nell'URL ad ogni battitura**. Rimuovere la riga:
-```ts
-if (filters.searchText) params.set("search", filters.searchText);
-```
-
-Oppure, soluzione alternativa migliore: aggiungere un **debounce separato** per la scrittura URL, usando un `useRef` per evitare che `setSearchParams` venga chiamato mentre l'utente sta ancora digitando.
-
-**Approccio scelto (piu robusto)**: usare `useRef` + `setTimeout` dedicato per la sincronizzazione URL, separato dal debounce della ricerca. In questo modo:
-- La ricerca continua a funzionare con debounce 300ms (come oggi)
-- L'URL si aggiorna solo dopo 500ms di inattivita, senza interrompere la digitazione
-- Il cursore non si resetta mai
-
-### Dettaglio tecnico
+**Cambiamento**: Separare la logica in due parti:
+- La query Supabase usa una `queryKey` che ESCLUDE `searchText` (perche non influenza la query server)
+- Il filtro testuale viene applicato tramite l'opzione `select` di React Query (trasformazione lato client, senza cambiare la queryKey)
 
 ```typescript
-// Ref per debounce URL separato
-const urlSyncTimerRef = useRef<NodeJS.Timeout>();
-
-useEffect(() => {
-  clearTimeout(urlSyncTimerRef.current);
-  urlSyncTimerRef.current = setTimeout(() => {
-    const params = new URLSearchParams();
-    if (filters.type && filters.type !== "all") params.set("type", filters.type);
-    if (filters.categoryId) params.set("categoryId", filters.categoryId);
-    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) params.set("dateTo", filters.dateTo);
-    if (filters.searchText) params.set("search", filters.searchText);
-    if (filters.amountMin) params.set("amountMin", filters.amountMin.toString());
-    if (filters.amountMax) params.set("amountMax", filters.amountMax.toString());
-    setSearchParams(params, { replace: true });
-  }, 500);
-  
-  return () => clearTimeout(urlSyncTimerRef.current);
-}, [filters, setSearchParams]);
+// queryKey SENZA searchText - evita refetch inutili
+queryKey: ["transactions", "filtered", user?.id, {
+  type: filters.type,
+  categoryId: filters.categoryId,
+  dateFrom: filters.dateFrom,
+  dateTo: filters.dateTo,
+  amountMin: filters.amountMin,
+  amountMax: filters.amountMax,
+}],
 ```
 
-Inoltre, leggere `search` dall'URL nell'inizializzazione:
+Il filtro `searchText` viene spostato nell'opzione `select` di React Query, che trasforma i dati senza causare un refetch:
+
 ```typescript
-const [filters, setFilters] = useState<FiltersType>(() => {
-  // ... existing code ...
-  const search = searchParams.get("search");
-  return {
-    // ... existing fields ...
-    searchText: search || undefined,
-  };
-});
+select: (data) => {
+  if (!filters.searchText?.trim()) return data;
+  const searchLower = filters.searchText.trim().toLowerCase();
+  return data.filter(t =>
+    t.description?.toLowerCase().includes(searchLower) ||
+    t.categories?.name.toLowerCase().includes(searchLower)
+  );
+},
 ```
 
-### File coinvolti
+### File 2: `src/pages/Transactions.tsx`
 
-| File | Modifica |
-|------|----------|
-| `src/pages/Transactions.tsx` | Debounce separato per sync URL + leggere `search` da URL |
+**Cambiamento**: Aggiungere `placeholderData: keepPreviousData` come sicurezza aggiuntiva. Questo fa si che, anche quando i filtri server cambiano (tipo, categoria, date, importo), i dati precedenti restino visibili durante il caricamento, evitando lo smontaggio dei filtri.
 
+Questo e gia gestito correttamente dal cambio in File 1, ma e una protezione extra.
+
+## Risultato atteso
+
+- Digitare nella ricerca NON causa piu refetch (queryKey stabile)
+- `isLoading` resta `false` durante la ricerca
+- `TransactionFilters` non viene MAI smontato durante la digitazione
+- Il cursore resta nella posizione corretta
+- La ricerca continua a funzionare con debounce 300ms come prima
