@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -42,27 +42,35 @@ export default function Transactions() {
     const categoryId = searchParams.get("categoryId");
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
+    const search = searchParams.get("search");
     
     return {
       type: type === "income" || type === "expense" ? type : "all",
       categoryId: categoryId || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
+      searchText: search || undefined,
     };
   });
 
-  // Update URL when filters change
+  // Debounced URL sync to avoid cursor reset during typing
+  const urlSyncTimerRef = useRef<NodeJS.Timeout>();
+
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (filters.type && filters.type !== "all") params.set("type", filters.type);
-    if (filters.categoryId) params.set("categoryId", filters.categoryId);
-    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) params.set("dateTo", filters.dateTo);
-    if (filters.searchText) params.set("search", filters.searchText);
-    if (filters.amountMin) params.set("amountMin", filters.amountMin.toString());
-    if (filters.amountMax) params.set("amountMax", filters.amountMax.toString());
-    
-    setSearchParams(params, { replace: true });
+    clearTimeout(urlSyncTimerRef.current);
+    urlSyncTimerRef.current = setTimeout(() => {
+      const params = new URLSearchParams();
+      if (filters.type && filters.type !== "all") params.set("type", filters.type);
+      if (filters.categoryId) params.set("categoryId", filters.categoryId);
+      if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+      if (filters.dateTo) params.set("dateTo", filters.dateTo);
+      if (filters.searchText) params.set("search", filters.searchText);
+      if (filters.amountMin) params.set("amountMin", filters.amountMin.toString());
+      if (filters.amountMax) params.set("amountMax", filters.amountMax.toString());
+      setSearchParams(params, { replace: true });
+    }, 500);
+
+    return () => clearTimeout(urlSyncTimerRef.current);
   }, [filters, setSearchParams]);
 
   const { data: transactions = [], isLoading } = useFilteredTransactions(filters);
