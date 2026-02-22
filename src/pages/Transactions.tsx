@@ -73,7 +73,7 @@ export default function Transactions() {
     return () => clearTimeout(urlSyncTimerRef.current);
   }, [filters, setSearchParams]);
 
-  const { data: transactions = [], isLoading } = useFilteredTransactions(filters);
+  const { data: transactions = [], isLoading, isPlaceholderData } = useFilteredTransactions(filters);
   const deleteMutation = useDeleteTransaction();
 
   // Calcola totali

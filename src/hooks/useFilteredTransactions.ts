@@ -16,8 +16,18 @@ export interface TransactionFilters {
 export function useFilteredTransactions(filters: TransactionFilters) {
   const { user } = useAuth();
 
+  // queryKey SENZA searchText - il filtro testuale è lato client e non deve causare refetch
+  const serverFilters = {
+    type: filters.type,
+    categoryId: filters.categoryId,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    amountMin: filters.amountMin,
+    amountMax: filters.amountMax,
+  };
+
   return useQuery({
-    queryKey: ["transactions", "filtered", user?.id, filters],
+    queryKey: ["transactions", "filtered", user?.id, serverFilters],
     queryFn: async () => {
       if (!user) return [];
 
@@ -33,12 +43,10 @@ export function useFilteredTransactions(filters: TransactionFilters) {
         `)
         .is("deleted_at", null);
 
-      // Filtro per tipo
       if (filters.type && filters.type !== "all") {
         query = query.eq("type", filters.type);
       }
 
-      // Filtro per categoria
       if (filters.categoryId) {
         if (filters.categoryId === "uncategorized") {
           query = query.is("category_id", null);
@@ -47,7 +55,6 @@ export function useFilteredTransactions(filters: TransactionFilters) {
         }
       }
 
-      // Filtro per data
       if (filters.dateFrom) {
         query = query.gte("date", filters.dateFrom);
       }
@@ -55,7 +62,6 @@ export function useFilteredTransactions(filters: TransactionFilters) {
         query = query.lte("date", filters.dateTo);
       }
 
-      // Filtro per importo
       if (filters.amountMin !== undefined && filters.amountMin > 0) {
         query = query.gte("amount", filters.amountMin);
       }
@@ -67,19 +73,17 @@ export function useFilteredTransactions(filters: TransactionFilters) {
 
       if (error) throw error;
 
-      // Filtro aggiuntivo per ricerca nel nome categoria (lato client perché non possiamo fare ilike su join)
-      let results = data as TransactionWithCategory[];
-      
-      if (filters.searchText && filters.searchText.trim()) {
-        const searchLower = filters.searchText.trim().toLowerCase();
-        results = results.filter(
-          (t) =>
-            t.description?.toLowerCase().includes(searchLower) ||
-            t.categories?.name.toLowerCase().includes(searchLower)
-        );
-      }
-
-      return results;
+      return data as TransactionWithCategory[];
+    },
+    // Filtro testuale applicato lato client tramite select, senza cambiare la queryKey
+    select: (data) => {
+      if (!filters.searchText?.trim()) return data;
+      const searchLower = filters.searchText.trim().toLowerCase();
+      return data.filter(
+        (t) =>
+          t.description?.toLowerCase().includes(searchLower) ||
+          t.categories?.name.toLowerCase().includes(searchLower)
+      );
     },
     enabled: !!user,
   });
