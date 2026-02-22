@@ -1,143 +1,74 @@
 
-# Piano: Sezione Comparazione Periodi Dedicata
 
-## Obiettivo
-Aggiungere una nuova sezione nella Dashboard con due selettori di periodo affiancati per confrontare liberamente qualsiasi coppia di periodi (es. Gennaio 2025 vs Luglio 2024), mostrando una tabella con i delta in euro e percentuale.
+# Fix: Cursore di ricerca che si resetta
 
----
+## Problema
+Quando digiti nella barra di ricerca, ogni lettera provoca questo ciclo:
 
-## Struttura Proposta
+1. Digiti "c" → `searchInput` cambia → dopo 300ms debounce → `onFiltersChange({searchText: "c"})` viene chiamato
+2. `filters` si aggiorna nel componente `Transactions`
+3. Il `useEffect` di sincronizzazione URL rileva il cambio di `filters` e chiama `setSearchParams()`
+4. React Router processa il cambio URL come una "navigazione", causando un re-render che resetta la posizione del cursore nell'input
 
-```text
-+------------------------------------------------------------------+
-|                    COMPARAZIONE PERIODI                           |
-+------------------------------------------------------------------+
-|  Periodo A                    |   Periodo B                       |
-|  [Mese ▼] [Anno ▼]           |   [Mese ▼] [Anno ▼]               |
-|                               |                                   |
-|  Gennaio 2025                 |   Dicembre 2024                   |
-+------------------------------------------------------------------+
-|             | Periodo A      | Periodo B      | Delta   | %      |
-+------------------------------------------------------------------+
-| Entrate     | €4.010,00      | €3.200,00      | +€810   | +25%   |
-| Uscite      | €914,00        | €1.100,00      | -€186   | -17%   |
-| Netto       | €3.096,00      | €2.100,00      | +€996   | +47%   |
-+------------------------------------------------------------------+
+## Soluzione
+
+Modificare `src/pages/Transactions.tsx` per **escludere `searchText` dalla sincronizzazione URL**, oppure debounce anche la scrittura URL. La soluzione piu pulita e semplice:
+
+### File: `src/pages/Transactions.tsx`
+
+**Cambiamento 1**: Leggere anche `search` dai parametri URL nell'inizializzazione dei filtri (riga 44-48), cosi il filtro si ripristina se l'utente arriva con `?search=...` nel link.
+
+**Cambiamento 2**: Nel `useEffect` di sincronizzazione URL (riga 51-60), **non scrivere `searchText` nell'URL ad ogni battitura**. Rimuovere la riga:
+```ts
+if (filters.searchText) params.set("search", filters.searchText);
 ```
 
----
+Oppure, soluzione alternativa migliore: aggiungere un **debounce separato** per la scrittura URL, usando un `useRef` per evitare che `setSearchParams` venga chiamato mentre l'utente sta ancora digitando.
 
-## Dettagli Implementazione
+**Approccio scelto (piu robusto)**: usare `useRef` + `setTimeout` dedicato per la sincronizzazione URL, separato dal debounce della ricerca. In questo modo:
+- La ricerca continua a funzionare con debounce 300ms (come oggi)
+- L'URL si aggiorna solo dopo 500ms di inattivita, senza interrompere la digitazione
+- Il cursore non si resetta mai
 
-### 1. Nuovo Componente: `PeriodComparisonCard.tsx`
+### Dettaglio tecnico
 
-**Percorso:** `src/components/dashboard/PeriodComparisonCard.tsx`
-
-**Funzionalita:**
-- Due gruppi di select affiancati (Mese + Anno per ciascun periodo)
-- I mesi disponibili dipendono dall'anno selezionato e dai dati esistenti
-- Tabella di confronto con 3 metriche: Entrate, Uscite, Netto
-- Delta assoluto (euro) e percentuale con colori (verde positivo, rosso negativo)
-- Frecce direzionali per indicare trend
-
-**Props:**
 ```typescript
-interface PeriodComparisonCardProps {
-  transactions: TransactionWithCategory[];
-  availableYears: number[];
-}
+// Ref per debounce URL separato
+const urlSyncTimerRef = useRef<NodeJS.Timeout>();
+
+useEffect(() => {
+  clearTimeout(urlSyncTimerRef.current);
+  urlSyncTimerRef.current = setTimeout(() => {
+    const params = new URLSearchParams();
+    if (filters.type && filters.type !== "all") params.set("type", filters.type);
+    if (filters.categoryId) params.set("categoryId", filters.categoryId);
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    if (filters.searchText) params.set("search", filters.searchText);
+    if (filters.amountMin) params.set("amountMin", filters.amountMin.toString());
+    if (filters.amountMax) params.set("amountMax", filters.amountMax.toString());
+    setSearchParams(params, { replace: true });
+  }, 500);
+  
+  return () => clearTimeout(urlSyncTimerRef.current);
+}, [filters, setSearchParams]);
 ```
 
-**State interno:**
+Inoltre, leggere `search` dall'URL nell'inizializzazione:
 ```typescript
-const [periodA, setPeriodA] = useState({ month: currentMonth, year: currentYear });
-const [periodB, setPeriodB] = useState({ month: prevMonth, year: prevYear });
-```
-
-### 2. Hook di Supporto: estensione di `useDashboardStats.ts`
-
-Aggiungere una nuova funzione helper:
-
-```typescript
-export function getMonthDateRange(month: number, year: number): DateRange {
-  const date = new Date(year, month, 1);
+const [filters, setFilters] = useState<FiltersType>(() => {
+  // ... existing code ...
+  const search = searchParams.get("search");
   return {
-    startDate: startOfDay(startOfMonth(date)),
-    endDate: endOfDay(endOfMonth(date)),
+    // ... existing fields ...
+    searchText: search || undefined,
   };
-}
+});
 ```
 
-Il componente riutilizzera `usePeriodComparison` gia esistente, passando i due range calcolati.
+### File coinvolti
 
-### 3. Integrazione in Dashboard.tsx
+| File | Modifica |
+|------|----------|
+| `src/pages/Transactions.tsx` | Debounce separato per sync URL + leggere `search` da URL |
 
-Aggiungere la nuova card sotto le card statistiche esistenti:
-
-```tsx
-{/* Period Comparison Section */}
-<PeriodComparisonCard
-  transactions={transactions}
-  availableYears={availableYears}
-/>
-```
-
----
-
-## Layout della Tabella
-
-| Metrica   | Periodo A       | Periodo B       | Delta            | Variazione % |
-|-----------|-----------------|-----------------|------------------|--------------|
-| Entrate   | Euro X          | Euro Y          | +/- Euro (Z)     | +/- N%       |
-| Uscite    | Euro X          | Euro Y          | +/- Euro (Z)     | +/- N%       |
-| Netto     | Euro X          | Euro Y          | +/- Euro (Z)     | +/- N%       |
-
-**Colori:**
-- Verde (`text-success`): delta positivo per Entrate/Netto, negativo per Uscite
-- Rosso (`text-destructive`): delta negativo per Entrate/Netto, positivo per Uscite
-
----
-
-## File da Creare/Modificare
-
-| File | Azione | Descrizione |
-|------|--------|-------------|
-| `src/components/dashboard/PeriodComparisonCard.tsx` | Creare | Nuovo componente con selettori + tabella |
-| `src/hooks/useDashboardStats.ts` | Modificare | Aggiungere `getMonthDateRange()` |
-| `src/pages/Dashboard.tsx` | Modificare | Importare e posizionare il nuovo componente |
-
----
-
-## Comportamento UX
-
-1. **Default**: Periodo A = mese corrente, Periodo B = mese precedente
-2. **Selezione**: Dropdown per mese (Gennaio-Dicembre) e anno
-3. **Validazione**: Se un periodo non ha dati, mostrare "Nessun dato" nella cella
-4. **Responsive**: Su mobile, i due selettori si impilano verticalmente
-
----
-
-## Esempio Visivo Finale
-
-La card sara posizionata dopo le 4 StatCard principali e prima dei breakdown per categoria:
-
-```text
-[Saldo Totale] [Entrate] [Uscite] [Netto]
-
-[=== COMPARAZIONE PERIODI (nuova sezione) ===]
-|  Gen 2025  vs  Dic 2024                      |
-|  Entrate: €4.010 vs €3.200  (+€810, +25%)   |
-|  Uscite:  €914   vs €1.100  (-€186, -17%)   |
-|  Netto:   €3.096 vs €2.100  (+€996, +47%)   |
-
-[Spese per Categoria] [Entrate per Categoria] [Insights]
-```
-
----
-
-## Vantaggi
-
-- Confronto libero tra qualsiasi coppia di mesi/anni
-- Vista immediata delle variazioni rispetto a periodi passati
-- Analisi trend stagionali (es. Gennaio 2025 vs Gennaio 2024)
-- Mantenimento della struttura esistente della dashboard
