@@ -242,6 +242,7 @@ export default function Transactions() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Data</TableHead>
+                    <TableHead>Conto</TableHead>
                     <TableHead className="hidden print:table-cell">Tipo</TableHead>
                     <TableHead>Categoria</TableHead>
                     <TableHead>Descrizione</TableHead>
@@ -256,6 +257,9 @@ export default function Transactions() {
                         {format(new Date(transaction.date), "dd MMM yyyy", {
                           locale: it,
                         })}
+                      </TableCell>
+                      <TableCell>
+                        {transaction.conti?.nome_conto || "Conto Principale"}
                       </TableCell>
                       <TableCell className="hidden print:table-cell">
                         {transaction.type === "income" ? "Entrata" : "Uscita"}
