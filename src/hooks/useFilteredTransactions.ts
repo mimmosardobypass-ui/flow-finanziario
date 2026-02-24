@@ -6,6 +6,7 @@ import { TransactionWithCategory } from "./useTransactions";
 export interface TransactionFilters {
   searchText?: string;
   categoryId?: string;
+  contoId?: string;
   type?: "income" | "expense" | "all";
   dateFrom?: string;
   dateTo?: string;
@@ -20,6 +21,7 @@ export function useFilteredTransactions(filters: TransactionFilters) {
   const serverFilters = {
     type: filters.type,
     categoryId: filters.categoryId,
+    contoId: filters.contoId,
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,
     amountMin: filters.amountMin,
@@ -39,9 +41,18 @@ export function useFilteredTransactions(filters: TransactionFilters) {
             id,
             name,
             type
+          ),
+          conti (
+            id,
+            nome_conto,
+            banca
           )
         `)
         .is("deleted_at", null);
+
+      if (filters.contoId) {
+        query = query.eq("conto_id", filters.contoId);
+      }
 
       if (filters.type && filters.type !== "all") {
         query = query.eq("type", filters.type);

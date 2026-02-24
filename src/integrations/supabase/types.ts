@@ -38,6 +38,36 @@ export type Database = {
         }
         Relationships: []
       }
+      conti: {
+        Row: {
+          attivo: boolean
+          banca: string | null
+          created_at: string
+          id: string
+          nome_conto: string
+          saldo_iniziale: number
+          user_id: string
+        }
+        Insert: {
+          attivo?: boolean
+          banca?: string | null
+          created_at?: string
+          id?: string
+          nome_conto: string
+          saldo_iniziale?: number
+          user_id: string
+        }
+        Update: {
+          attivo?: boolean
+          banca?: string | null
+          created_at?: string
+          id?: string
+          nome_conto?: string
+          saldo_iniziale?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       scadenze_rate: {
         Row: {
           created_at: string
@@ -132,6 +162,7 @@ export type Database = {
         Row: {
           amount: number
           category_id: string | null
+          conto_id: string
           created_at: string
           date: string
           deleted_at: string | null
@@ -144,6 +175,7 @@ export type Database = {
         Insert: {
           amount: number
           category_id?: string | null
+          conto_id: string
           created_at?: string
           date?: string
           deleted_at?: string | null
@@ -156,6 +188,7 @@ export type Database = {
         Update: {
           amount?: number
           category_id?: string | null
+          conto_id?: string
           created_at?: string
           date?: string
           deleted_at?: string | null
@@ -171,6 +204,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "conti"
             referencedColumns: ["id"]
           },
           {

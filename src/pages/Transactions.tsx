@@ -42,6 +42,7 @@ export default function Transactions() {
   const [filters, setFilters] = useState<FiltersType>(() => {
     const type = searchParams.get("type");
     const categoryId = searchParams.get("categoryId");
+    const contoId = searchParams.get("contoId");
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
     const search = searchParams.get("search");
@@ -49,6 +50,7 @@ export default function Transactions() {
     return {
       type: type === "income" || type === "expense" ? type : "all",
       categoryId: categoryId || undefined,
+      contoId: contoId || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       searchText: search || undefined,
@@ -64,6 +66,7 @@ export default function Transactions() {
       const params = new URLSearchParams();
       if (filters.type && filters.type !== "all") params.set("type", filters.type);
       if (filters.categoryId) params.set("categoryId", filters.categoryId);
+      if (filters.contoId) params.set("contoId", filters.contoId);
       if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
       if (filters.dateTo) params.set("dateTo", filters.dateTo);
       if (filters.searchText) params.set("search", filters.searchText);

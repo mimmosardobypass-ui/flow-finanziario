@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Search, Filter, X, Calendar, DollarSign, Tag } from "lucide-react";
+import { Search, Filter, X, Calendar, DollarSign, Tag, Landmark } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
 import { useCategories, Category } from "@/hooks/useCategories";
+import { useContiAttivi } from "@/hooks/useConti";
 import { TransactionFilters as FiltersType } from "@/hooks/useFilteredTransactions";
 
 interface Props {
@@ -35,6 +36,7 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
   const [amountMaxInput, setAmountMaxInput] = useState(filters.amountMax?.toString() || "");
 
   const { data: categories = [] } = useCategories();
+  const { data: contiAttivi = [] } = useContiAttivi();
 
   // Filtra le categorie in base al tipo selezionato
   const filteredCategories = useMemo(() => {
@@ -108,6 +110,7 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
     onFiltersChange({
       searchText: "",
       categoryId: undefined,
+      contoId: undefined,
       type: "all",
       dateFrom: undefined,
       dateTo: undefined,
@@ -119,6 +122,7 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
   const activeFiltersCount = [
     filters.searchText,
     filters.categoryId,
+    filters.contoId,
     filters.type && filters.type !== "all",
     filters.dateFrom,
     filters.dateTo,
@@ -156,6 +160,25 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
             <SelectItem value="all">Tutte</SelectItem>
             <SelectItem value="income">Entrate</SelectItem>
             <SelectItem value="expense">Uscite</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Conto */}
+        <Select
+          value={filters.contoId || "all"}
+          onValueChange={(v) => onFiltersChange({ ...filters, contoId: v === "all" ? undefined : v })}
+        >
+          <SelectTrigger className="w-[160px] bg-secondary border-border">
+            <Landmark className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Conto" />
+          </SelectTrigger>
+          <SelectContent className="bg-popover border-border">
+            <SelectItem value="all">Tutti i conti</SelectItem>
+            {contiAttivi.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.nome_conto}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -350,6 +373,15 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => onFiltersChange({ ...filters, type: "all" })}
+              />
+            </Badge>
+          )}
+          {filters.contoId && (
+            <Badge variant="secondary" className="gap-1">
+              {contiAttivi.find((c) => c.id === filters.contoId)?.nome_conto}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() => onFiltersChange({ ...filters, contoId: undefined })}
               />
             </Badge>
           )}

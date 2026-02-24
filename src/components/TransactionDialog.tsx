@@ -32,6 +32,7 @@ import {
   useUpdateTransaction,
   TransactionWithCategory,
 } from "@/hooks/useTransactions";
+import { useContiAttivi } from "@/hooks/useConti";
 import { useUnpaidRateByContract } from "@/hooks/useScadenziario";
 import { toast } from "@/hooks/use-toast";
 import { QuickCategoryDialog } from "@/components/QuickCategoryDialog";
@@ -51,6 +52,7 @@ export function TransactionDialog({
   const [amount, setAmount] = useState("");
   const [type, setType] = useState<"income" | "expense">("expense");
   const [categoryId, setCategoryId] = useState<string>("");
+  const [contoId, setContoId] = useState<string>("");
   const [date, setDate] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [quickCategoryOpen, setQuickCategoryOpen] = useState(false);
@@ -61,6 +63,7 @@ export function TransactionDialog({
   const { data: categories = [] } = useCategories();
   const createMutation = useCreateTransaction();
   const updateMutation = useUpdateTransaction();
+  const { data: contiAttivi = [] } = useContiAttivi();
   const { data: contractsWithUnpaid = [] } = useUnpaidRateByContract();
 
   const isEditing = !!transaction;
@@ -75,6 +78,7 @@ export function TransactionDialog({
       setAmount(String(transaction.amount));
       setType(transaction.type as "income" | "expense");
       setCategoryId(transaction.category_id || "");
+      setContoId(transaction.conto_id || "");
       setDate(new Date(transaction.date));
       setLinkRata(false);
       setSelectedContractId("");
@@ -84,6 +88,7 @@ export function TransactionDialog({
       setAmount("");
       setType("expense");
       setCategoryId("");
+      setContoId(contiAttivi.length === 1 ? contiAttivi[0].id : "");
       setDate(new Date());
       setLinkRata(false);
       setSelectedContractId("");
@@ -117,6 +122,7 @@ export function TransactionDialog({
       type,
       date: format(date, "yyyy-MM-dd"),
       category_id: categoryId || null,
+      conto_id: contoId,
       rata_id: linkRata && selectedRataId ? selectedRataId : null,
     };
 
@@ -218,6 +224,22 @@ export function TransactionDialog({
                 {filteredCategories.map((cat) => (
                   <SelectItem key={cat.id} value={cat.id}>
                     {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Conto *</Label>
+            <Select value={contoId} onValueChange={setContoId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleziona conto" />
+              </SelectTrigger>
+              <SelectContent>
+                {contiAttivi.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nome_conto}{c.banca ? ` (${c.banca})` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
