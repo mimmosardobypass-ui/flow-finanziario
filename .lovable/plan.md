@@ -1,22 +1,36 @@
 
 
-# Aggiunta colonna "Conto" alla tabella Transazioni
+# Migrazione: Rinomina "Conto Principale" in "Cassa"
 
-## Cosa cambia
+## Cosa viene fatto
 
-Una singola modifica al file `src/pages/Transactions.tsx`: aggiungere la colonna "Conto" tra "Data" e "Categoria" sia nell'header che nelle righe della tabella.
+Una migrazione SQL che, per ogni utente:
 
-## Dettagli
+1. Verifica se esiste gia un conto chiamato "Cassa"
+2. Se non esiste, rinomina il "Conto Principale" (creato dalla migrazione precedente) in "Cassa"
+3. Se "Conto Principale" non esiste ma nemmeno "Cassa", crea un nuovo conto "Cassa" attivo
+4. Aggiorna tutte le transazioni attualmente collegate al vecchio "Conto Principale" per puntare a "Cassa"
 
-- **Header**: aggiungere `<TableHead>Conto</TableHead>` dopo la colonna "Data"
-- **Righe**: aggiungere una `<TableCell>` che mostra `transaction.conti?.nome_conto || "Conto Principale"`
-- Il join con la tabella `conti` e gia presente nelle query (`useFilteredTransactions` e `useTransactions` includono gia `conti (id, nome_conto, banca)` nella select), quindi nessuna modifica lato dati
-- La colonna sara sempre visibile, anche con filtro conto attivo
-- Nessun impatto sulle performance: i dati sono gia caricati
+Le transazioni non vengono eliminate ne modificate nei loro dati (importo, data, descrizione, categoria). Viene solo aggiornato il riferimento al conto.
 
-## File da modificare
+## Sicurezza
 
-| File | Modifica |
-|------|----------|
-| `src/pages/Transactions.tsx` | Aggiungere colonna "Conto" nell'header e nelle righe della tabella (2 punti di modifica) |
+- Nessun dato viene cancellato
+- L'operazione e idempotente: se eseguita piu volte non causa errori
+- Le transazioni future non vengono toccate (la migrazione agisce solo sui record esistenti al momento dell'esecuzione)
+
+## Dettagli tecnici
+
+| File | Azione |
+|------|--------|
+| `supabase/migrations/[timestamp].sql` | Creare nuova migrazione SQL |
+
+### Logica SQL
+
+```text
+1. Rinomina i conti "Conto Principale" in "Cassa" (dove non esiste gia un conto "Cassa" per lo stesso utente)
+2. Se per qualche utente esiste gia "Cassa" ma anche "Conto Principale":
+   - Sposta le transazioni dal "Conto Principale" al conto "Cassa" esistente
+   - Elimina il "Conto Principale" ormai vuoto
+```
 
