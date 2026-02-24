@@ -11,6 +11,7 @@ export interface Transaction {
   date: string;
   category_id: string | null;
   rata_id: string | null;
+  conto_id: string;
   created_at: string;
   deleted_at: string | null;
 }
@@ -21,6 +22,11 @@ export interface TransactionWithCategory extends Transaction {
     name: string;
     type: string;
   } | null;
+  conti: {
+    id: string;
+    nome_conto: string;
+    banca: string | null;
+  } | null;
 }
 
 export interface CreateTransactionInput {
@@ -29,6 +35,7 @@ export interface CreateTransactionInput {
   type: "income" | "expense";
   date: string;
   category_id: string | null;
+  conto_id: string;
   rata_id?: string | null;
 }
 
@@ -52,6 +59,11 @@ export function useTransactions() {
             id,
             name,
             type
+          ),
+          conti (
+            id,
+            nome_conto,
+            banca
           )
         `)
         .is("deleted_at", null)
@@ -81,6 +93,7 @@ export function useCreateTransaction() {
           type: input.type,
           date: input.date,
           category_id: input.category_id,
+          conto_id: input.conto_id,
           rata_id: input.rata_id || null,
         })
         .select()
@@ -119,6 +132,7 @@ export function useUpdateTransaction() {
           type: input.type,
           date: input.date,
           category_id: input.category_id,
+          conto_id: input.conto_id,
         })
         .eq("id", input.id)
         .select()

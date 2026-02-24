@@ -34,6 +34,7 @@ import {
   useImportTransactions,
   ParsedTransaction,
 } from "@/hooks/useImportTransactions";
+import { useContiAttivi } from "@/hooks/useConti";
 
 type Step = "upload" | "mapping" | "result";
 
@@ -122,9 +123,11 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     categoryId: string;
   } | null>(null);
   const [importing, setImporting] = useState(false);
+  const [selectedContoId, setSelectedContoId] = useState("");
 
   const ensureCategoriesMutation = useEnsureClassificationCategories();
   const importMutation = useImportTransactions();
+  const { data: contiAttivi = [] } = useContiAttivi();
 
   const reset = useCallback(() => {
     setStep("upload");
@@ -134,6 +137,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     setMapping({ data: "", descrizione: "", importo: "" });
     setImportResult(null);
     setImporting(false);
+    setSelectedContoId("");
   }, []);
 
   const handleOpenChange = (open: boolean) => {
@@ -210,7 +214,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     [processFile]
   );
 
-  const isMappingValid = mapping.data && mapping.descrizione && mapping.importo;
+  const isMappingValid = mapping.data && mapping.descrizione && mapping.importo && selectedContoId;
 
   const handleImport = async () => {
     if (!isMappingValid) return;
@@ -244,7 +248,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
         return;
       }
 
-      const result = await importMutation.mutateAsync({ transactions: parsed, categories });
+      const result = await importMutation.mutateAsync({ transactions: parsed, categories, contoId: selectedContoId });
 
       setImportResult({
         imported: result.imported,
@@ -308,7 +312,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
           <div className="space-y-6">
             {/* Column mapping */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {(["data", "descrizione", "importo"] as const).map((field) => (
+            {(["data", "descrizione", "importo"] as const).map((field) => (
                 <div key={field} className="space-y-2">
                   <Label className="capitalize">{field} *</Label>
                   <Select
@@ -328,6 +332,23 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
                   </Select>
                 </div>
               ))}
+            </div>
+
+            {/* Conto destinazione */}
+            <div className="space-y-2">
+              <Label>Conto destinazione *</Label>
+              <Select value={selectedContoId} onValueChange={setSelectedContoId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona conto" />
+                </SelectTrigger>
+                <SelectContent>
+                  {contiAttivi.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nome_conto}{c.banca ? ` (${c.banca})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Preview table */}

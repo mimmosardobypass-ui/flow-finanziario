@@ -73,9 +73,11 @@ export function useImportTransactions() {
     mutationFn: async ({
       transactions,
       categories,
+      contoId,
     }: {
       transactions: ParsedTransaction[];
       categories: ClassificationCategories;
+      contoId: string;
     }): Promise<ImportResult> => {
       if (!user) throw new Error("Utente non autenticato");
 
@@ -86,6 +88,7 @@ export function useImportTransactions() {
         amount: Math.abs(t.amount),
         type: t.amount >= 0 ? "income" : "expense",
         category_id: t.amount >= 0 ? categories.incomeId : categories.expenseId,
+        conto_id: contoId,
       }));
 
       let imported = 0;

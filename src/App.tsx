@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Categories from "./pages/Categories";
 import Scadenziario from "./pages/Scadenziario";
+import Conti from "./pages/Conti";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
@@ -62,6 +63,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <Scadenziario />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/conti"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Conti />
                   </Layout>
                 </ProtectedRoute>
               }
