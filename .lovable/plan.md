@@ -1,64 +1,92 @@
 
 
-# Miglioramento Modale "Nuovo Contratto"
+# Importazione Transazioni da File Excel/CSV
 
-## Modifiche pianificate
+## Panoramica
 
-### 1. Validazione completa prima del salvataggio
-
-Aggiungere controlli espliciti per tutti i campi obbligatori (`numero_contratto`, `societa_finanziaria`, `tipo`, `numero_rate`, `importo_totale`) con messaggi di errore specifici per campo.
-
-### 2. Tipo con opzione "Altro..." personalizzabile
-
-Quando si seleziona "Altro" nella select Tipo, comparira un campo di testo aggiuntivo "Tipo personalizzato". Il valore digitato verra salvato direttamente nella colonna `tipo` del DB (es. "noleggio" invece di "altro").
-
-### 3. Placeholder chiari
-
-- Numero Contratto: "Es. 12345ABC"
-- Societa Finanziaria: "Es. Compass"
-- Importo Totale: "Es. 5000.00"
-- Numero Rate: "Es. 12"
-- Tipo personalizzato: "Es. Noleggio"
-
-### 4. Autocomplete Societa Finanziaria
-
-Aggiungere una query che recupera le societa gia usate dall'utente (distinct `societa_finanziaria` dalla tabella `scadenziario`). Mostrare i suggerimenti in un datalist HTML nativo sotto l'input, senza librerie aggiuntive.
-
-### 5. Espansione contratto appena creato
-
-Dopo il salvataggio, il dialog si chiude e la pagina `Scadenziario.tsx` espande automaticamente la riga del contratto appena creato. Per farlo:
-- `useCreateScadenziario` restituisce gia il contratto creato
-- `ScadenziarioDialog` ricevera un callback `onCreated(id: string)`
-- `Scadenziario.tsx` impostera `expandedId` con l'id ricevuto
-
-### 6. Messaggio errore leggibile
-
-Il blocco catch mostrera il messaggio di errore dal server quando disponibile, con fallback generico.
+Aggiungere un pulsante "Importa file" nella pagina Transazioni che permette di caricare file Excel (.xlsx) o CSV, visualizzare un'anteprima, mappare le colonne e importare le transazioni con categoria "Da classificare".
 
 ---
 
-## Dettagli tecnici
+## 1. Categoria "Da classificare"
 
-### File: `src/hooks/useScadenziario.ts`
+Prima dell'importazione, il sistema verifica se esiste gia una categoria "Da classificare" per l'utente (sia income che expense). Se non esiste, la crea automaticamente. Servono due categorie: una di tipo "income" e una di tipo "expense", per rispettare il vincolo che ogni transazione ha una categoria del tipo corretto.
 
-Aggiungere hook `useSocietaSuggestions`:
-```typescript
-export function useSocietaSuggestions() {
-  // SELECT DISTINCT societa_finanziaria FROM scadenziario WHERE user_id = auth.uid()
-}
-```
+---
 
-### File: `src/components/scadenziario/ScadenziarioDialog.tsx`
+## 2. Nuovo componente: ImportDialog
 
-- Aggiungere stato `tipoCustom` per il campo personalizzato
-- Aggiungere stato `errors` per validazione inline
-- Aggiungere logica: se `tipo === "altro_custom"` mostra input, al salvataggio usa `tipoCustom` come valore
-- Aggiungere `datalist` con societa suggerite collegato all'input
-- Prop `onCreated?: (id: string) => void`
-- Placeholder su tutti gli input
+### File: `src/components/ImportTransactionsDialog.tsx`
 
-### File: `src/pages/Scadenziario.tsx`
+Dialog multi-step con 3 fasi:
 
-- Passare callback `onCreated` al dialog per espandere il contratto appena creato
-- Aggiornare `tipoLabels` per gestire valori custom (fallback al valore grezzo se non presente nelle label note)
+### Step 1 - Upload
+- Area drag & drop + pulsante "Seleziona file"
+- Accetta `.xlsx` e `.csv`
+- Parsing con libreria `xlsx` (gia installata)
+- Gestione errori: file corrotto, vuoto, formato non supportato
+- Mostra messaggio chiaro in caso di errore senza bloccare l'interfaccia
+
+### Step 2 - Anteprima e Mappatura
+- Mostra anteprima delle prime 5-10 righe in una tabella
+- 3 select per mappare le colonne del file ai campi:
+  - **Data** (obbligatorio)
+  - **Descrizione** (obbligatorio)
+  - **Importo** (obbligatorio)
+- Le opzioni delle select sono i nomi delle colonne rilevate dal file
+- Tentativo di auto-mappatura iniziale basato su nomi colonne comuni (es. "data", "date", "descrizione", "description", "importo", "amount")
+- Validazione: tutte e 3 le colonne devono essere mappate
+
+### Step 3 - Risultato
+- Mostra "X transazioni importate con successo"
+- Pulsante "Vai a classificare" che naviga a `/transactions?categoryId=<id_da_classificare>`
+- Pulsante "Chiudi"
+
+### Logica di salvataggio
+- Per ogni riga valida:
+  - Parsing della data (supporto formati: dd/MM/yyyy, yyyy-MM-dd, MM/dd/yyyy)
+  - Se importo > 0: type = "income", category = "Da classificare" (income)
+  - Se importo < 0: type = "expense", amount = valore assoluto, category = "Da classificare" (expense)
+  - Righe con data o importo non validi vengono saltate
+- INSERT bulk tramite Supabase (batch di max 100 righe per chiamata)
+- Mostra conteggio righe importate e righe saltate
+
+---
+
+## 3. Modifiche alla pagina Transazioni
+
+### File: `src/pages/Transactions.tsx`
+
+- Aggiungere pulsante "Importa" nell'header accanto a "Nuova Transazione" e "Esporta"
+- Icona: `Upload` da lucide-react
+- Stato `importDialogOpen` per controllare il dialog
+
+---
+
+## 4. Hook per importazione
+
+### File: `src/hooks/useImportTransactions.ts`
+
+- `useEnsureClassificationCategory()`: query + mutation che trova o crea le categorie "Da classificare" (income + expense)
+- `useImportTransactions()`: mutation che riceve un array di transazioni parsate e le inserisce in batch nel DB
+
+---
+
+## 5. File da creare/modificare
+
+| File | Azione | Descrizione |
+|------|--------|-------------|
+| `src/components/ImportTransactionsDialog.tsx` | Creare | Dialog multi-step con upload, anteprima, mappatura, risultato |
+| `src/hooks/useImportTransactions.ts` | Creare | Hook per gestione categorie "Da classificare" e bulk insert |
+| `src/pages/Transactions.tsx` | Modificare | Aggiungere pulsante "Importa" e stato dialog |
+
+---
+
+## 6. Dettagli tecnici
+
+- **Parsing file**: usa `XLSX.read()` con `type: "array"` per leggere il file, poi `XLSX.utils.sheet_to_json()` per ottenere righe JSON
+- **Formati data supportati**: il parser provera `date-fns/parse` con i pattern piu comuni (dd/MM/yyyy, yyyy-MM-dd, dd-MM-yyyy, MM/dd/yyyy)
+- **Batch insert**: divide l'array in chunk da 100 e fa INSERT sequenziali per evitare timeout
+- **Gestione errori**: ogni errore (file, parsing, DB) viene catturato e mostrato con toast, senza bloccare l'interfaccia
+- **Nessuna dipendenza aggiuntiva**: usa `xlsx` gia installato e `date-fns` gia presente
 
