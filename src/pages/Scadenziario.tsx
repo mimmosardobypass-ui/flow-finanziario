@@ -30,12 +30,15 @@ function getContractStatus(contract: ScadenziarioWithRate) {
   return { label: "In corso", variant: "secondary" as const, className: "bg-yellow-500 hover:bg-yellow-600 text-white" };
 }
 
-const tipoLabels: Record<string, string> = {
+const tipoLabelsMap: Record<string, string> = {
   finanziamento: "Finanziamento",
   abbonamento: "Abbonamento",
   assicurazione: "Assicurazione",
-  altro: "Altro",
 };
+
+function getTipoLabel(tipo: string) {
+  return tipoLabelsMap[tipo] || tipo.charAt(0).toUpperCase() + tipo.slice(1);
+}
 
 export default function Scadenziario() {
   const { data: contratti = [], isLoading } = useScadenziarioList();
@@ -107,7 +110,7 @@ export default function Scadenziario() {
                           </TableCell>
                           <TableCell className="font-medium">{c.numero_contratto}</TableCell>
                           <TableCell>{c.societa_finanziaria}</TableCell>
-                          <TableCell>{tipoLabels[c.tipo] || c.tipo}</TableCell>
+                          <TableCell>{getTipoLabel(c.tipo)}</TableCell>
                           <TableCell className="text-right">€ {c.importo_totale.toFixed(2)}</TableCell>
                           <TableCell className="text-center">{pagate}/{rate.length}</TableCell>
                           <TableCell>
@@ -141,7 +144,7 @@ export default function Scadenziario() {
         </CardContent>
       </Card>
 
-      <ScadenziarioDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <ScadenziarioDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreated={(id) => setExpandedId(id)} />
 
       <DeleteConfirmDialog
         open={!!deleteTarget}

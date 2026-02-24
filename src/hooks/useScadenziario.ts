@@ -155,6 +155,26 @@ export function useUpdateRata() {
   });
 }
 
+export function useSocietaSuggestions() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["societa_suggestions", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("scadenziario")
+        .select("societa_finanziaria")
+        .order("societa_finanziaria");
+
+      if (error) throw error;
+      const unique = [...new Set((data || []).map((d) => d.societa_finanziaria).filter(Boolean))];
+      return unique;
+    },
+    enabled: !!user,
+  });
+}
+
 export function useDeleteScadenziario() {
   const queryClient = useQueryClient();
 

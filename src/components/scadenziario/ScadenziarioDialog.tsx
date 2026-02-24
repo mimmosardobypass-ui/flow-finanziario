@@ -33,12 +33,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useCreateScadenziario } from "@/hooks/useScadenziario";
+import { useCreateScadenziario, useSocietaSuggestions } from "@/hooks/useScadenziario";
 import { toast } from "@/hooks/use-toast";
 
 interface ScadenziarioDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated?: (id: string) => void;
 }
 
 interface RataPreview {
@@ -47,18 +48,29 @@ interface RataPreview {
   data_scadenza: string;
 }
 
-export function ScadenziarioDialog({ open, onOpenChange }: ScadenziarioDialogProps) {
+interface FormErrors {
+  numero_contratto?: string;
+  societa?: string;
+  tipo?: string;
+  importo_totale?: string;
+  numero_rate?: string;
+}
+
+export function ScadenziarioDialog({ open, onOpenChange, onCreated }: ScadenziarioDialogProps) {
   const [numeroContratto, setNumeroContratto] = useState("");
   const [societa, setSocieta] = useState("");
   const [tipo, setTipo] = useState("finanziamento");
+  const [tipoCustom, setTipoCustom] = useState("");
   const [importoTotale, setImportoTotale] = useState("");
   const [numeroRate, setNumeroRate] = useState("");
   const [dataPrima, setDataPrima] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [modalita, setModalita] = useState<"automatico" | "manuale">("automatico");
   const [rate, setRate] = useState<RataPreview[]>([]);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   const createMutation = useCreateScadenziario();
+  const { data: societaSuggestions = [] } = useSocietaSuggestions();
 
   // Generate rate preview when relevant fields change
   useEffect(() => {
@@ -97,11 +109,13 @@ export function ScadenziarioDialog({ open, onOpenChange }: ScadenziarioDialogPro
       setNumeroContratto("");
       setSocieta("");
       setTipo("finanziamento");
+      setTipoCustom("");
       setImportoTotale("");
       setNumeroRate("");
       setDataPrima(new Date());
       setModalita("automatico");
       setRate([]);
+      setErrors({});
     }
   }, [open]);
 
@@ -109,22 +123,32 @@ export function ScadenziarioDialog({ open, onOpenChange }: ScadenziarioDialogPro
     setRate((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
   };
 
+  const validate = (): boolean => {
+    const newErrors: FormErrors = {};
+    if (!numeroContratto.trim()) newErrors.numero_contratto = "Campo obbligatorio";
+    if (!societa.trim()) newErrors.societa = "Campo obbligatorio";
+    if (tipo === "altro_custom" && !tipoCustom.trim()) newErrors.tipo = "Inserisci il tipo personalizzato";
+    const totale = parseFloat(importoTotale);
+    if (!totale || totale <= 0) newErrors.importo_totale = "Inserisci un importo valido";
+    const nRate = parseInt(numeroRate);
+    if (!nRate || nRate < 1) newErrors.numero_rate = "Inserisci almeno 1 rata";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validate()) return;
 
     const totale = parseFloat(importoTotale);
     const nRate = parseInt(numeroRate);
-
-    if (!totale || totale <= 0 || !nRate || nRate < 1) {
-      toast({ title: "Errore", description: "Compila tutti i campi obbligatori", variant: "destructive" });
-      return;
-    }
+    const finalTipo = tipo === "altro_custom" ? tipoCustom.trim().toLowerCase() : tipo;
 
     try {
-      await createMutation.mutateAsync({
+      const contratto = await createMutation.mutateAsync({
         numero_contratto: numeroContratto.trim(),
         societa_finanziaria: societa.trim(),
-        tipo,
+        tipo: finalTipo,
         importo_totale: totale,
         numero_rate: nRate,
         data_prima_scadenza: format(dataPrima, "yyyy-MM-dd"),
@@ -137,8 +161,10 @@ export function ScadenziarioDialog({ open, onOpenChange }: ScadenziarioDialogPro
       });
       toast({ title: "Contratto creato" });
       onOpenChange(false);
-    } catch {
-      toast({ title: "Errore", description: "Impossibile creare il contratto", variant: "destructive" });
+      onCreated?.(contratto.id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Impossibile creare il contratto";
+      toast({ title: "Errore", description: message, variant: "destructive" });
     }
   };
 
@@ -151,38 +177,82 @@ export function ScadenziarioDialog({ open, onOpenChange }: ScadenziarioDialogPro
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="numero_contratto">Numero Contratto</Label>
-              <Input id="numero_contratto" value={numeroContratto} onChange={(e) => setNumeroContratto(e.target.value)} required />
+              <Label htmlFor="numero_contratto">Numero Contratto *</Label>
+              <Input
+                id="numero_contratto"
+                placeholder="Es. 12345ABC"
+                value={numeroContratto}
+                onChange={(e) => { setNumeroContratto(e.target.value); setErrors((p) => ({ ...p, numero_contratto: undefined })); }}
+              />
+              {errors.numero_contratto && <p className="text-sm text-destructive">{errors.numero_contratto}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="societa">Società Finanziaria</Label>
-              <Input id="societa" value={societa} onChange={(e) => setSocieta(e.target.value)} required />
+              <Label htmlFor="societa">Società Finanziaria *</Label>
+              <Input
+                id="societa"
+                placeholder="Es. Compass"
+                list="societa-suggestions"
+                value={societa}
+                onChange={(e) => { setSocieta(e.target.value); setErrors((p) => ({ ...p, societa: undefined })); }}
+              />
+              <datalist id="societa-suggestions">
+                {societaSuggestions.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+              {errors.societa && <p className="text-sm text-destructive">{errors.societa}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select value={tipo} onValueChange={setTipo}>
+              <Label>Tipo *</Label>
+              <Select value={tipo} onValueChange={(v) => { setTipo(v); setErrors((p) => ({ ...p, tipo: undefined })); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="finanziamento">Finanziamento</SelectItem>
                   <SelectItem value="abbonamento">Abbonamento</SelectItem>
                   <SelectItem value="assicurazione">Assicurazione</SelectItem>
-                  <SelectItem value="altro">Altro</SelectItem>
+                  <SelectItem value="altro_custom">Altro…</SelectItem>
                 </SelectContent>
               </Select>
+              {tipo === "altro_custom" && (
+                <Input
+                  placeholder="Es. Noleggio"
+                  value={tipoCustom}
+                  onChange={(e) => { setTipoCustom(e.target.value); setErrors((p) => ({ ...p, tipo: undefined })); }}
+                  className="mt-2"
+                />
+              )}
+              {errors.tipo && <p className="text-sm text-destructive">{errors.tipo}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="importo_totale">Importo Totale (€)</Label>
-              <Input id="importo_totale" type="number" step="0.01" min="0.01" value={importoTotale} onChange={(e) => setImportoTotale(e.target.value)} required />
+              <Label htmlFor="importo_totale">Importo Totale (€) *</Label>
+              <Input
+                id="importo_totale"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Es. 5000.00"
+                value={importoTotale}
+                onChange={(e) => { setImportoTotale(e.target.value); setErrors((p) => ({ ...p, importo_totale: undefined })); }}
+              />
+              {errors.importo_totale && <p className="text-sm text-destructive">{errors.importo_totale}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="numero_rate">Numero Rate</Label>
-              <Input id="numero_rate" type="number" min="1" value={numeroRate} onChange={(e) => setNumeroRate(e.target.value)} required />
+              <Label htmlFor="numero_rate">Numero Rate *</Label>
+              <Input
+                id="numero_rate"
+                type="number"
+                min="1"
+                placeholder="Es. 12"
+                value={numeroRate}
+                onChange={(e) => { setNumeroRate(e.target.value); setErrors((p) => ({ ...p, numero_rate: undefined })); }}
+              />
+              {errors.numero_rate && <p className="text-sm text-destructive">{errors.numero_rate}</p>}
             </div>
             <div className="space-y-2">
               <Label>Data Prima Scadenza</Label>
