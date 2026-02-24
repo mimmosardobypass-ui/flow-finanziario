@@ -38,6 +38,96 @@ export type Database = {
         }
         Relationships: []
       }
+      scadenze_rate: {
+        Row: {
+          created_at: string
+          data_scadenza: string | null
+          id: string
+          importo: number | null
+          numero_rata: number
+          scadenziario_id: string
+          stato: string
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_scadenza?: string | null
+          id?: string
+          importo?: number | null
+          numero_rata: number
+          scadenziario_id: string
+          stato?: string
+          transaction_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data_scadenza?: string | null
+          id?: string
+          importo?: number | null
+          numero_rata?: number
+          scadenziario_id?: string
+          stato?: string
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scadenze_rate_scadenziario_id_fkey"
+            columns: ["scadenziario_id"]
+            isOneToOne: false
+            referencedRelation: "scadenziario"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scadenze_rate_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scadenziario: {
+        Row: {
+          created_at: string
+          data_prima_scadenza: string
+          id: string
+          importo_totale: number
+          modalita_importo: string
+          numero_contratto: string
+          numero_rate: number
+          societa_finanziaria: string
+          tipo: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_prima_scadenza: string
+          id?: string
+          importo_totale: number
+          modalita_importo: string
+          numero_contratto: string
+          numero_rate: number
+          societa_finanziaria: string
+          tipo: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data_prima_scadenza?: string
+          id?: string
+          importo_totale?: number
+          modalita_importo?: string
+          numero_contratto?: string
+          numero_rate?: number
+          societa_finanziaria?: string
+          tipo?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number
@@ -47,6 +137,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
+          rata_id: string | null
           type: string
           user_id: string
         }
@@ -58,6 +149,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          rata_id?: string | null
           type: string
           user_id: string
         }
@@ -69,6 +161,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          rata_id?: string | null
           type?: string
           user_id?: string
         }
@@ -78,6 +171,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_rata_id_fkey"
+            columns: ["rata_id"]
+            isOneToOne: false
+            referencedRelation: "scadenze_rate"
             referencedColumns: ["id"]
           },
         ]

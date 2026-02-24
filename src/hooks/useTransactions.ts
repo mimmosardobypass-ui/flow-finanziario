@@ -10,6 +10,7 @@ export interface Transaction {
   type: "income" | "expense";
   date: string;
   category_id: string | null;
+  rata_id: string | null;
   created_at: string;
   deleted_at: string | null;
 }
@@ -28,6 +29,7 @@ export interface CreateTransactionInput {
   type: "income" | "expense";
   date: string;
   category_id: string | null;
+  rata_id?: string | null;
 }
 
 export interface UpdateTransactionInput extends CreateTransactionInput {
@@ -79,15 +81,27 @@ export function useCreateTransaction() {
           type: input.type,
           date: input.date,
           category_id: input.category_id,
+          rata_id: input.rata_id || null,
         })
         .select()
         .single();
 
       if (error) throw error;
+
+      // If linked to a rata, update the rata status
+      if (input.rata_id) {
+        await supabase
+          .from("scadenze_rate")
+          .update({ stato: "pagata", transaction_id: data.id })
+          .eq("id", input.rata_id);
+      }
+
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["scadenziario"] });
+      queryClient.invalidateQueries({ queryKey: ["scadenze_rate_unpaid"] });
     },
   });
 }
