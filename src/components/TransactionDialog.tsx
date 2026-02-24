@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Plus } from "lucide-react";
+import { CalendarIcon, Plus, Link } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -25,12 +25,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useCategories } from "@/hooks/useCategories";
 import {
   useCreateTransaction,
   useUpdateTransaction,
   TransactionWithCategory,
 } from "@/hooks/useTransactions";
+import { useUnpaidRateByContract } from "@/hooks/useScadenziario";
 import { toast } from "@/hooks/use-toast";
 import { QuickCategoryDialog } from "@/components/QuickCategoryDialog";
 
@@ -52,13 +54,20 @@ export function TransactionDialog({
   const [date, setDate] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [quickCategoryOpen, setQuickCategoryOpen] = useState(false);
+  const [linkRata, setLinkRata] = useState(false);
+  const [selectedContractId, setSelectedContractId] = useState("");
+  const [selectedRataId, setSelectedRataId] = useState("");
 
   const { data: categories = [] } = useCategories();
   const createMutation = useCreateTransaction();
   const updateMutation = useUpdateTransaction();
+  const { data: contractsWithUnpaid = [] } = useUnpaidRateByContract();
 
   const isEditing = !!transaction;
   const filteredCategories = categories.filter((c) => c.type === type);
+
+  const selectedContract = contractsWithUnpaid.find((c) => c.id === selectedContractId);
+  const availableRate = selectedContract?.scadenze_rate || [];
 
   useEffect(() => {
     if (transaction) {
@@ -67,12 +76,18 @@ export function TransactionDialog({
       setType(transaction.type as "income" | "expense");
       setCategoryId(transaction.category_id || "");
       setDate(new Date(transaction.date));
+      setLinkRata(false);
+      setSelectedContractId("");
+      setSelectedRataId("");
     } else {
       setDescription("");
       setAmount("");
       setType("expense");
       setCategoryId("");
       setDate(new Date());
+      setLinkRata(false);
+      setSelectedContractId("");
+      setSelectedRataId("");
     }
   }, [transaction, open]);
 
@@ -102,6 +117,7 @@ export function TransactionDialog({
       type,
       date: format(date, "yyyy-MM-dd"),
       category_id: categoryId || null,
+      rata_id: linkRata && selectedRataId ? selectedRataId : null,
     };
 
     try {
@@ -208,6 +224,54 @@ export function TransactionDialog({
             </Select>
           </div>
 
+          {!isEditing && contractsWithUnpaid.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="link-rata"
+                  checked={linkRata}
+                  onCheckedChange={(v) => {
+                    setLinkRata(!!v);
+                    if (!v) { setSelectedContractId(""); setSelectedRataId(""); }
+                  }}
+                />
+                <Label htmlFor="link-rata" className="cursor-pointer flex items-center gap-1">
+                  <Link className="h-3.5 w-3.5" />
+                  Collega a scadenza
+                </Label>
+              </div>
+              {linkRata && (
+                <div className="space-y-2 pl-6">
+                  <Select value={selectedContractId} onValueChange={(v) => { setSelectedContractId(v); setSelectedRataId(""); }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona contratto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {contractsWithUnpaid.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.numero_contratto} — {c.societa_finanziaria}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedContractId && availableRate.length > 0 && (
+                    <Select value={selectedRataId} onValueChange={setSelectedRataId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleziona rata" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableRate.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            Rata {r.numero_rata}{r.importo ? ` — € ${r.importo.toFixed(2)}` : ""}{r.data_scadenza ? ` (${format(new Date(r.data_scadenza), "dd/MM/yyyy")})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Data</Label>

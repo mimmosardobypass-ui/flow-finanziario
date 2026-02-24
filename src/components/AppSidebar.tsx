@@ -1,4 +1,4 @@
-import { LayoutDashboard, Receipt, LogOut, Wallet, Tag } from "lucide-react";
+import { LayoutDashboard, Receipt, LogOut, Wallet, Tag, CalendarClock } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -18,6 +18,7 @@ const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Transazioni", url: "/transactions", icon: Receipt },
   { title: "Categorie", url: "/categories", icon: Tag },
+  { title: "Scadenziario", url: "/scadenziario", icon: CalendarClock },
 ];
 
 export function AppSidebar() {

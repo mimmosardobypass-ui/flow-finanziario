@@ -9,6 +9,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Categories from "./pages/Categories";
+import Scadenziario from "./pages/Scadenziario";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
@@ -51,6 +52,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <Categories />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/scadenziario"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Scadenziario />
                   </Layout>
                 </ProtectedRoute>
               }
