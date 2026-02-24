@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Receipt, Plus, Pencil, Trash2 } from "lucide-react";
+import { Receipt, Plus, Pencil, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -19,6 +19,7 @@ import { TransactionDialog } from "@/components/TransactionDialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { TransactionFilters } from "@/components/TransactionFilters";
 import { ExportDropdown } from "@/components/ExportDropdown";
+import { ImportTransactionsDialog } from "@/components/ImportTransactionsDialog";
 import {
   useFilteredTransactions,
   TransactionFilters as FiltersType,
@@ -33,6 +34,7 @@ export default function Transactions() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] =
     useState<TransactionWithCategory | null>(null);
   
@@ -158,6 +160,10 @@ export default function Transactions() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setImportDialogOpen(true)}>
+            <Upload className="h-4 w-4" />
+            <span className="hidden sm:inline">Importa</span>
+          </Button>
           <ExportDropdown
             transactions={transactions}
             dateFrom={filters.dateFrom}
@@ -327,6 +333,11 @@ export default function Transactions() {
         onOpenChange={setDeleteDialogOpen}
         onConfirm={confirmDelete}
         isLoading={deleteMutation.isPending}
+      />
+
+      <ImportTransactionsDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
       />
     </div>
   );
