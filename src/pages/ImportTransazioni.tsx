@@ -63,12 +63,13 @@ const AUTO_MAP_KEYS: Partial<Record<keyof MappingState, string[]>> = {
     "amount",
     "importo (eur)",
     "importo (euro)",
+    "importo euro",
     "ammontare",
     "valore",
     "value",
   ],
-  addebiti: ["addebiti", "addebiti (euro)", "dare"],
-  accrediti: ["accrediti", "accrediti (euro)", "avere"],
+  addebiti: ["addebiti", "addebiti (euro)", "addebiti euro", "dare"],
+  accrediti: ["accrediti", "accrediti (euro)", "accrediti euro", "avere"],
 };
 
 const DATE_FORMATS = [
@@ -267,8 +268,7 @@ export default function ImportTransazioni() {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        if (!sheetName) {
+        if (workbook.SheetNames.length === 0) {
           toast({
             title: "File vuoto",
             description: "Il file non contiene fogli",
@@ -276,31 +276,42 @@ export default function ImportTransazioni() {
           });
           return;
         }
-        const sheet = workbook.Sheets[sheetName];
-        const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
 
-        // Scan first 20 rows for a header row containing "Data Contabile"
+        // Multi-sheet scan: find the sheet containing "Data Contabile"
+        let targetSheet: XLSX.WorkSheet | null = null;
         let headerRowIndex = -1;
-        const scanLimit = Math.min(rawRows.length, 20);
-        for (let i = 0; i < scanLimit; i++) {
-          const row = rawRows[i];
-          if (
-            Array.isArray(row) &&
-            row.some(
-              (cell) =>
-                typeof cell === "string" &&
-                cell.toLowerCase().includes("data contabile")
-            )
-          ) {
-            headerRowIndex = i;
-            break;
+
+        for (const name of workbook.SheetNames) {
+          const ws = workbook.Sheets[name];
+          const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+          const limit = Math.min(raw.length, 50);
+          for (let i = 0; i < limit; i++) {
+            const row = raw[i];
+            if (
+              Array.isArray(row) &&
+              row.some(
+                (cell) =>
+                  typeof cell === "string" &&
+                  cell.toLowerCase().includes("data contabile")
+              )
+            ) {
+              targetSheet = ws;
+              headerRowIndex = i;
+              break;
+            }
           }
+          if (targetSheet) break;
+        }
+
+        // Fallback: first sheet without offset
+        if (!targetSheet) {
+          targetSheet = workbook.Sheets[workbook.SheetNames[0]];
         }
 
         const json: Record<string, unknown>[] =
           headerRowIndex >= 0
-            ? XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { range: headerRowIndex })
-            : XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+            ? XLSX.utils.sheet_to_json<Record<string, unknown>>(targetSheet, { range: headerRowIndex })
+            : XLSX.utils.sheet_to_json<Record<string, unknown>>(targetSheet);
 
         if (json.length === 0) {
           toast({
@@ -311,7 +322,7 @@ export default function ImportTransazioni() {
           return;
         }
         const rawCols = Object.keys(json[0]);
-        const cols = rawCols.map(c => c.trim());
+        const cols = rawCols.map(c => c.trim().replace(/\s+/g, ' '));
         const cleanedRows = json.map(row => {
           const clean: Record<string, unknown> = {};
           for (const key of rawCols) {
@@ -335,7 +346,7 @@ export default function ImportTransazioni() {
         };
         for (const [field, keywords] of Object.entries(AUTO_MAP_KEYS)) {
           const match = cols.find((c) =>
-            keywords.includes(c.toLowerCase().trim())
+            keywords.includes(c.toLowerCase().trim().replace(/\s+/g, ' '))
           );
           if (match) autoMapping[field as keyof MappingState] = match;
         }
