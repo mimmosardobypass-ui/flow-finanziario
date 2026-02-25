@@ -1,54 +1,60 @@
 
 
-# Aggiunta `reconciliation_type` alla Riconciliazione
+# Completamento `reconciliation_type`
 
 ## Panoramica
 
-Aggiungere una colonna `reconciliation_type` alla tabella `transactions` e una select nel pannello `ReconciliationSheet` per classificare il tipo di riconciliazione.
+Completare l'implementazione del campo `reconciliation_type` con auto-detect per trasferimenti tra conti diversi, valori standardizzati e filtro dedicato.
 
 ---
 
-## 1. Migrazione Database
+## Modifiche
 
-Aggiungere la colonna `reconciliation_type` alla tabella `transactions`:
+### 1. `src/components/ReconciliationSheet.tsx`
 
-```text
-reconciliation_type  text  NULLABLE  DEFAULT NULL
-```
+- **Standardizzare i valori**: cambiare `pagamento` in `payment` e `altro` in `other` nelle opzioni della Select
+- **Auto-detect tipo**: quando l'utente seleziona movimenti compatibili, verificare automaticamente se i conti sono diversi e pre-impostare `reconciliationType = "transfer"`. L'utente puo comunque cambiarlo manualmente
+- **Etichette aggiornate**: Transfer, Pagamento (`payment`), Altro (`other`)
+- **Mostrare il tipo anche per transazioni gia riconciliate**: gia implementato con Badge, aggiornare le label per coerenza con i nuovi valori
 
-Valori possibili: `transfer`, `pagamento`, `altro`. Resta `NULL` per le transazioni non riconciliate.
+### 2. `src/components/TransactionFilters.tsx`
 
----
+- Aggiungere un nuovo Select per filtrare per `reconciliationType` con valori:
+  - Tutti
+  - Transfer
+  - Pagamento
+  - Altro
+- Aggiungere il badge filtro attivo corrispondente nella sezione badge
 
-## 2. File da modificare
+### 3. `src/hooks/useFilteredTransactions.ts`
 
-### Migrazione SQL
-- Aggiungere colonna `reconciliation_type` a `public.transactions`
+- Aggiungere campo `reconciliationType` al tipo `TransactionFilters` con valori `"all" | "transfer" | "payment" | "other"`
+- Aggiungere filtro server-side: `.eq("reconciliation_type", value)` quando diverso da "all"
+- Includere nel `serverFilters` per la queryKey
 
-### `src/hooks/useReconciliation.ts`
-- Modificare `useReconcile()` per accettare anche il `reconciliation_type` come parametro e salvarlo insieme a `reconciliation_id` e `reconciliation_status`
+### 4. `src/hooks/useReconciliation.ts`
 
-### `src/components/ReconciliationSheet.tsx`
-- Aggiungere uno stato locale `reconciliationType` (default `"transfer"`)
-- Inserire un componente `Select` con le opzioni:
-  - **Transfer** - Trasferimento tra conti
-  - **Pagamento** - Pagamento/incasso collegato
-  - **Altro** - Altro tipo di collegamento
-- Passare il tipo selezionato alla mutation `useReconcile`
-- Quando la transazione e gia riconciliata, mostrare il tipo attuale come badge o testo informativo
-
-### `src/integrations/supabase/types.ts`
-- Aggiornamento automatico per includere `reconciliation_type` nel tipo `transactions`
+- Nella mutation `useReconcile`, aggiungere logica di auto-detect: se i movimenti selezionati appartengono a conti diversi e l'utente non ha modificato manualmente il tipo, impostare `reconciliation_type = "transfer"` come default (gia gestito dal default del parametro, nessuna modifica necessaria)
 
 ---
 
-## 3. Dettagli UI
+## Mappa valori
 
-La select viene posizionata sopra l'elenco dei movimenti compatibili, visibile solo quando si sta per creare una nuova riconciliazione (non gia riconciliata). Per le riconciliazioni esistenti, il tipo viene mostrato come informazione nella sezione "Movimenti gia riconciliati".
+| Valore DB | Etichetta UI | Descrizione |
+|-----------|-------------|-------------|
+| `transfer` | Transfer | Trasferimento tra conti (auto-detect) |
+| `payment` | Pagamento | Pagamento/incasso collegato |
+| `other` | Altro | Altro tipo di collegamento |
 
-| Valore | Etichetta | Descrizione |
-|--------|-----------|-------------|
-| `transfer` | Transfer | Trasferimento tra conti |
-| `pagamento` | Pagamento | Pagamento o incasso collegato |
-| `altro` | Altro | Altro tipo di collegamento |
+---
+
+## File coinvolti
+
+| File | Tipo modifica |
+|------|--------------|
+| `src/components/ReconciliationSheet.tsx` | Standardizzare valori, aggiornare label |
+| `src/components/TransactionFilters.tsx` | Aggiungere filtro tipo riconciliazione |
+| `src/hooks/useFilteredTransactions.ts` | Aggiungere campo e filtro server-side |
+
+Nessuna migrazione database necessaria: la colonna `reconciliation_type` esiste gia come testo libero.
 
