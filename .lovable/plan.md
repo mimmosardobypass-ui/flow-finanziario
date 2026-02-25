@@ -1,36 +1,81 @@
 
 
-# Migrazione: Rinomina "Conto Principale" in "Cassa"
+# Gestione Trasferimenti tra Conti
 
-## Cosa viene fatto
+## Panoramica
 
-Una migrazione SQL che, per ogni utente:
+Aggiungere la possibilita di trasferire fondi tra conti direttamente dal form "Nuova Transazione". Un trasferimento genera automaticamente 2 o 3 movimenti collegati tramite un `transfer_id` comune, senza alterare il saldo complessivo.
 
-1. Verifica se esiste gia un conto chiamato "Cassa"
-2. Se non esiste, rinomina il "Conto Principale" (creato dalla migrazione precedente) in "Cassa"
-3. Se "Conto Principale" non esiste ma nemmeno "Cassa", crea un nuovo conto "Cassa" attivo
-4. Aggiorna tutte le transazioni attualmente collegate al vecchio "Conto Principale" per puntare a "Cassa"
+---
 
-Le transazioni non vengono eliminate ne modificate nei loro dati (importo, data, descrizione, categoria). Viene solo aggiornato il riferimento al conto.
+## 1. Migrazione Database
 
-## Sicurezza
+Aggiungere una colonna `transfer_id` alla tabella `transactions`:
 
-- Nessun dato viene cancellato
-- L'operazione e idempotente: se eseguita piu volte non causa errori
-- Le transazioni future non vengono toccate (la migrazione agisce solo sui record esistenti al momento dell'esecuzione)
+```text
+transactions.transfer_id  uuid  NULLABLE  DEFAULT NULL
+```
 
-## Dettagli tecnici
+Questa colonna collega tra loro i movimenti generati da un singolo trasferimento. Le transazioni normali avranno `transfer_id = NULL`.
+
+---
+
+## 2. Logica del trasferimento
+
+Alla conferma di un trasferimento con importo X e commissione C (opzionale):
+
+| # | Tipo | Conto | Importo | Descrizione | Categoria |
+|---|------|-------|---------|-------------|-----------|
+| 1 | expense | Conto origine | X | "Trasferimento verso [dest]" | nessuna |
+| 2 | income | Conto destinazione | X | "Trasferimento da [origine]" | nessuna |
+| 3 | expense | Conto origine | C | "Commissione trasferimento" | "Commissioni" (auto-creata) |
+
+Tutti i movimenti condividono lo stesso `transfer_id` (UUID generato lato client).
+
+---
+
+## 3. File da modificare
+
+### `src/hooks/useTransactions.ts`
+- Aggiungere `transfer_id` opzionale alle interfacce `Transaction` e `CreateTransactionInput`
+- Creare un nuovo hook `useCreateTransfer()` che:
+  - Genera un UUID come `transfer_id`
+  - Cerca o crea la categoria "Commissioni" (tipo expense) se serve
+  - Inserisce 2 o 3 righe in `transactions` in un'unica operazione
+  - Invalida le query necessarie
+
+### `src/components/TransactionDialog.tsx`
+- Aggiungere "Trasferimento" come terza opzione nel RadioGroup del tipo (con icona `ArrowLeftRight`)
+- Quando tipo = "transfer":
+  - Nascondere il campo "Conto" singolo
+  - Mostrare "Conto origine" (select tra conti attivi)
+  - Mostrare "Conto destinazione" (select tra conti attivi, escludendo l'origine)
+  - Mostrare campo "Commissione (opzionale)" numerico
+  - Nascondere la sezione categoria (non pertinente)
+  - Nascondere la sezione "Collega a scadenza"
+  - Pre-compilare la descrizione con "Trasferimento"
+- Alla conferma, chiamare `useCreateTransfer` invece di `useCreateTransaction`
+- In modifica, i trasferimenti non sono modificabili dal dialog standard (troppo complesso)
+
+### `src/pages/Transactions.tsx`
+- Nella colonna "Importo", gestire la visualizzazione delle transazioni con `transfer_id`:
+  - Mostrare un'icona o badge "Trasf." per identificare visivamente i trasferimenti
+- Nessun impatto sul calcolo saldi (entrate e uscite si bilanciano gia)
+
+---
+
+## 4. Categoria "Commissioni"
+
+La categoria "Commissioni" (tipo expense) viene cercata tra le categorie esistenti dell'utente. Se non esiste, viene creata automaticamente al momento del trasferimento con commissione. Questo evita di richiedere una migrazione dati.
+
+---
+
+## 5. Riepilogo file
 
 | File | Azione |
 |------|--------|
-| `supabase/migrations/[timestamp].sql` | Creare nuova migrazione SQL |
-
-### Logica SQL
-
-```text
-1. Rinomina i conti "Conto Principale" in "Cassa" (dove non esiste gia un conto "Cassa" per lo stesso utente)
-2. Se per qualche utente esiste gia "Cassa" ma anche "Conto Principale":
-   - Sposta le transazioni dal "Conto Principale" al conto "Cassa" esistente
-   - Elimina il "Conto Principale" ormai vuoto
-```
+| Migrazione SQL | Aggiungere colonna `transfer_id` a `transactions` |
+| `src/hooks/useTransactions.ts` | Aggiungere `transfer_id` alle interfacce, creare `useCreateTransfer()` |
+| `src/components/TransactionDialog.tsx` | Aggiungere tipo "Trasferimento" con UI dedicata (origine, destinazione, commissione) |
+| `src/pages/Transactions.tsx` | Badge visivo per transazioni di trasferimento |
 
