@@ -14,6 +14,7 @@ export interface Transaction {
   conto_id: string;
   created_at: string;
   deleted_at: string | null;
+  transfer_id: string | null;
 }
 
 export interface TransactionWithCategory extends Transaction {
@@ -37,10 +38,20 @@ export interface CreateTransactionInput {
   category_id: string | null;
   conto_id: string;
   rata_id?: string | null;
+  transfer_id?: string | null;
 }
 
 export interface UpdateTransactionInput extends CreateTransactionInput {
   id: string;
+}
+
+export interface CreateTransferInput {
+  amount: number;
+  date: string;
+  description: string;
+  contoOrigineId: string;
+  contoDestinazioneId: string;
+  commissione?: number;
 }
 
 export function useTransactions() {
@@ -143,6 +154,94 @@ export function useUpdateTransaction() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    },
+  });
+}
+
+export function useCreateTransfer() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: CreateTransferInput) => {
+      if (!user) throw new Error("Not authenticated");
+
+      const transfer_id = crypto.randomUUID();
+
+      // Fetch conti names for descriptions
+      const { data: conti } = await supabase
+        .from("conti")
+        .select("id, nome_conto")
+        .in("id", [input.contoOrigineId, input.contoDestinazioneId]);
+
+      const origineNome = conti?.find((c) => c.id === input.contoOrigineId)?.nome_conto || "Origine";
+      const destNome = conti?.find((c) => c.id === input.contoDestinazioneId)?.nome_conto || "Destinazione";
+
+      const rows: any[] = [
+        {
+          user_id: user.id,
+          description: input.description || `Trasferimento verso ${destNome}`,
+          amount: input.amount,
+          type: "expense",
+          date: input.date,
+          category_id: null,
+          conto_id: input.contoOrigineId,
+          transfer_id,
+        },
+        {
+          user_id: user.id,
+          description: input.description || `Trasferimento da ${origineNome}`,
+          amount: input.amount,
+          type: "income",
+          date: input.date,
+          category_id: null,
+          conto_id: input.contoDestinazioneId,
+          transfer_id,
+        },
+      ];
+
+      // Handle commission
+      if (input.commissione && input.commissione > 0) {
+        // Find or create "Commissioni" category
+        let { data: existingCat } = await supabase
+          .from("categories")
+          .select("id")
+          .eq("name", "Commissioni")
+          .eq("type", "expense")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        let commissionCategoryId: string;
+        if (existingCat) {
+          commissionCategoryId = existingCat.id;
+        } else {
+          const { data: newCat, error: catError } = await supabase
+            .from("categories")
+            .insert({ name: "Commissioni", type: "expense", user_id: user.id })
+            .select("id")
+            .single();
+          if (catError) throw catError;
+          commissionCategoryId = newCat.id;
+        }
+
+        rows.push({
+          user_id: user.id,
+          description: "Commissione trasferimento",
+          amount: input.commissione,
+          type: "expense",
+          date: input.date,
+          category_id: commissionCategoryId,
+          conto_id: input.contoOrigineId,
+          transfer_id,
+        });
+      }
+
+      const { error } = await supabase.from("transactions").insert(rows);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
     },
   });
 }

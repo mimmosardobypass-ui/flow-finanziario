@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Receipt, Plus, Pencil, Trash2, Upload } from "lucide-react";
+import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -281,10 +281,20 @@ export default function Transactions() {
                             : "text-destructive"
                         }`}
                       >
-                        {transaction.type === "income" ? "+" : "-"}€
-                        {transaction.amount.toLocaleString("it-IT", {
-                          minimumFractionDigits: 2,
-                        })}
+                        <div className="flex items-center justify-end gap-1.5">
+                          {(transaction as any).transfer_id && (
+                            <Badge variant="outline" className="text-primary border-primary/30 text-[10px] px-1.5 py-0">
+                              <ArrowLeftRight className="h-3 w-3 mr-0.5" />
+                              Trasf.
+                            </Badge>
+                          )}
+                          <span>
+                            {transaction.type === "income" ? "+" : "-"}€
+                            {transaction.amount.toLocaleString("it-IT", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell className="print:hidden">
                         <div className="flex gap-1">

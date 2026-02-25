@@ -169,6 +169,7 @@ export type Database = {
           description: string | null
           id: string
           rata_id: string | null
+          transfer_id: string | null
           type: string
           user_id: string
         }
@@ -182,6 +183,7 @@ export type Database = {
           description?: string | null
           id?: string
           rata_id?: string | null
+          transfer_id?: string | null
           type: string
           user_id: string
         }
@@ -195,6 +197,7 @@ export type Database = {
           description?: string | null
           id?: string
           rata_id?: string | null
+          transfer_id?: string | null
           type?: string
           user_id?: string
         }
