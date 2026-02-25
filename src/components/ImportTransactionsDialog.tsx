@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { parse, isValid, format } from "date-fns";
@@ -28,6 +28,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
 import {
   useEnsureClassificationCategories,
@@ -45,9 +47,9 @@ interface MappingState {
 }
 
 const AUTO_MAP_KEYS: Record<keyof MappingState, string[]> = {
-  data: ["data", "date", "fecha", "datum"],
-  descrizione: ["descrizione", "description", "desc", "causale", "nota", "note"],
-  importo: ["importo", "amount", "importo (eur)", "ammontare", "valore", "value"],
+  data: ["data", "date", "fecha", "datum", "data contabile"],
+  descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
+  importo: ["importo", "amount", "importo (eur)", "importo (euro)", "ammontare", "valore", "value"],
 };
 
 const DATE_FORMATS = [
@@ -62,7 +64,6 @@ const DATE_FORMATS = [
 function tryParseDate(raw: unknown): string | null {
   if (raw == null) return null;
 
-  // Handle Excel serial date numbers
   if (typeof raw === "number") {
     try {
       const excelDate = XLSX.SSF.parse_date_code(raw);
@@ -86,7 +87,6 @@ function tryParseDate(raw: unknown): string | null {
     }
   }
 
-  // fallback: native Date
   const fallback = new Date(str);
   if (isValid(fallback) && fallback.getFullYear() > 1900) {
     return format(fallback, "yyyy-MM-dd");
@@ -117,6 +117,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [mapping, setMapping] = useState<MappingState>({ data: "", descrizione: "", importo: "" });
+  const [excludedRows, setExcludedRows] = useState<Set<number>>(new Set());
   const [importResult, setImportResult] = useState<{
     imported: number;
     skipped: number;
@@ -129,12 +130,16 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
   const importMutation = useImportTransactions();
   const { data: contiAttivi = [] } = useContiAttivi();
 
+  const includedCount = useMemo(() => rows.length - excludedRows.size, [rows.length, excludedRows.size]);
+  const allSelected = excludedRows.size === 0 && rows.length > 0;
+
   const reset = useCallback(() => {
     setStep("upload");
     setFileName("");
     setColumns([]);
     setRows([]);
     setMapping({ data: "", descrizione: "", importo: "" });
+    setExcludedRows(new Set());
     setImportResult(null);
     setImporting(false);
     setSelectedContoId("");
@@ -144,6 +149,23 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     if (!open) reset();
     onOpenChange(open);
   };
+
+  const toggleRow = useCallback((index: number) => {
+    setExcludedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    if (allSelected) {
+      setExcludedRows(new Set(rows.map((_, i) => i)));
+    } else {
+      setExcludedRows(new Set());
+    }
+  }, [allSelected, rows]);
 
   const processFile = useCallback((file: File) => {
     const validTypes = [
@@ -177,6 +199,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
         setColumns(cols);
         setRows(json);
         setFileName(file.name);
+        setExcludedRows(new Set());
 
         // auto-map
         const autoMapping: MappingState = { data: "", descrizione: "", importo: "" };
@@ -226,7 +249,10 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
       const parsed: ParsedTransaction[] = [];
       let skipped = 0;
 
-      for (const row of rows) {
+      for (let i = 0; i < rows.length; i++) {
+        if (excludedRows.has(i)) continue;
+
+        const row = rows[i];
         const date = tryParseDate(row[mapping.data]);
         const amount = tryParseAmount(row[mapping.importo]);
         const description = row[mapping.descrizione] != null ? String(row[mapping.descrizione]).trim() : "";
@@ -263,8 +289,6 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
       setImporting(false);
     }
   };
-
-  const previewRows = rows.slice(0, 5);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -312,7 +336,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
           <div className="space-y-6">
             {/* Column mapping */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {(["data", "descrizione", "importo"] as const).map((field) => (
+              {(["data", "descrizione", "importo"] as const).map((field) => (
                 <div key={field} className="space-y-2">
                   <Label className="capitalize">{field} *</Label>
                   <Select
@@ -351,46 +375,94 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
               </Select>
             </div>
 
-            {/* Preview table */}
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">
-                Anteprima (prime {previewRows.length} righe)
+            {/* Row counter */}
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {includedCount} di {rows.length} righe selezionate
               </p>
-              <div className="rounded-md border border-border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {columns.map((col) => (
-                        <TableHead key={col} className="whitespace-nowrap text-xs">
-                          {col}
-                          {col === mapping.data && " 📅"}
-                          {col === mapping.descrizione && " 📝"}
-                          {col === mapping.importo && " 💰"}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {previewRows.map((row, i) => (
-                      <TableRow key={i}>
-                        {columns.map((col) => (
-                          <TableCell key={col} className="whitespace-nowrap text-xs">
-                            {row[col] != null ? String(row[col]) : ""}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
             </div>
+
+            {/* Preview table with checkboxes */}
+            <ScrollArea className="h-[300px] rounded-md border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={toggleAll}
+                        aria-label="Seleziona tutto"
+                      />
+                    </TableHead>
+                    {columns.map((col) => (
+                      <TableHead key={col} className="whitespace-nowrap text-xs">
+                        {col}
+                        {col === mapping.data && " 📅"}
+                        {col === mapping.descrizione && " 📝"}
+                        {col === mapping.importo && " 💰"}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row, i) => {
+                    const isExcluded = excludedRows.has(i);
+
+                    return (
+                      <TableRow
+                        key={i}
+                        className={isExcluded ? "opacity-40" : ""}
+                      >
+                        <TableCell className="w-10">
+                          <Checkbox
+                            checked={!isExcluded}
+                            onCheckedChange={() => toggleRow(i)}
+                            aria-label={`Riga ${i + 1}`}
+                          />
+                        </TableCell>
+                        {columns.map((col) => {
+                          const raw = row[col] != null ? String(row[col]) : "";
+
+                          // Show interpreted values for mapped columns
+                          if (col === mapping.importo && !isExcluded) {
+                            const amt = tryParseAmount(row[col]);
+                            return (
+                              <TableCell key={col} className="whitespace-nowrap text-xs">
+                                <span className={amt != null ? (amt >= 0 ? "text-green-600" : "text-red-600") : ""}>
+                                  {amt != null ? `${amt >= 0 ? "+" : ""}${amt.toFixed(2)} €` : raw}
+                                </span>
+                              </TableCell>
+                            );
+                          }
+
+                          if (col === mapping.data && !isExcluded) {
+                            const parsed = tryParseDate(row[col]);
+                            return (
+                              <TableCell key={col} className="whitespace-nowrap text-xs">
+                                {parsed ? format(new Date(parsed), "dd/MM/yyyy") : raw}
+                              </TableCell>
+                            );
+                          }
+
+                          return (
+                            <TableCell key={col} className="whitespace-nowrap text-xs">
+                              {raw}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </ScrollArea>
 
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => { reset(); setStep("upload"); }}>
                 Indietro
               </Button>
-              <Button onClick={handleImport} disabled={!isMappingValid || importing}>
-                {importing ? "Importazione in corso..." : `Importa ${rows.length} righe`}
+              <Button onClick={handleImport} disabled={!isMappingValid || importing || includedCount === 0}>
+                {importing ? "Importazione in corso..." : `Importa ${includedCount} righe`}
               </Button>
             </DialogFooter>
           </div>
