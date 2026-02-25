@@ -1,98 +1,88 @@
 
-
-# Pagina Dedicata per Importazione Transazioni
+# Controllo Duplicati nell'Importazione Transazioni
 
 ## Panoramica
 
-Trasformare l'importazione da dialog modale a una pagina full-screen dedicata (`/import-transazioni`) con layout tipo foglio Excel: header fisso, tabella centrale scrollabile e footer fisso.
+Dopo il caricamento del file e la selezione del conto, il sistema interroga Supabase per ottenere le transazioni esistenti su quel conto. Per ogni riga del file, calcola una chiave di confronto (`conto_id + data + importo_abs + descrizione_normalizzata`). Se la chiave corrisponde a una transazione esistente, la riga viene marcata come "Duplicato", deselezionata di default e mostrata con un badge visivo. Un contatore nell'header mostra il numero di duplicati trovati.
 
 ---
 
-## File da creare
+## Modifiche
 
 ### `src/pages/ImportTransazioni.tsx`
 
-Nuova pagina che riprende tutta la logica esistente da `ImportTransactionsDialog.tsx` ma con layout full-page:
+**1. Fetch transazioni esistenti per il conto selezionato**
 
-**Layout struttura:**
+Aggiungere una query con `useQuery` (o fetch manuale) che, quando `selectedContoId` cambia e c'e un file caricato, recupera le transazioni esistenti per quel conto da Supabase:
+
 ```text
-+----------------------------------------------------------+
-| HEADER FISSO                                              |
-| [Selezione conto] [Upload file] [Info file]               |
-| [Righe selezionate: X/Y]  [Totale: +X / -Y]             |
-| [Ricerca per descrizione]                                 |
-+----------------------------------------------------------+
-| TABELLA ANTEPRIMA (flex-1, overflow-y-auto)               |
-| [x] Data Contabile | Descrizione          | Importo      |
-| [x] 01/01/2026     | Pagamento XYZ        | -50.00       |
-| [ ] 02/01/2026     | Accredito stipendio  | +1500.00     |
-| ...                                                       |
-+----------------------------------------------------------+
-| FOOTER FISSO                                              |
-| [Annulla / Torna indietro]        [Conferma Importazione] |
-+----------------------------------------------------------+
+SELECT date, amount, description FROM transactions
+WHERE conto_id = :selectedContoId AND deleted_at IS NULL
 ```
 
-**Dettagli implementazione:**
+**2. Funzione di normalizzazione e chiave duplicato**
 
-- Container con `h-screen flex flex-col` per occupare tutto lo schermo
-- Header: `shrink-0` con selezione conto, area upload (drag-and-drop), info file caricato, campo ricerca descrizione, contatore righe e totali importi
-- Area centrale: `flex-1 overflow-y-auto` con tabella HTML nativa (una sola scrollbar verticale, niente ScrollArea wrapper)
-- Footer: `shrink-0` con pulsanti azione
-- La pagina NON usa il componente `Layout` (sidebar) per massimizzare lo spazio
+Creare una funzione helper:
 
-**Colonne tabella:**
-- Checkbox (seleziona/deseleziona)
-- Data (Data Contabile, formattata dd/MM/yyyy)
-- Descrizione (colonna larga, `min-w-[300px]`)
-- Importo (colorato verde/rosso)
-- Stato riga (icona errore se data o importo non validi)
+```text
+function buildDuplicateKey(date: string, amount: number, description: string): string {
+  const normalizedDesc = description.toLowerCase().trim().replace(/\s+/g, " ");
+  return `${date}|${Math.abs(amount).toFixed(2)}|${normalizedDesc}`;
+}
+```
 
-**Righe con errori:**
-- Se `tryParseDate` o `tryParseAmount` falliscono, la riga mostra un'icona di errore e la checkbox e disabilitata
-- La riga appare con opacita ridotta e non puo essere selezionata
+Costruire un `Set<string>` delle chiavi delle transazioni esistenti.
 
-**Ricerca veloce:**
-- Input di ricerca nell'header che filtra le righe visibili per descrizione (filtro client-side sul campo mappato)
+**3. Aggiornare `parsedRows` per includere flag `isDuplicate`**
 
-**Totali dinamici nell'header:**
-- Somma importi positivi (entrate) e negativi (uscite) delle sole righe selezionate
+Nel `useMemo` di `parsedRows`, per ogni riga valida, verificare se la sua chiave esiste nel Set dei duplicati. Aggiungere `isDuplicate: boolean` al tipo di ritorno.
 
-**Flusso pagina:**
-1. L'utente arriva sulla pagina e vede l'area upload + selezione conto
-2. Carica il file -> auto-mapping colonne + mostra tabella anteprima
-3. Puo cercare, selezionare/deselezionare righe
-4. Clicca "Conferma Importazione"
-5. Redirect a `/transactions` con toast "Importate X transazioni, escluse Y"
+**4. Auto-escludere i duplicati**
 
----
+Quando il file viene processato o quando cambia il conto selezionato, aggiornare `excludedRows` per includere automaticamente gli indici delle righe duplicate.
 
-## File da modificare
+**5. UI: Badge "Duplicato" nella tabella**
 
-### `src/App.tsx`
+Nella colonna stato (ultima colonna), mostrare un badge arancione "Duplicato" accanto all'icona errore. Le righe duplicate restano selezionabili (l'utente puo forzare l'importazione) ma sono deselezionate di default.
 
-- Aggiungere rotta `/import-transazioni` che punta a `ImportTransazioni`
-- La rotta usa `ProtectedRoute` ma **senza** `Layout` (pagina full-screen)
+**6. Contatore duplicati nell'header**
 
-### `src/pages/Transactions.tsx`
+Nella sezione stats dell'header (accanto a "X/Y righe" e totali), aggiungere:
 
-- Cambiare il pulsante "Importa" da aprire il dialog a navigare verso `/import-transazioni` con `useNavigate`
-- Rimuovere lo stato `importDialogOpen` e il componente `ImportTransactionsDialog`
+```text
+[Duplicati: N]  (in arancione)
+```
 
 ---
 
-## File NON modificati
+## Dettaglio implementazione
 
-- `src/components/ImportTransactionsDialog.tsx` - Resta nel progetto come riferimento ma non viene piu usato dalla pagina Transactions
-- `src/hooks/useImportTransactions.ts` - La logica backend resta identica
+### Struttura dati
+
+| Campo | Tipo | Descrizione |
+|-------|------|-------------|
+| `existingKeys` | `Set<string>` | Chiavi delle transazioni gia presenti nel conto selezionato |
+| `isDuplicate` | `boolean` | Flag su ogni riga parsata |
+| `duplicateCount` | `number` | Contatore derivato per l'header |
+
+### Comportamento
+
+- Le righe duplicate appaiono con opacita ridotta e un badge arancione "Duplicato"
+- Sono **deselezionate di default** ma l'utente puo riselezionarle manualmente
+- Non sono disabilitate come le righe con errori: la checkbox resta attiva
+- Il "Seleziona tutto" non include i duplicati (seleziona solo le righe valide non duplicate)
+- La ricerca per descrizione funziona normalmente anche sulle righe duplicate
+
+### Query esistenti
+
+La query viene eseguita solo quando c'e un `selectedContoId` valido e almeno una riga caricata. Si usa `useQuery` con key `["existing-transactions", selectedContoId]` per il caching.
 
 ---
 
-## Riepilogo file
+## File coinvolti
 
-| File | Azione |
-|------|--------|
-| `src/pages/ImportTransazioni.tsx` | Nuovo - pagina full-screen |
-| `src/App.tsx` | Modifica - aggiunta rotta |
-| `src/pages/Transactions.tsx` | Modifica - navigazione invece di dialog |
+| File | Modifica |
+|------|----------|
+| `src/pages/ImportTransazioni.tsx` | Aggiungere query esistenti, calcolo duplicati, badge UI, contatore, auto-esclusione |
 
+Nessun altro file da modificare. Nessuna migrazione database.
