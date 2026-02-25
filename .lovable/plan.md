@@ -1,94 +1,73 @@
 
 
-# Supporto Formato Postepay con Colonne Separate (Addebiti/Accrediti)
+# Supporto Header Postepay con Righe di Intestazione
 
 ## Problema
 
-Il file Postepay puo avere due formati diversi:
-1. **Colonna singola**: "Importo (euro)" con segno positivo/negativo (gia supportato)
-2. **Colonne separate**: "Addebiti (euro)" e "Accrediti (euro)" (non supportato)
-
-Il sistema deve rilevare automaticamente quale formato usare.
+I file Postepay Excel hanno righe di intestazione prima delle colonne dati (es. "Intestato a:", "Saldo al:", ecc.). Il parser attuale usa `sheet_to_json` che prende la riga 1 come header, risultando in colonne errate.
 
 ## Approccio
 
-Introdurre una modalita "split" che si attiva automaticamente quando il file contiene le colonne "Addebiti (euro)" e "Accrediti (euro)". In questa modalita, il campo "importo" nel mapping viene sostituito da due campi (addebiti e accrediti), e l'importo viene calcolato come `-addebiti` o `+accrediti`.
+Usare `XLSX.utils.sheet_to_json` con `header: 1` (array di array) per leggere le prime 20 righe raw, cercare quella contenente "Data Contabile", e poi ri-parsare il foglio usando quella riga come header.
 
 ## Modifiche
 
-### `src/pages/ImportTransazioni.tsx`
+### Entrambi i file: `src/pages/ImportTransazioni.tsx` e `src/components/ImportTransactionsDialog.tsx`
 
-**1. Estendere MappingState (riga 42-46)**
+Modificare la funzione `processFile`, nella sezione dopo `XLSX.read()`, sostituendo il parsing diretto con questa logica:
 
-Aggiungere campi opzionali per le colonne split:
+**1. Leggere il foglio come array di array (prime 20 righe)**
+
 ```typescript
-interface MappingState {
-  data: string;
-  descrizione: string;
-  importo: string;        // usato in modalita singola
-  addebiti: string;       // usato in modalita split
-  accrediti: string;      // usato in modalita split
+const sheet = workbook.Sheets[sheetName];
+const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
+```
+
+**2. Cercare la riga header contenente "Data Contabile"**
+
+Scansionare le prime 20 righe per trovare quella che contiene una cella con il testo "Data Contabile" (case-insensitive). Se non trovata, fare fallback al comportamento attuale (`sheet_to_json` senza opzioni) per supportare file non-Postepay.
+
+```typescript
+let headerRowIndex = -1;
+const scanLimit = Math.min(rawRows.length, 20);
+for (let i = 0; i < scanLimit; i++) {
+  const row = rawRows[i];
+  if (Array.isArray(row) && row.some(cell => 
+    typeof cell === "string" && cell.toLowerCase().includes("data contabile")
+  )) {
+    headerRowIndex = i;
+    break;
+  }
 }
 ```
 
-**2. Aggiungere auto-detection nel processFile (riga 270-282)**
+**3. Ri-parsare con l'offset corretto**
 
-Dopo l'auto-map esistente, rilevare se le colonne contengono "addebiti (euro)" e "accrediti (euro)". Se si, popolare `addebiti` e `accrediti` nel mapping e lasciare `importo` vuoto. Se esiste "importo (euro)", usare la logica attuale.
-
-Aggiungere keywords nell'AUTO_MAP_KEYS:
-```
-addebiti: ["addebiti", "addebiti (euro)", "dare"]
-accrediti: ["accrediti", "accrediti (euro)", "avere"]
-```
-
-**3. Derivare isSplitMode**
-
-Un `useMemo` che calcola `isSplitMode = !mapping.importo && !!mapping.addebiti && !!mapping.accrediti`.
-
-**4. Modificare parsedRows (riga 145-158)**
-
-In modalita split, calcolare l'importo dalla riga:
-- Se `addebiti` ha valore numerico -> `amount = -Math.abs(valore)`
-- Se `accrediti` ha valore numerico -> `amount = +Math.abs(valore)`
-- Se entrambi o nessuno -> hasError = true
-
-**5. Modificare la validazione isMappingValid (riga 312-313)**
+Se trovata la riga header, usare l'opzione `range` di `sheet_to_json` per iniziare da quella riga:
 
 ```typescript
-const isMappingValid = mapping.data && mapping.descrizione && selectedContoId &&
-  (mapping.importo || (mapping.addebiti && mapping.accrediti));
+let json: Record<string, unknown>[];
+if (headerRowIndex >= 0) {
+  json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { range: headerRowIndex });
+} else {
+  json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+}
 ```
 
-**6. Modificare la UI dei selettori colonna (riga 444-466)**
+**4. Validazione dati**
 
-In modalita split, mostrare i selettori "Addebiti" e "Accrediti" al posto di "Importo". Usare un rendering condizionale basato su `isSplitMode`.
+Il resto della logica (controllo `json.length === 0`, estrazione colonne, auto-mapping) resta invariato.
 
-**7. Nessuna modifica al rendering della tabella anteprima**
+### Nessuna altra modifica
 
-La tabella usa gia `r.amount` per visualizzare segno e colore -- funzionera automaticamente perche `parsedRows` calcolera il valore con il segno corretto.
-
-### `src/components/ImportTransactionsDialog.tsx`
-
-Applicare le stesse modifiche al dialog di importazione (usato altrove):
-- Estendere MappingState con addebiti/accrediti
-- Aggiungere auto-detection
-- Modificare parsedRows per la modalita split
-- Aggiornare isMappingValid
-- Aggiornare i selettori colonna nella UI
-
-### Nessuna modifica al backend
-
-`useImportTransactions.ts` riceve gia `ParsedTransaction[]` con `amount` che include il segno. Non servono modifiche.
+L'auto-mapping, la split mode (addebiti/accrediti), il parsing importi e la UI restano tutti invariati.
 
 ## Dettagli Tecnici
 
-| File | Tipo modifica |
-|------|--------------|
-| `src/pages/ImportTransazioni.tsx` | Estendere mapping, auto-detect split, calcolo importo, UI selettori |
-| `src/components/ImportTransactionsDialog.tsx` | Stesse modifiche per il dialog |
+| File | Modifica |
+|------|----------|
+| `src/pages/ImportTransazioni.tsx` | Aggiungere rilevamento header nella funzione `processFile` |
+| `src/components/ImportTransactionsDialog.tsx` | Stessa modifica nella funzione `processFile` |
 
-La logica di auto-detection funziona cosi:
-1. Se trovata colonna "importo (euro)" -> modalita singola (come ora)
-2. Se trovate colonne "addebiti (euro)" E "accrediti (euro)" -> modalita split
-3. Se trovata solo una delle due -> l'utente puo mappare manualmente l'altra
+Il parametro `range` di `sheet_to_json` accetta un numero che indica la riga da cui iniziare (0-indexed), trattando quella riga come header.
 
