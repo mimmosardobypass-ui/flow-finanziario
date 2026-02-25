@@ -1,73 +1,59 @@
 
 
-# Supporto Header Postepay con Righe di Intestazione
+# Trim Header e Errore Esplicito per Formato Non Rilevato
 
-## Problema
+## Stato Attuale
 
-I file Postepay Excel hanno righe di intestazione prima delle colonne dati (es. "Intestato a:", "Saldo al:", ecc.). Il parser attuale usa `sheet_to_json` che prende la riga 1 come header, risultando in colonne errate.
+Il supporto per entrambi i formati (colonna singola "Importo (euro)" e colonne separate "Addebiti/Accrediti") e il rilevamento header "Data Contabile" sono gia implementati. Mancano due dettagli:
 
-## Approccio
-
-Usare `XLSX.utils.sheet_to_json` con `header: 1` (array di array) per leggere le prime 20 righe raw, cercare quella contenente "Data Contabile", e poi ri-parsare il foglio usando quella riga come header.
+1. **Trim sugli header**: Le chiavi JSON estratte dal foglio Excel possono contenere spazi iniziali/finali. Attualmente il trim viene applicato solo durante il confronto nell'auto-mapping, ma i nomi colonna stessi non vengono puliti.
+2. **Errore esplicito**: Se dopo l'auto-mapping non viene rilevato ne "Importo" ne la coppia "Addebiti/Accrediti", non viene mostrato alcun errore.
 
 ## Modifiche
 
-### Entrambi i file: `src/pages/ImportTransazioni.tsx` e `src/components/ImportTransactionsDialog.tsx`
+### `src/pages/ImportTransazioni.tsx`
 
-Modificare la funzione `processFile`, nella sezione dopo `XLSX.read()`, sostituendo il parsing diretto con questa logica:
+**1. Trim dei nomi colonna (dopo riga 313)**
 
-**1. Leggere il foglio come array di array (prime 20 righe)**
-
-```typescript
-const sheet = workbook.Sheets[sheetName];
-const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
-```
-
-**2. Cercare la riga header contenente "Data Contabile"**
-
-Scansionare le prime 20 righe per trovare quella che contiene una cella con il testo "Data Contabile" (case-insensitive). Se non trovata, fare fallback al comportamento attuale (`sheet_to_json` senza opzioni) per supportare file non-Postepay.
+Dopo `Object.keys(json[0])`, applicare trim a ogni nome colonna e aggiornare anche le righe di dati per usare le chiavi trimmate:
 
 ```typescript
-let headerRowIndex = -1;
-const scanLimit = Math.min(rawRows.length, 20);
-for (let i = 0; i < scanLimit; i++) {
-  const row = rawRows[i];
-  if (Array.isArray(row) && row.some(cell => 
-    typeof cell === "string" && cell.toLowerCase().includes("data contabile")
-  )) {
-    headerRowIndex = i;
-    break;
+const rawCols = Object.keys(json[0]);
+const cols = rawCols.map(c => c.trim());
+// Remap rows with trimmed keys
+const cleanedRows = json.map(row => {
+  const clean: Record<string, unknown> = {};
+  for (const key of rawCols) {
+    clean[key.trim()] = row[key];
   }
-}
+  return clean;
+});
 ```
 
-**3. Ri-parsare con l'offset corretto**
+**2. Errore esplicito se formato non rilevato (dopo auto-mapping)**
 
-Se trovata la riga header, usare l'opzione `range` di `sheet_to_json` per iniziare da quella riga:
+Dopo aver calcolato l'auto-mapping, verificare se e stato trovato almeno un formato valido. Se no, mostrare un toast di errore:
 
 ```typescript
-let json: Record<string, unknown>[];
-if (headerRowIndex >= 0) {
-  json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { range: headerRowIndex });
-} else {
-  json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+if (!autoMapping.importo && !(autoMapping.addebiti && autoMapping.accrediti)) {
+  toast({
+    title: "Formato non riconosciuto",
+    description: "Il file non contiene colonne 'Importo (euro)' ne 'Addebiti/Accrediti (euro)'.",
+    variant: "destructive",
+  });
+  return;
 }
 ```
 
-**4. Validazione dati**
+### `src/components/ImportTransactionsDialog.tsx`
 
-Il resto della logica (controllo `json.length === 0`, estrazione colonne, auto-mapping) resta invariato.
-
-### Nessuna altra modifica
-
-L'auto-mapping, la split mode (addebiti/accrediti), il parsing importi e la UI restano tutti invariati.
+Stesse due modifiche: trim delle colonne e errore esplicito.
 
 ## Dettagli Tecnici
 
 | File | Modifica |
 |------|----------|
-| `src/pages/ImportTransazioni.tsx` | Aggiungere rilevamento header nella funzione `processFile` |
-| `src/components/ImportTransactionsDialog.tsx` | Stessa modifica nella funzione `processFile` |
+| `src/pages/ImportTransazioni.tsx` | Trim header + errore formato non rilevato |
+| `src/components/ImportTransactionsDialog.tsx` | Stesse modifiche |
 
-Il parametro `range` di `sheet_to_json` accetta un numero che indica la riga da cui iniziare (0-indexed), trattando quella riga come header.
-
+Nessuna modifica alla logica di parsing, split mode o salvataggio database.
