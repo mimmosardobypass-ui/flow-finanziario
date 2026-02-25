@@ -1,94 +1,68 @@
 
 
-# Fix Detection: Scansione Multi-Sheet, Header Flessibile e Normalizzazione
+# Selettore "Tipo File" per l'Importazione
 
-## Problema
+## Cosa cambia
 
-La detection fallisce perche:
-1. Solo il primo foglio viene analizzato, ma il foglio con i dati potrebbe essere un altro
-2. La scansione header si ferma a 20 righe (potrebbe non bastare)
-3. Gli header non vengono normalizzati completamente (spazi doppi, case)
-4. Le keywords di matching non coprono tutte le varianti ("importo euro" senza parentesi)
+Si aggiunge un selettore "Tipo file" nella zona di upload, prima di caricare il file. In base alla selezione, il sistema applica regole di parsing e mapping diverse.
 
-## Modifiche
+## Opzioni del selettore
 
-### Entrambi i file: `src/pages/ImportTransazioni.tsx` e `src/components/ImportTransactionsDialog.tsx`
+| Tipo | Comportamento |
+|------|--------------|
+| **Postepay - Importo unico** | Cerca "Data Contabile" come header, mappa "Importo (euro)" con segno originale |
+| **Postepay - Addebiti/Accrediti** | Cerca "Data Contabile" come header, mappa "Addebiti (euro)" e "Accrediti (euro)" separatamente |
+| **Bancoposta** | Mapping specifico Bancoposta (da definire, stesso pattern di scansione header) |
+| **Manuale** | Nessun auto-mapping, l'utente sceglie tutte le colonne manualmente |
 
-**1. Scansione multi-sheet per trovare il foglio giusto**
+## Flusso utente
 
-Invece di prendere sempre `SheetNames[0]`, iterare su tutti i fogli e scegliere quello che contiene una riga con "Data Contabile". Se nessun foglio la contiene, usare il primo foglio come fallback.
+1. L'utente vede la zona di upload con un selettore "Tipo file" sopra l'area drag-and-drop
+2. Seleziona il tipo di file
+3. Carica il file
+4. Il sistema applica la logica corrispondente al tipo selezionato
+5. Per "Manuale", tutti i selettori colonna restano vuoti e l'utente li compila
 
-```typescript
-const workbook = XLSX.read(data, { type: "array" });
-if (workbook.SheetNames.length === 0) { /* errore file vuoto */ return; }
+## Dettagli tecnici
 
-let targetSheet: XLSX.WorkSheet | null = null;
-let headerRowIndex = -1;
+### File: `src/pages/ImportTransazioni.tsx`
 
-for (const name of workbook.SheetNames) {
-  const ws = workbook.Sheets[name];
-  const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
-  const limit = Math.min(raw.length, 50);
-  for (let i = 0; i < limit; i++) {
-    const row = raw[i];
-    if (Array.isArray(row) && row.some(cell =>
-      typeof cell === "string" && cell.toLowerCase().includes("data contabile")
-    )) {
-      targetSheet = ws;
-      headerRowIndex = i;
-      break;
-    }
-  }
-  if (targetSheet) break;
-}
+**1. Nuovo tipo e stato**
 
-// Fallback: primo foglio senza offset
-if (!targetSheet) {
-  targetSheet = workbook.Sheets[workbook.SheetNames[0]];
-}
-```
-
-**2. Aumentare scansione a 50 righe**
-
-Il limite di scansione passa da 20 a 50 righe.
-
-**3. Normalizzazione header completa**
-
-Dopo l'estrazione delle colonne, normalizzare con trim + rimozione spazi doppi:
+Aggiungere un tipo `FileType` con i 4 valori e uno stato `selectedFileType`:
 
 ```typescript
-const cols = rawCols.map(c => c.trim().replace(/\s+/g, ' '));
+type FileType = "postepay-importo" | "postepay-split" | "bancoposta" | "manuale";
 ```
 
-**4. Normalizzare anche nel matching auto-map**
+**2. Configurazioni per tipo**
 
-Il confronto nell'auto-mapping deve applicare la stessa normalizzazione:
+Definire un oggetto di configurazione per ogni tipo con le keyword di auto-mapping specifiche:
 
-```typescript
-const match = cols.find(c => 
-  keywords.includes(c.toLowerCase().trim().replace(/\s+/g, ' '))
-);
-```
+- `postepay-importo`: cerca solo `importo` keywords, ignora addebiti/accrediti
+- `postepay-split`: cerca solo `addebiti`/`accrediti` keywords, ignora importo
+- `bancoposta`: keywords specifiche Bancoposta (stesse di Postepay come base, personalizzabili)
+- `manuale`: nessun auto-mapping
 
-**5. Aggiungere keyword "importo euro" (senza parentesi)**
+**3. Modifica `processFile`**
 
-Aggiungere all'array `importo` in AUTO_MAP_KEYS:
-```typescript
-importo: ["importo", "amount", "importo (eur)", "importo (euro)", "importo euro", "ammontare", "valore", "value"]
-```
+- Riceve il `fileType` come parametro
+- Tutti i tipi tranne "manuale": scansione multi-sheet per "Data Contabile" (logica esistente)
+- Per "manuale": nessuna scansione header, usa prima riga come header (comportamento standard)
+- Rimuovere il blocco di errore "Formato non riconosciuto" -- la validazione avviene tramite il tipo selezionato
+- Per "postepay-importo": auto-mappa solo data, descrizione, importo
+- Per "postepay-split": auto-mappa solo data, descrizione, addebiti, accrediti
+- Per "manuale": non auto-mappa nulla
 
-E per addebiti/accrediti aggiungere varianti senza parentesi:
-```typescript
-addebiti: ["addebiti", "addebiti (euro)", "addebiti euro", "dare"]
-accrediti: ["accrediti", "accrediti (euro)", "accrediti euro", "avere"]
-```
+**4. UI: selettore nella zona upload**
 
-## Dettagli Tecnici
+Aggiungere un `Select` sopra l'area drag-and-drop con le 4 opzioni. Il selettore resta visibile anche dopo il caricamento del file (nell'header, accanto al conto destinazione).
 
-| File | Modifica |
-|------|----------|
-| `src/pages/ImportTransazioni.tsx` | Multi-sheet scan, 50 righe, normalizzazione header, keywords estese |
-| `src/components/ImportTransactionsDialog.tsx` | Stesse modifiche |
+**5. Mapping manuale completo**
 
-La logica di parsing (split mode, importi, date) e la UI restano invariate.
+Per il tipo "Manuale", mostrare sempre tutti e 5 i selettori colonna (data, descrizione, importo, addebiti, accrediti) cosi l'utente puo scegliere il formato che preferisce.
+
+### File: `src/components/ImportTransactionsDialog.tsx`
+
+Stesse modifiche applicate al dialog (usato altrove nell'app), mantenendo coerenza tra i due componenti.
 
