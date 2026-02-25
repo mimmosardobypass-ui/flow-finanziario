@@ -1,60 +1,83 @@
 
 
-# Completamento `reconciliation_type`
+# Importazione Postepay - Auto-mapping e Esclusione Righe
 
 ## Panoramica
 
-Completare l'implementazione del campo `reconciliation_type` con auto-detect per trasferimenti tra conti diversi, valori standardizzati e filtro dedicato.
+Migliorare il dialog di importazione per riconoscere automaticamente il formato Postepay (colonne: "Data Contabile", "Data Valuta", "Importo (euro)", "Descrizione operazioni") e permettere all'utente di escludere manualmente singole righe prima del salvataggio.
 
 ---
 
 ## Modifiche
 
-### 1. `src/components/ReconciliationSheet.tsx`
+### 1. `src/components/ImportTransactionsDialog.tsx`
 
-- **Standardizzare i valori**: cambiare `pagamento` in `payment` e `altro` in `other` nelle opzioni della Select
-- **Auto-detect tipo**: quando l'utente seleziona movimenti compatibili, verificare automaticamente se i conti sono diversi e pre-impostare `reconciliationType = "transfer"`. L'utente puo comunque cambiarlo manualmente
-- **Etichette aggiornate**: Transfer, Pagamento (`payment`), Altro (`other`)
-- **Mostrare il tipo anche per transazioni gia riconciliate**: gia implementato con Badge, aggiornare le label per coerenza con i nuovi valori
+**Auto-mapping Postepay**: Aggiungere le keyword specifiche Postepay all'oggetto `AUTO_MAP_KEYS` in modo che le colonne vengano riconosciute automaticamente:
 
-### 2. `src/components/TransactionFilters.tsx`
+| Campo | Keyword aggiunte |
+|-------|-----------------|
+| `data` | `"data contabile"` |
+| `descrizione` | `"descrizione operazioni"` |
+| `importo` | `"importo (euro)"` |
 
-- Aggiungere un nuovo Select per filtrare per `reconciliationType` con valori:
-  - Tutti
-  - Transfer
-  - Pagamento
-  - Altro
-- Aggiungere il badge filtro attivo corrispondente nella sezione badge
+In questo modo, caricando un file Postepay, i tre campi verranno mappati senza intervento manuale.
 
-### 3. `src/hooks/useFilteredTransactions.ts`
+**Esclusione righe**: Aggiungere uno stato `excludedRows` (Set di indici) e nella tabella anteprima:
+- Mostrare **tutte** le righe (non solo le prime 5), con scroll verticale limitato
+- Aggiungere una colonna checkbox a sinistra per ogni riga
+- Le righe deselezionate vengono escluse dall'importazione
+- Mostrare un contatore "X di Y righe selezionate" sopra la tabella
+- Il pulsante di importazione mostra il numero effettivo di righe che verranno importate
 
-- Aggiungere campo `reconciliationType` al tipo `TransactionFilters` con valori `"all" | "transfer" | "payment" | "other"`
-- Aggiungere filtro server-side: `.eq("reconciliation_type", value)` quando diverso da "all"
-- Includere nel `serverFilters` per la queryKey
+**Anteprima migliorata**: Nella tabella anteprima, le colonne mappate mostrano i valori interpretati (data formattata, importo con segno e colore verde/rosso) accanto ai valori originali per conferma visiva.
 
-### 4. `src/hooks/useReconciliation.ts`
+### 2. Nessuna modifica backend
 
-- Nella mutation `useReconcile`, aggiungere logica di auto-detect: se i movimenti selezionati appartengono a conti diversi e l'utente non ha modificato manualmente il tipo, impostare `reconciliation_type = "transfer"` come default (gia gestito dal default del parametro, nessuna modifica necessaria)
+La logica di `useImportTransactions.ts` resta invariata: riceve gia un array di `ParsedTransaction` con segno positivo/negativo che determina entrata/uscita. Il filtraggio delle righe escluse avviene nel dialog prima di passare i dati alla mutation.
 
 ---
 
-## Mappa valori
+## Dettaglio implementazione
 
-| Valore DB | Etichetta UI | Descrizione |
-|-----------|-------------|-------------|
-| `transfer` | Transfer | Trasferimento tra conti (auto-detect) |
-| `payment` | Pagamento | Pagamento/incasso collegato |
-| `other` | Altro | Altro tipo di collegamento |
+### Auto-mapping aggiornato
+
+```text
+AUTO_MAP_KEYS = {
+  data: ["data", "date", "fecha", "datum", "data contabile"],
+  descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
+  importo: ["importo", "amount", "importo (eur)", "importo (euro)", "ammontare", "valore", "value"],
+}
+```
+
+### Stato esclusione righe
+
+- Nuovo state: `excludedRows: Set<number>` (indici delle righe escluse)
+- Checkbox "Seleziona tutto" nell'header della tabella
+- Checkbox per ogni riga nella prima colonna
+- Le righe escluse appaiono con opacita ridotta
+- Il conteggio nel pulsante importa si aggiorna dinamicamente
+
+### Flusso utente
+
+1. L'utente carica il file Postepay
+2. Le colonne vengono mappate automaticamente (Data Contabile, Descrizione operazioni, Importo euro)
+3. L'utente seleziona il conto destinazione
+4. Nella tabella anteprima vede tutte le righe con checkbox
+5. Puo deselezionare righe che non vuole importare
+6. Clicca "Importa X righe" (solo le selezionate)
+7. Vede il risultato finale
+
+### "Data Valuta"
+
+La colonna "Data Valuta" viene semplicemente ignorata: non viene mappata a nessun campo e appare nella tabella anteprima come colonna non mappata. Non servono modifiche al database.
 
 ---
 
 ## File coinvolti
 
-| File | Tipo modifica |
-|------|--------------|
-| `src/components/ReconciliationSheet.tsx` | Standardizzare valori, aggiornare label |
-| `src/components/TransactionFilters.tsx` | Aggiungere filtro tipo riconciliazione |
-| `src/hooks/useFilteredTransactions.ts` | Aggiungere campo e filtro server-side |
+| File | Modifica |
+|------|----------|
+| `src/components/ImportTransactionsDialog.tsx` | Aggiungere keyword Postepay, stato esclusione righe, checkbox nella tabella, contatore righe selezionate |
 
-Nessuna migrazione database necessaria: la colonna `reconciliation_type` esiste gia come testo libero.
+Nessuna migrazione database necessaria. Nessuna modifica al backend.
 
