@@ -1,94 +1,54 @@
 
 
-# Riconciliazione Manuale tra Movimenti
+# Aggiunta `reconciliation_type` alla Riconciliazione
 
 ## Panoramica
 
-Aggiungere un sistema di riconciliazione manuale che permette di collegare transazioni di conti diversi tramite un `reconciliation_id` condiviso, con stato visivo nella tabella e pannello laterale per la selezione dei movimenti compatibili.
+Aggiungere una colonna `reconciliation_type` alla tabella `transactions` e una select nel pannello `ReconciliationSheet` per classificare il tipo di riconciliazione.
 
 ---
 
 ## 1. Migrazione Database
 
-Aggiungere due colonne alla tabella `transactions`:
+Aggiungere la colonna `reconciliation_type` alla tabella `transactions`:
 
-| Colonna | Tipo | Default | Descrizione |
-|---------|------|---------|-------------|
-| `reconciliation_id` | uuid | NULL | Collega movimenti riconciliati tra loro |
-| `reconciliation_status` | text | 'none' | Stato: `none`, `partial`, `complete` |
+```text
+reconciliation_type  text  NULLABLE  DEFAULT NULL
+```
 
----
-
-## 2. Nuovo componente: Pannello Riconciliazione
-
-Creare `src/components/ReconciliationSheet.tsx` usando il componente Sheet (pannello laterale) gia presente nel progetto.
-
-Il pannello mostra:
-- **Sezione superiore**: dettagli della transazione selezionata (importo, conto, data, descrizione)
-- **Elenco movimenti compatibili**: transazioni di **altri conti** filtrate per compatibilita (stesso importo oppure stessa data, con tolleranza di +/- 3 giorni). I movimenti gia riconciliati con la stessa transazione sono evidenziati
-- **Checkbox** per selezionare uno o piu movimenti da collegare
-- **Pulsante "Riconcilia"**: collega i movimenti selezionati assegnando lo stesso `reconciliation_id` e aggiornando lo stato
-- **Pulsante "Rimuovi riconciliazione"**: per scollegare movimenti gia riconciliati
-
-### Logica stato riconciliazione
-- `none`: nessun `reconciliation_id` assegnato
-- `partial`: ha un `reconciliation_id` ma il totale entrate != totale uscite nel gruppo
-- `complete`: il totale entrate == totale uscite nel gruppo riconciliato
+Valori possibili: `transfer`, `pagamento`, `altro`. Resta `NULL` per le transazioni non riconciliate.
 
 ---
 
-## 3. Nuovo hook: `useReconciliation`
+## 2. File da modificare
 
-Creare `src/hooks/useReconciliation.ts` con:
+### Migrazione SQL
+- Aggiungere colonna `reconciliation_type` a `public.transactions`
 
-- **`useReconcile()`**: mutation che riceve un array di ID transazione, genera un UUID, aggiorna `reconciliation_id` per tutte, poi calcola e aggiorna `reconciliation_status` (partial o complete)
-- **`useUnreconcile()`**: mutation che rimuove il `reconciliation_id` e resetta lo stato a `none` per tutte le transazioni del gruppo
-- **`useCompatibleTransactions(transactionId)`**: query che recupera le transazioni compatibili per riconciliazione (stesso importo o date vicine, conti diversi)
+### `src/hooks/useReconciliation.ts`
+- Modificare `useReconcile()` per accettare anche il `reconciliation_type` come parametro e salvarlo insieme a `reconciliation_id` e `reconciliation_status`
 
----
+### `src/components/ReconciliationSheet.tsx`
+- Aggiungere uno stato locale `reconciliationType` (default `"transfer"`)
+- Inserire un componente `Select` con le opzioni:
+  - **Transfer** - Trasferimento tra conti
+  - **Pagamento** - Pagamento/incasso collegato
+  - **Altro** - Altro tipo di collegamento
+- Passare il tipo selezionato alla mutation `useReconcile`
+- Quando la transazione e gia riconciliata, mostrare il tipo attuale come badge o testo informativo
 
-## 4. Colonna "Riconciliazione" nella tabella
-
-In `src/pages/Transactions.tsx`, aggiungere una colonna tra "Importo" e "Azioni":
-
-| Stato | Icona | Colore |
-|-------|-------|--------|
-| `none` | `Circle` | Grigio (text-muted-foreground) |
-| `partial` | `CircleDot` | Arancione (text-orange-500) |
-| `complete` | `CircleCheck` | Verde (text-success) |
-
-Cliccando sull'icona si apre il pannello laterale `ReconciliationSheet`.
+### `src/integrations/supabase/types.ts`
+- Aggiornamento automatico per includere `reconciliation_type` nel tipo `transactions`
 
 ---
 
-## 5. Filtro "Riconciliazione" nei filtri
+## 3. Dettagli UI
 
-In `src/components/TransactionFilters.tsx` e `src/hooks/useFilteredTransactions.ts`:
+La select viene posizionata sopra l'elenco dei movimenti compatibili, visibile solo quando si sta per creare una nuova riconciliazione (non gia riconciliata). Per le riconciliazioni esistenti, il tipo viene mostrato come informazione nella sezione "Movimenti gia riconciliati".
 
-- Aggiungere campo `reconciliation` al tipo `TransactionFilters` con valori: `"all"` | `"none"` | `"partial"` | `"complete"`
-- Aggiungere un Select nei filtri con opzioni: "Tutti", "Non riconciliati", "Parziali", "Riconciliati"
-- Filtrare lato server con `.eq("reconciliation_status", value)` quando selezionato
-
----
-
-## 6. Riepilogo file
-
-| File | Azione |
-|------|--------|
-| Migrazione SQL | Aggiungere colonne `reconciliation_id` e `reconciliation_status` |
-| `src/hooks/useReconciliation.ts` | **Nuovo** - Hook per riconciliazione e movimenti compatibili |
-| `src/hooks/useTransactions.ts` | Aggiornare interfacce `Transaction` e `TransactionWithCategory` |
-| `src/hooks/useFilteredTransactions.ts` | Aggiungere filtro `reconciliation` |
-| `src/components/ReconciliationSheet.tsx` | **Nuovo** - Pannello laterale riconciliazione |
-| `src/components/TransactionFilters.tsx` | Aggiungere Select per filtro riconciliazione |
-| `src/pages/Transactions.tsx` | Aggiungere colonna icona + apertura pannello |
-
----
-
-## 7. Sicurezza
-
-- Nessun movimento viene creato o eliminato
-- Solo i campi `reconciliation_id` e `reconciliation_status` vengono modificati
-- I saldi non vengono alterati in alcun modo
-- Le RLS esistenti proteggono gia le transazioni per utente
+| Valore | Etichetta | Descrizione |
+|--------|-----------|-------------|
+| `transfer` | Transfer | Trasferimento tra conti |
+| `pagamento` | Pagamento | Pagamento o incasso collegato |
+| `altro` | Altro | Altro tipo di collegamento |
 
