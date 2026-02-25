@@ -1,83 +1,98 @@
 
 
-# Importazione Postepay - Auto-mapping e Esclusione Righe
+# Pagina Dedicata per Importazione Transazioni
 
 ## Panoramica
 
-Migliorare il dialog di importazione per riconoscere automaticamente il formato Postepay (colonne: "Data Contabile", "Data Valuta", "Importo (euro)", "Descrizione operazioni") e permettere all'utente di escludere manualmente singole righe prima del salvataggio.
+Trasformare l'importazione da dialog modale a una pagina full-screen dedicata (`/import-transazioni`) con layout tipo foglio Excel: header fisso, tabella centrale scrollabile e footer fisso.
 
 ---
 
-## Modifiche
+## File da creare
 
-### 1. `src/components/ImportTransactionsDialog.tsx`
+### `src/pages/ImportTransazioni.tsx`
 
-**Auto-mapping Postepay**: Aggiungere le keyword specifiche Postepay all'oggetto `AUTO_MAP_KEYS` in modo che le colonne vengano riconosciute automaticamente:
+Nuova pagina che riprende tutta la logica esistente da `ImportTransactionsDialog.tsx` ma con layout full-page:
 
-| Campo | Keyword aggiunte |
-|-------|-----------------|
-| `data` | `"data contabile"` |
-| `descrizione` | `"descrizione operazioni"` |
-| `importo` | `"importo (euro)"` |
-
-In questo modo, caricando un file Postepay, i tre campi verranno mappati senza intervento manuale.
-
-**Esclusione righe**: Aggiungere uno stato `excludedRows` (Set di indici) e nella tabella anteprima:
-- Mostrare **tutte** le righe (non solo le prime 5), con scroll verticale limitato
-- Aggiungere una colonna checkbox a sinistra per ogni riga
-- Le righe deselezionate vengono escluse dall'importazione
-- Mostrare un contatore "X di Y righe selezionate" sopra la tabella
-- Il pulsante di importazione mostra il numero effettivo di righe che verranno importate
-
-**Anteprima migliorata**: Nella tabella anteprima, le colonne mappate mostrano i valori interpretati (data formattata, importo con segno e colore verde/rosso) accanto ai valori originali per conferma visiva.
-
-### 2. Nessuna modifica backend
-
-La logica di `useImportTransactions.ts` resta invariata: riceve gia un array di `ParsedTransaction` con segno positivo/negativo che determina entrata/uscita. Il filtraggio delle righe escluse avviene nel dialog prima di passare i dati alla mutation.
-
----
-
-## Dettaglio implementazione
-
-### Auto-mapping aggiornato
-
+**Layout struttura:**
 ```text
-AUTO_MAP_KEYS = {
-  data: ["data", "date", "fecha", "datum", "data contabile"],
-  descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
-  importo: ["importo", "amount", "importo (eur)", "importo (euro)", "ammontare", "valore", "value"],
-}
++----------------------------------------------------------+
+| HEADER FISSO                                              |
+| [Selezione conto] [Upload file] [Info file]               |
+| [Righe selezionate: X/Y]  [Totale: +X / -Y]             |
+| [Ricerca per descrizione]                                 |
++----------------------------------------------------------+
+| TABELLA ANTEPRIMA (flex-1, overflow-y-auto)               |
+| [x] Data Contabile | Descrizione          | Importo      |
+| [x] 01/01/2026     | Pagamento XYZ        | -50.00       |
+| [ ] 02/01/2026     | Accredito stipendio  | +1500.00     |
+| ...                                                       |
++----------------------------------------------------------+
+| FOOTER FISSO                                              |
+| [Annulla / Torna indietro]        [Conferma Importazione] |
++----------------------------------------------------------+
 ```
 
-### Stato esclusione righe
+**Dettagli implementazione:**
 
-- Nuovo state: `excludedRows: Set<number>` (indici delle righe escluse)
-- Checkbox "Seleziona tutto" nell'header della tabella
-- Checkbox per ogni riga nella prima colonna
-- Le righe escluse appaiono con opacita ridotta
-- Il conteggio nel pulsante importa si aggiorna dinamicamente
+- Container con `h-screen flex flex-col` per occupare tutto lo schermo
+- Header: `shrink-0` con selezione conto, area upload (drag-and-drop), info file caricato, campo ricerca descrizione, contatore righe e totali importi
+- Area centrale: `flex-1 overflow-y-auto` con tabella HTML nativa (una sola scrollbar verticale, niente ScrollArea wrapper)
+- Footer: `shrink-0` con pulsanti azione
+- La pagina NON usa il componente `Layout` (sidebar) per massimizzare lo spazio
 
-### Flusso utente
+**Colonne tabella:**
+- Checkbox (seleziona/deseleziona)
+- Data (Data Contabile, formattata dd/MM/yyyy)
+- Descrizione (colonna larga, `min-w-[300px]`)
+- Importo (colorato verde/rosso)
+- Stato riga (icona errore se data o importo non validi)
 
-1. L'utente carica il file Postepay
-2. Le colonne vengono mappate automaticamente (Data Contabile, Descrizione operazioni, Importo euro)
-3. L'utente seleziona il conto destinazione
-4. Nella tabella anteprima vede tutte le righe con checkbox
-5. Puo deselezionare righe che non vuole importare
-6. Clicca "Importa X righe" (solo le selezionate)
-7. Vede il risultato finale
+**Righe con errori:**
+- Se `tryParseDate` o `tryParseAmount` falliscono, la riga mostra un'icona di errore e la checkbox e disabilitata
+- La riga appare con opacita ridotta e non puo essere selezionata
 
-### "Data Valuta"
+**Ricerca veloce:**
+- Input di ricerca nell'header che filtra le righe visibili per descrizione (filtro client-side sul campo mappato)
 
-La colonna "Data Valuta" viene semplicemente ignorata: non viene mappata a nessun campo e appare nella tabella anteprima come colonna non mappata. Non servono modifiche al database.
+**Totali dinamici nell'header:**
+- Somma importi positivi (entrate) e negativi (uscite) delle sole righe selezionate
+
+**Flusso pagina:**
+1. L'utente arriva sulla pagina e vede l'area upload + selezione conto
+2. Carica il file -> auto-mapping colonne + mostra tabella anteprima
+3. Puo cercare, selezionare/deselezionare righe
+4. Clicca "Conferma Importazione"
+5. Redirect a `/transactions` con toast "Importate X transazioni, escluse Y"
 
 ---
 
-## File coinvolti
+## File da modificare
 
-| File | Modifica |
-|------|----------|
-| `src/components/ImportTransactionsDialog.tsx` | Aggiungere keyword Postepay, stato esclusione righe, checkbox nella tabella, contatore righe selezionate |
+### `src/App.tsx`
 
-Nessuna migrazione database necessaria. Nessuna modifica al backend.
+- Aggiungere rotta `/import-transazioni` che punta a `ImportTransazioni`
+- La rotta usa `ProtectedRoute` ma **senza** `Layout` (pagina full-screen)
+
+### `src/pages/Transactions.tsx`
+
+- Cambiare il pulsante "Importa" da aprire il dialog a navigare verso `/import-transazioni` con `useNavigate`
+- Rimuovere lo stato `importDialogOpen` e il componente `ImportTransactionsDialog`
+
+---
+
+## File NON modificati
+
+- `src/components/ImportTransactionsDialog.tsx` - Resta nel progetto come riferimento ma non viene piu usato dalla pagina Transactions
+- `src/hooks/useImportTransactions.ts` - La logica backend resta identica
+
+---
+
+## Riepilogo file
+
+| File | Azione |
+|------|--------|
+| `src/pages/ImportTransazioni.tsx` | Nuovo - pagina full-screen |
+| `src/App.tsx` | Modifica - aggiunta rotta |
+| `src/pages/Transactions.tsx` | Modifica - navigazione invece di dialog |
 
