@@ -573,7 +573,7 @@ export default function ImportTransazioni() {
                               : "text-destructive"
                           }
                         >
-                          {r.amount >= 0 ? "+" : ""}€
+                          {r.amount >= 0 ? "+" : "-"}€
                           {Math.abs(r.amount).toLocaleString("it-IT", {
                             minimumFractionDigits: 2,
                           })}
