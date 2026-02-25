@@ -276,9 +276,32 @@ export default function ImportTransazioni() {
           });
           return;
         }
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(
-          workbook.Sheets[sheetName]
-        );
+        const sheet = workbook.Sheets[sheetName];
+        const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
+
+        // Scan first 20 rows for a header row containing "Data Contabile"
+        let headerRowIndex = -1;
+        const scanLimit = Math.min(rawRows.length, 20);
+        for (let i = 0; i < scanLimit; i++) {
+          const row = rawRows[i];
+          if (
+            Array.isArray(row) &&
+            row.some(
+              (cell) =>
+                typeof cell === "string" &&
+                cell.toLowerCase().includes("data contabile")
+            )
+          ) {
+            headerRowIndex = i;
+            break;
+          }
+        }
+
+        const json: Record<string, unknown>[] =
+          headerRowIndex >= 0
+            ? XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { range: headerRowIndex })
+            : XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+
         if (json.length === 0) {
           toast({
             title: "Nessun dato",
