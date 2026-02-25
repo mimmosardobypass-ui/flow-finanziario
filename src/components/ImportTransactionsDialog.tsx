@@ -40,13 +40,11 @@ import { useContiAttivi } from "@/hooks/useConti";
 
 type Step = "upload" | "mapping" | "result";
 
-type FileType = "postepay-importo" | "postepay-split" | "bancoposta" | "manuale";
+type FileType = "postepay-importo" | "postepay-split";
 
 const FILE_TYPE_LABELS: Record<FileType, string> = {
   "postepay-importo": "Postepay – Importo unico",
   "postepay-split": "Postepay – Addebiti/Accrediti",
-  "bancoposta": "Bancoposta",
-  "manuale": "Manuale",
 };
 
 interface MappingState {
@@ -69,14 +67,6 @@ const AUTO_MAP_KEYS: Record<FileType, Partial<Record<keyof MappingState, string[
     addebiti: ["addebiti", "addebiti (euro)", "addebiti euro", "dare"],
     accrediti: ["accrediti", "accrediti (euro)", "accrediti euro", "avere"],
   },
-  "bancoposta": {
-    data: ["data", "date", "data contabile"],
-    descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
-    importo: ["importo", "amount", "importo (eur)", "importo (euro)", "importo euro", "ammontare", "valore", "value"],
-    addebiti: ["addebiti", "addebiti (euro)", "addebiti euro", "dare"],
-    accrediti: ["accrediti", "accrediti (euro)", "accrediti euro", "avere"],
-  },
-  "manuale": {},
 };
 
 const DATE_FORMATS = [
@@ -229,7 +219,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
         let targetSheet: XLSX.WorkSheet | null = null;
         let headerRowIndex = -1;
 
-        if (ft !== "manuale") {
+        {
           for (const name of workbook.SheetNames) {
             const ws = workbook.Sheets[name];
             const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
@@ -288,6 +278,27 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
           if (match) autoMapping[field as keyof MappingState] = match;
         }
 
+        // Validate required columns
+        if (ft === "postepay-importo") {
+          if (!autoMapping.data || !autoMapping.descrizione || !autoMapping.importo) {
+            toast({
+              title: "Colonne mancanti per il formato scelto",
+              description: "Servono: Data Contabile, Descrizione operazioni, Importo (euro).",
+              variant: "destructive",
+            });
+            return;
+          }
+        } else if (ft === "postepay-split") {
+          if (!autoMapping.data || !autoMapping.descrizione || !autoMapping.addebiti || !autoMapping.accrediti) {
+            toast({
+              title: "Colonne mancanti per il formato scelto",
+              description: "Servono: Data Contabile, Descrizione operazioni, Addebiti (euro), Accrediti (euro).",
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+
         setMapping(autoMapping);
         setStep("mapping");
       } catch {
@@ -318,7 +329,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     [processFile, fileType]
   );
 
-  const isSplitMode = !mapping.importo && !!mapping.addebiti && !!mapping.accrediti;
+  const isSplitMode = fileType === "postepay-split";
 
   const isMappingValid = mapping.data && mapping.descrizione && selectedContoId &&
     (mapping.importo || (mapping.addebiti && mapping.accrediti));
@@ -472,14 +483,12 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
                   </SelectContent>
                 </Select>
               </div>
-              {(fileType === "manuale"
-                ? (["data", "descrizione", "importo", "addebiti", "accrediti"] as const)
-                : isSplitMode
-                  ? (["data", "descrizione", "addebiti", "accrediti"] as const)
-                  : (["data", "descrizione", "importo"] as const)
+              {(isSplitMode
+                ? (["data", "descrizione", "addebiti", "accrediti"] as const)
+                : (["data", "descrizione", "importo"] as const)
               ).map((field) => (
                 <div key={field} className="space-y-2">
-                  <Label className="capitalize">{field} {fileType !== "manuale" ? "*" : ""}</Label>
+                  <Label className="capitalize">{field} *</Label>
                   <Select
                     value={mapping[field]}
                     onValueChange={(v) => setMapping((m) => ({ ...m, [field]: v }))}
