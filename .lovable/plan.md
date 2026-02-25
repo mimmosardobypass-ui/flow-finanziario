@@ -1,59 +1,94 @@
 
 
-# Trim Header e Errore Esplicito per Formato Non Rilevato
+# Fix Detection: Scansione Multi-Sheet, Header Flessibile e Normalizzazione
 
-## Stato Attuale
+## Problema
 
-Il supporto per entrambi i formati (colonna singola "Importo (euro)" e colonne separate "Addebiti/Accrediti") e il rilevamento header "Data Contabile" sono gia implementati. Mancano due dettagli:
-
-1. **Trim sugli header**: Le chiavi JSON estratte dal foglio Excel possono contenere spazi iniziali/finali. Attualmente il trim viene applicato solo durante il confronto nell'auto-mapping, ma i nomi colonna stessi non vengono puliti.
-2. **Errore esplicito**: Se dopo l'auto-mapping non viene rilevato ne "Importo" ne la coppia "Addebiti/Accrediti", non viene mostrato alcun errore.
+La detection fallisce perche:
+1. Solo il primo foglio viene analizzato, ma il foglio con i dati potrebbe essere un altro
+2. La scansione header si ferma a 20 righe (potrebbe non bastare)
+3. Gli header non vengono normalizzati completamente (spazi doppi, case)
+4. Le keywords di matching non coprono tutte le varianti ("importo euro" senza parentesi)
 
 ## Modifiche
 
-### `src/pages/ImportTransazioni.tsx`
+### Entrambi i file: `src/pages/ImportTransazioni.tsx` e `src/components/ImportTransactionsDialog.tsx`
 
-**1. Trim dei nomi colonna (dopo riga 313)**
+**1. Scansione multi-sheet per trovare il foglio giusto**
 
-Dopo `Object.keys(json[0])`, applicare trim a ogni nome colonna e aggiornare anche le righe di dati per usare le chiavi trimmate:
+Invece di prendere sempre `SheetNames[0]`, iterare su tutti i fogli e scegliere quello che contiene una riga con "Data Contabile". Se nessun foglio la contiene, usare il primo foglio come fallback.
 
 ```typescript
-const rawCols = Object.keys(json[0]);
-const cols = rawCols.map(c => c.trim());
-// Remap rows with trimmed keys
-const cleanedRows = json.map(row => {
-  const clean: Record<string, unknown> = {};
-  for (const key of rawCols) {
-    clean[key.trim()] = row[key];
+const workbook = XLSX.read(data, { type: "array" });
+if (workbook.SheetNames.length === 0) { /* errore file vuoto */ return; }
+
+let targetSheet: XLSX.WorkSheet | null = null;
+let headerRowIndex = -1;
+
+for (const name of workbook.SheetNames) {
+  const ws = workbook.Sheets[name];
+  const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+  const limit = Math.min(raw.length, 50);
+  for (let i = 0; i < limit; i++) {
+    const row = raw[i];
+    if (Array.isArray(row) && row.some(cell =>
+      typeof cell === "string" && cell.toLowerCase().includes("data contabile")
+    )) {
+      targetSheet = ws;
+      headerRowIndex = i;
+      break;
+    }
   }
-  return clean;
-});
-```
+  if (targetSheet) break;
+}
 
-**2. Errore esplicito se formato non rilevato (dopo auto-mapping)**
-
-Dopo aver calcolato l'auto-mapping, verificare se e stato trovato almeno un formato valido. Se no, mostrare un toast di errore:
-
-```typescript
-if (!autoMapping.importo && !(autoMapping.addebiti && autoMapping.accrediti)) {
-  toast({
-    title: "Formato non riconosciuto",
-    description: "Il file non contiene colonne 'Importo (euro)' ne 'Addebiti/Accrediti (euro)'.",
-    variant: "destructive",
-  });
-  return;
+// Fallback: primo foglio senza offset
+if (!targetSheet) {
+  targetSheet = workbook.Sheets[workbook.SheetNames[0]];
 }
 ```
 
-### `src/components/ImportTransactionsDialog.tsx`
+**2. Aumentare scansione a 50 righe**
 
-Stesse due modifiche: trim delle colonne e errore esplicito.
+Il limite di scansione passa da 20 a 50 righe.
+
+**3. Normalizzazione header completa**
+
+Dopo l'estrazione delle colonne, normalizzare con trim + rimozione spazi doppi:
+
+```typescript
+const cols = rawCols.map(c => c.trim().replace(/\s+/g, ' '));
+```
+
+**4. Normalizzare anche nel matching auto-map**
+
+Il confronto nell'auto-mapping deve applicare la stessa normalizzazione:
+
+```typescript
+const match = cols.find(c => 
+  keywords.includes(c.toLowerCase().trim().replace(/\s+/g, ' '))
+);
+```
+
+**5. Aggiungere keyword "importo euro" (senza parentesi)**
+
+Aggiungere all'array `importo` in AUTO_MAP_KEYS:
+```typescript
+importo: ["importo", "amount", "importo (eur)", "importo (euro)", "importo euro", "ammontare", "valore", "value"]
+```
+
+E per addebiti/accrediti aggiungere varianti senza parentesi:
+```typescript
+addebiti: ["addebiti", "addebiti (euro)", "addebiti euro", "dare"]
+accrediti: ["accrediti", "accrediti (euro)", "accrediti euro", "avere"]
+```
 
 ## Dettagli Tecnici
 
 | File | Modifica |
 |------|----------|
-| `src/pages/ImportTransazioni.tsx` | Trim header + errore formato non rilevato |
+| `src/pages/ImportTransazioni.tsx` | Multi-sheet scan, 50 righe, normalizzazione header, keywords estese |
 | `src/components/ImportTransactionsDialog.tsx` | Stesse modifiche |
 
-Nessuna modifica alla logica di parsing, split mode o salvataggio database.
+La logica di parsing (split mode, importi, date) e la UI restano invariate.
+
