@@ -83,7 +83,7 @@ export function useReconcile() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (transactionIds: string[]) => {
+    mutationFn: async ({ transactionIds, reconciliationType = "transfer" }: { transactionIds: string[]; reconciliationType?: string }) => {
       if (!user || transactionIds.length < 2) throw new Error("Seleziona almeno 2 transazioni");
 
       const reconciliation_id = crypto.randomUUID();
@@ -123,7 +123,7 @@ export function useReconcile() {
       const allIds = allTxns.map((t) => t.id);
       const { error } = await supabase
         .from("transactions")
-        .update({ reconciliation_id: finalId, reconciliation_status: status })
+        .update({ reconciliation_id: finalId, reconciliation_status: status, reconciliation_type: reconciliationType } as any)
         .in("id", allIds);
 
       if (error) throw error;
@@ -143,7 +143,7 @@ export function useUnreconcile() {
     mutationFn: async (reconciliationId: string) => {
       const { error } = await supabase
         .from("transactions")
-        .update({ reconciliation_id: null, reconciliation_status: "none" })
+        .update({ reconciliation_id: null, reconciliation_status: "none", reconciliation_type: null } as any)
         .eq("reconciliation_id", reconciliationId);
 
       if (error) throw error;
