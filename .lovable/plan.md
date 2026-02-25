@@ -73,4 +73,3 @@ Il default `fileType` resta `"postepay-importo"`.
 | `src/components/ImportTransactionsDialog.tsx` | Stesse modifiche |
 
 La logica di parsing (trim header, scansione multi-sheet, calcolo importi) resta invariata.
-
