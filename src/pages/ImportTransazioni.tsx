@@ -108,10 +108,11 @@ function tryParseDate(raw: unknown): string | null {
 function tryParseAmount(raw: unknown): number | null {
   if (raw == null) return null;
   if (typeof raw === "number") return isNaN(raw) ? null : raw;
-  const str = String(raw)
-    .trim()
-    .replace(/[€$£\s]/g, "")
-    .replace(",", ".");
+  let str = String(raw).trim().replace(/[€$£\s]/g, "");
+  // Italian format: 1.234,56 → remove thousand dots, then swap decimal comma
+  if (str.includes(",")) {
+    str = str.replace(/\./g, "").replace(",", ".");
+  }
   const n = parseFloat(str);
   return isNaN(n) ? null : n;
 }
