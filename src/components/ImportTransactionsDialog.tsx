@@ -40,6 +40,15 @@ import { useContiAttivi } from "@/hooks/useConti";
 
 type Step = "upload" | "mapping" | "result";
 
+type FileType = "postepay-importo" | "postepay-split" | "bancoposta" | "manuale";
+
+const FILE_TYPE_LABELS: Record<FileType, string> = {
+  "postepay-importo": "Postepay – Importo unico",
+  "postepay-split": "Postepay – Addebiti/Accrediti",
+  "bancoposta": "Bancoposta",
+  "manuale": "Manuale",
+};
+
 interface MappingState {
   data: string;
   descrizione: string;
@@ -48,12 +57,26 @@ interface MappingState {
   accrediti: string;
 }
 
-const AUTO_MAP_KEYS: Partial<Record<keyof MappingState, string[]>> = {
-  data: ["data", "date", "fecha", "datum", "data contabile"],
-  descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
-  importo: ["importo", "amount", "importo (eur)", "importo (euro)", "importo euro", "ammontare", "valore", "value"],
-  addebiti: ["addebiti", "addebiti (euro)", "addebiti euro", "dare"],
-  accrediti: ["accrediti", "accrediti (euro)", "accrediti euro", "avere"],
+const AUTO_MAP_KEYS: Record<FileType, Partial<Record<keyof MappingState, string[]>>> = {
+  "postepay-importo": {
+    data: ["data", "date", "data contabile"],
+    descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
+    importo: ["importo", "amount", "importo (eur)", "importo (euro)", "importo euro", "ammontare", "valore", "value"],
+  },
+  "postepay-split": {
+    data: ["data", "date", "data contabile"],
+    descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
+    addebiti: ["addebiti", "addebiti (euro)", "addebiti euro", "dare"],
+    accrediti: ["accrediti", "accrediti (euro)", "accrediti euro", "avere"],
+  },
+  "bancoposta": {
+    data: ["data", "date", "data contabile"],
+    descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
+    importo: ["importo", "amount", "importo (eur)", "importo (euro)", "importo euro", "ammontare", "valore", "value"],
+    addebiti: ["addebiti", "addebiti (euro)", "addebiti euro", "dare"],
+    accrediti: ["accrediti", "accrediti (euro)", "accrediti euro", "avere"],
+  },
+  "manuale": {},
 };
 
 const DATE_FORMATS = [
@@ -121,6 +144,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<Step>("upload");
+  const [fileType, setFileType] = useState<FileType>("postepay-importo");
   const [fileName, setFileName] = useState("");
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
@@ -143,11 +167,15 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
 
   const reset = useCallback(() => {
     setStep("upload");
+    setFileType("postepay-importo");
     setFileName("");
     setColumns([]);
     setRows([]);
     setMapping({ data: "", descrizione: "", importo: "", addebiti: "", accrediti: "" });
     setExcludedRows(new Set());
+    setImportResult(null);
+    setImporting(false);
+    setSelectedContoId("");
     setImportResult(null);
     setImporting(false);
     setSelectedContoId("");
@@ -175,7 +203,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     }
   }, [allSelected, rows]);
 
-  const processFile = useCallback((file: File) => {
+  const processFile = useCallback((file: File, ft: FileType) => {
     const validTypes = [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "text/csv",
@@ -198,33 +226,33 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
           return;
         }
 
-        // Multi-sheet scan: find the sheet containing "Data Contabile"
         let targetSheet: XLSX.WorkSheet | null = null;
         let headerRowIndex = -1;
 
-        for (const name of workbook.SheetNames) {
-          const ws = workbook.Sheets[name];
-          const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
-          const limit = Math.min(raw.length, 50);
-          for (let i = 0; i < limit; i++) {
-            const row = raw[i];
-            if (
-              Array.isArray(row) &&
-              row.some(
-                (cell) =>
-                  typeof cell === "string" &&
-                  cell.toLowerCase().includes("data contabile")
-              )
-            ) {
-              targetSheet = ws;
-              headerRowIndex = i;
-              break;
+        if (ft !== "manuale") {
+          for (const name of workbook.SheetNames) {
+            const ws = workbook.Sheets[name];
+            const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+            const limit = Math.min(raw.length, 50);
+            for (let i = 0; i < limit; i++) {
+              const row = raw[i];
+              if (
+                Array.isArray(row) &&
+                row.some(
+                  (cell) =>
+                    typeof cell === "string" &&
+                    cell.toLowerCase().includes("data contabile")
+                )
+              ) {
+                targetSheet = ws;
+                headerRowIndex = i;
+                break;
+              }
             }
+            if (targetSheet) break;
           }
-          if (targetSheet) break;
         }
 
-        // Fallback: first sheet without offset
         if (!targetSheet) {
           targetSheet = workbook.Sheets[workbook.SheetNames[0]];
         }
@@ -252,20 +280,12 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
         setFileName(file.name);
         setExcludedRows(new Set());
 
-        // auto-map
+        // auto-map based on file type
         const autoMapping: MappingState = { data: "", descrizione: "", importo: "", addebiti: "", accrediti: "" };
-        for (const [field, keywords] of Object.entries(AUTO_MAP_KEYS)) {
+        const keywordsMap = AUTO_MAP_KEYS[ft];
+        for (const [field, keywords] of Object.entries(keywordsMap)) {
           const match = cols.find((c) => keywords.includes(c.toLowerCase().trim().replace(/\s+/g, ' ')));
           if (match) autoMapping[field as keyof MappingState] = match;
-        }
-
-        if (!autoMapping.importo && !(autoMapping.addebiti && autoMapping.accrediti)) {
-          toast({
-            title: "Formato non riconosciuto",
-            description: "Il file non contiene colonne 'Importo (euro)' né 'Addebiti/Accrediti (euro)'.",
-            variant: "destructive",
-          });
-          return;
         }
 
         setMapping(autoMapping);
@@ -284,18 +304,18 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     (e: React.DragEvent) => {
       e.preventDefault();
       const file = e.dataTransfer.files?.[0];
-      if (file) processFile(file);
+      if (file) processFile(file, fileType);
     },
-    [processFile]
+    [processFile, fileType]
   );
 
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (file) processFile(file);
+      if (file) processFile(file, fileType);
       e.target.value = "";
     },
-    [processFile]
+    [processFile, fileType]
   );
 
   const isSplitMode = !mapping.importo && !!mapping.addebiti && !!mapping.accrediti;
@@ -383,40 +403,83 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
 
         {/* Step 1: Upload */}
         {step === "upload" && (
-          <div
-            className="border-2 border-dashed border-border rounded-lg p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-foreground font-medium mb-1">
-              Trascina un file qui o clicca per selezionarlo
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Formati supportati: .xlsx, .csv
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.csv"
-              className="hidden"
-              onChange={handleFileInput}
-            />
+          <div className="space-y-4">
+            {/* File type selector */}
+            <div className="space-y-2">
+              <Label>Tipo file</Label>
+              <Select
+                value={fileType}
+                onValueChange={(v) => setFileType(v as FileType)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.entries(FILE_TYPE_LABELS) as [FileType, string][]).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Drop zone */}
+            <div
+              className="border-2 border-dashed border-border rounded-lg p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-foreground font-medium mb-1">
+                Trascina un file qui o clicca per selezionarlo
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Formati supportati: .xlsx, .csv
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.csv"
+                className="hidden"
+                onChange={handleFileInput}
+              />
+            </div>
           </div>
         )}
 
         {/* Step 2: Mapping */}
         {step === "mapping" && (
           <div className="space-y-6">
-            {/* Column mapping */}
+            {/* File type + Column mapping */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {(isSplitMode
-                ? (["data", "descrizione", "addebiti", "accrediti"] as const)
-                : (["data", "descrizione", "importo"] as const)
+              <div className="space-y-2">
+                <Label>Tipo file</Label>
+                <Select
+                  value={fileType}
+                  onValueChange={(v) => setFileType(v as FileType)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(FILE_TYPE_LABELS) as [FileType, string][]).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {(fileType === "manuale"
+                ? (["data", "descrizione", "importo", "addebiti", "accrediti"] as const)
+                : isSplitMode
+                  ? (["data", "descrizione", "addebiti", "accrediti"] as const)
+                  : (["data", "descrizione", "importo"] as const)
               ).map((field) => (
                 <div key={field} className="space-y-2">
-                  <Label className="capitalize">{field} *</Label>
+                  <Label className="capitalize">{field} {fileType !== "manuale" ? "*" : ""}</Label>
                   <Select
                     value={mapping[field]}
                     onValueChange={(v) => setMapping((m) => ({ ...m, [field]: v }))}
