@@ -169,6 +169,8 @@ export type Database = {
           description: string | null
           id: string
           rata_id: string | null
+          reconciliation_id: string | null
+          reconciliation_status: string
           transfer_id: string | null
           type: string
           user_id: string
@@ -183,6 +185,8 @@ export type Database = {
           description?: string | null
           id?: string
           rata_id?: string | null
+          reconciliation_id?: string | null
+          reconciliation_status?: string
           transfer_id?: string | null
           type: string
           user_id: string
@@ -197,6 +201,8 @@ export type Database = {
           description?: string | null
           id?: string
           rata_id?: string | null
+          reconciliation_id?: string | null
+          reconciliation_status?: string
           transfer_id?: string | null
           type?: string
           user_id?: string

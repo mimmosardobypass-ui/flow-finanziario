@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight } from "lucide-react";
+import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, CircleDot, CircleCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -20,6 +20,7 @@ import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { TransactionFilters } from "@/components/TransactionFilters";
 import { ExportDropdown } from "@/components/ExportDropdown";
 import { ImportTransactionsDialog } from "@/components/ImportTransactionsDialog";
+import { ReconciliationSheet } from "@/components/ReconciliationSheet";
 import {
   useFilteredTransactions,
   TransactionFilters as FiltersType,
@@ -35,6 +36,9 @@ export default function Transactions() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [reconciliationOpen, setReconciliationOpen] = useState(false);
+  const [reconciliationTransaction, setReconciliationTransaction] =
+    useState<TransactionWithCategory | null>(null);
   const [selectedTransaction, setSelectedTransaction] =
     useState<TransactionWithCategory | null>(null);
   
@@ -247,6 +251,7 @@ export default function Transactions() {
                     <TableHead>Categoria</TableHead>
                     <TableHead>Descrizione</TableHead>
                     <TableHead className="text-right">Importo</TableHead>
+                    <TableHead className="w-[50px] print:hidden">Ric.</TableHead>
                     <TableHead className="w-[100px] print:hidden">Azioni</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -295,6 +300,25 @@ export default function Transactions() {
                             })}
                           </span>
                         </div>
+                      </TableCell>
+                      <TableCell className="print:hidden">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            setReconciliationTransaction(transaction);
+                            setReconciliationOpen(true);
+                          }}
+                        >
+                          {(transaction as any).reconciliation_status === "complete" ? (
+                            <CircleCheck className="h-4 w-4 text-success" />
+                          ) : (transaction as any).reconciliation_status === "partial" ? (
+                            <CircleDot className="h-4 w-4 text-orange-500" />
+                          ) : (
+                            <Circle className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </Button>
                       </TableCell>
                       <TableCell className="print:hidden">
                         <div className="flex gap-1">
@@ -355,6 +379,12 @@ export default function Transactions() {
       <ImportTransactionsDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
+      />
+
+      <ReconciliationSheet
+        open={reconciliationOpen}
+        onOpenChange={setReconciliationOpen}
+        transaction={reconciliationTransaction}
       />
     </div>
   );

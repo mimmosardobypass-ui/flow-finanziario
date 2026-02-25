@@ -12,6 +12,7 @@ export interface TransactionFilters {
   dateTo?: string;
   amountMin?: number;
   amountMax?: number;
+  reconciliation?: "all" | "none" | "partial" | "complete";
 }
 
 export function useFilteredTransactions(filters: TransactionFilters) {
@@ -26,6 +27,7 @@ export function useFilteredTransactions(filters: TransactionFilters) {
     dateTo: filters.dateTo,
     amountMin: filters.amountMin,
     amountMax: filters.amountMax,
+    reconciliation: filters.reconciliation,
   };
 
   return useQuery({
@@ -78,6 +80,10 @@ export function useFilteredTransactions(filters: TransactionFilters) {
       }
       if (filters.amountMax !== undefined && filters.amountMax > 0) {
         query = query.lte("amount", filters.amountMax);
+      }
+
+      if (filters.reconciliation && filters.reconciliation !== "all") {
+        query = query.eq("reconciliation_status", filters.reconciliation);
       }
 
       const { data, error } = await query.order("date", { ascending: false });

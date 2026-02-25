@@ -15,6 +15,8 @@ export interface Transaction {
   created_at: string;
   deleted_at: string | null;
   transfer_id: string | null;
+  reconciliation_id: string | null;
+  reconciliation_status: string;
 }
 
 export interface TransactionWithCategory extends Transaction {

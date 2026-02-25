@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Search, Filter, X, Calendar, DollarSign, Tag, Landmark } from "lucide-react";
+import { Search, Filter, X, Calendar, DollarSign, Tag, Landmark, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
@@ -116,6 +116,7 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
       dateTo: undefined,
       amountMin: undefined,
       amountMax: undefined,
+      reconciliation: "all",
     });
   };
 
@@ -128,6 +129,7 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
     filters.dateTo,
     filters.amountMin,
     filters.amountMax,
+    filters.reconciliation && filters.reconciliation !== "all",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFiltersCount > 0;
@@ -338,6 +340,28 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
           </PopoverContent>
         </Popover>
 
+        {/* Riconciliazione */}
+        <Select
+          value={filters.reconciliation || "all"}
+          onValueChange={(v) =>
+            onFiltersChange({
+              ...filters,
+              reconciliation: v as "all" | "none" | "partial" | "complete",
+            })
+          }
+        >
+          <SelectTrigger className="w-[160px] bg-secondary border-border">
+            <Link2 className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Riconciliazione" />
+          </SelectTrigger>
+          <SelectContent className="bg-popover border-border">
+            <SelectItem value="all">Tutti</SelectItem>
+            <SelectItem value="none">Non riconciliati</SelectItem>
+            <SelectItem value="partial">Parziali</SelectItem>
+            <SelectItem value="complete">Riconciliati</SelectItem>
+          </SelectContent>
+        </Select>
+
         {/* Pulisci filtri */}
         {hasActiveFilters && (
           <Button
@@ -431,6 +455,21 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
                     amountMax: undefined,
                   });
                 }}
+              />
+            </Badge>
+          )}
+          {filters.reconciliation && filters.reconciliation !== "all" && (
+            <Badge variant="secondary" className="gap-1">
+              {filters.reconciliation === "none"
+                ? "Non riconciliati"
+                : filters.reconciliation === "partial"
+                ? "Parziali"
+                : "Riconciliati"}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() =>
+                  onFiltersChange({ ...filters, reconciliation: "all" })
+                }
               />
             </Badge>
           )}
