@@ -114,8 +114,18 @@ export function useCreateTransaction() {
 
       if (error) throw error;
 
-      // If linked to a rata, update the rata status
+      // If linked to a rata, verify ownership then update status
       if (input.rata_id) {
+        const { data: rata, error: rataError } = await supabase
+          .from("scadenze_rate")
+          .select("user_id")
+          .eq("id", input.rata_id)
+          .single();
+
+        if (rataError || !rata || rata.user_id !== user.id) {
+          throw new Error("Invalid rata_id");
+        }
+
         await supabase
           .from("scadenze_rate")
           .update({ stato: "pagata", transaction_id: data.id })
