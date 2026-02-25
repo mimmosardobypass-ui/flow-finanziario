@@ -43,9 +43,11 @@ interface MappingState {
   data: string;
   descrizione: string;
   importo: string;
+  addebiti: string;
+  accrediti: string;
 }
 
-const AUTO_MAP_KEYS: Record<keyof MappingState, string[]> = {
+const AUTO_MAP_KEYS: Partial<Record<keyof MappingState, string[]>> = {
   data: ["data", "date", "fecha", "datum", "data contabile"],
   descrizione: [
     "descrizione",
@@ -65,6 +67,8 @@ const AUTO_MAP_KEYS: Record<keyof MappingState, string[]> = {
     "valore",
     "value",
   ],
+  addebiti: ["addebiti", "addebiti (euro)", "dare"],
+  accrediti: ["accrediti", "accrediti (euro)", "avere"],
 };
 
 const DATE_FORMATS = [
@@ -130,6 +134,8 @@ export default function ImportTransazioni() {
     data: "",
     descrizione: "",
     importo: "",
+    addebiti: "",
+    accrediti: "",
   });
   const [excludedRows, setExcludedRows] = useState<Set<number>>(new Set());
   const [importing, setImporting] = useState(false);
@@ -142,11 +148,32 @@ export default function ImportTransazioni() {
 
   /* ── derived data ── */
 
+  const isSplitMode = useMemo(
+    () => !mapping.importo && !!mapping.addebiti && !!mapping.accrediti,
+    [mapping.importo, mapping.addebiti, mapping.accrediti]
+  );
+
   const parsedRows = useMemo(() => {
-    if (!mapping.data || !mapping.importo) return [];
+    if (!mapping.data) return [];
+    if (!isSplitMode && !mapping.importo) return [];
+    if (isSplitMode && (!mapping.addebiti || !mapping.accrediti)) return [];
+
     return rows.map((row, i) => {
       const date = tryParseDate(row[mapping.data]);
-      const amount = tryParseAmount(row[mapping.importo]);
+
+      let amount: number | null = null;
+      if (isSplitMode) {
+        const addebito = tryParseAmount(row[mapping.addebiti]);
+        const accredito = tryParseAmount(row[mapping.accrediti]);
+        if (addebito != null && addebito !== 0) {
+          amount = -Math.abs(addebito);
+        } else if (accredito != null && accredito !== 0) {
+          amount = Math.abs(accredito);
+        }
+      } else {
+        amount = tryParseAmount(row[mapping.importo]);
+      }
+
       const description = mapping.descrizione
         ? row[mapping.descrizione] != null
           ? String(row[mapping.descrizione]).trim()
@@ -155,7 +182,7 @@ export default function ImportTransazioni() {
       const hasError = !date || amount == null || amount === 0;
       return { index: i, date, amount, description, hasError, raw: row };
     });
-  }, [rows, mapping]);
+  }, [rows, mapping, isSplitMode]);
 
   const filteredRows = useMemo(() => {
     if (!searchText.trim()) return parsedRows;
@@ -272,6 +299,8 @@ export default function ImportTransazioni() {
           data: "",
           descrizione: "",
           importo: "",
+          addebiti: "",
+          accrediti: "",
         };
         for (const [field, keywords] of Object.entries(AUTO_MAP_KEYS)) {
           const match = cols.find((c) =>
@@ -310,7 +339,8 @@ export default function ImportTransazioni() {
   );
 
   const isMappingValid =
-    mapping.data && mapping.descrizione && mapping.importo && selectedContoId;
+    mapping.data && mapping.descrizione && selectedContoId &&
+    (mapping.importo || (mapping.addebiti && mapping.accrediti));
 
   const handleImport = async () => {
     if (!isMappingValid) return;
@@ -442,7 +472,10 @@ export default function ImportTransazioni() {
             </div>
 
             {/* Column mapping */}
-            {(["data", "descrizione", "importo"] as const).map((field) => (
+            {(isSplitMode
+              ? (["data", "descrizione", "addebiti", "accrediti"] as const)
+              : (["data", "descrizione", "importo"] as const)
+            ).map((field) => (
               <div key={field} className="space-y-1 min-w-[150px]">
                 <Label className="text-xs capitalize">{field} *</Label>
                 <Select
