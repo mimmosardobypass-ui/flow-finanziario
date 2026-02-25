@@ -11,6 +11,7 @@ import Transactions from "./pages/Transactions";
 import Categories from "./pages/Categories";
 import Scadenziario from "./pages/Scadenziario";
 import Conti from "./pages/Conti";
+import ImportTransazioni from "./pages/ImportTransazioni";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
@@ -74,6 +75,14 @@ const App = () => (
                   <Layout>
                     <Conti />
                   </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/import-transazioni"
+              element={
+                <ProtectedRoute>
+                  <ImportTransazioni />
                 </ProtectedRoute>
               }
             />

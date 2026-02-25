@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, CircleDot, CircleCheck } from "lucide-react";
@@ -19,7 +19,7 @@ import { TransactionDialog } from "@/components/TransactionDialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { TransactionFilters } from "@/components/TransactionFilters";
 import { ExportDropdown } from "@/components/ExportDropdown";
-import { ImportTransactionsDialog } from "@/components/ImportTransactionsDialog";
+
 import { ReconciliationSheet } from "@/components/ReconciliationSheet";
 import {
   useFilteredTransactions,
@@ -32,10 +32,10 @@ import {
 import { toast } from "@/hooks/use-toast";
 
 export default function Transactions() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [reconciliationOpen, setReconciliationOpen] = useState(false);
   const [reconciliationTransaction, setReconciliationTransaction] =
     useState<TransactionWithCategory | null>(null);
@@ -167,7 +167,7 @@ export default function Transactions() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => setImportDialogOpen(true)}>
+          <Button variant="outline" className="gap-2" onClick={() => navigate("/import-transazioni")}>
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Importa</span>
           </Button>
@@ -376,10 +376,6 @@ export default function Transactions() {
         isLoading={deleteMutation.isPending}
       />
 
-      <ImportTransactionsDialog
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
-      />
 
       <ReconciliationSheet
         open={reconciliationOpen}
