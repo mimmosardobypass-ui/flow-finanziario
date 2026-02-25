@@ -1,81 +1,94 @@
 
 
-# Gestione Trasferimenti tra Conti
+# Riconciliazione Manuale tra Movimenti
 
 ## Panoramica
 
-Aggiungere la possibilita di trasferire fondi tra conti direttamente dal form "Nuova Transazione". Un trasferimento genera automaticamente 2 o 3 movimenti collegati tramite un `transfer_id` comune, senza alterare il saldo complessivo.
+Aggiungere un sistema di riconciliazione manuale che permette di collegare transazioni di conti diversi tramite un `reconciliation_id` condiviso, con stato visivo nella tabella e pannello laterale per la selezione dei movimenti compatibili.
 
 ---
 
 ## 1. Migrazione Database
 
-Aggiungere una colonna `transfer_id` alla tabella `transactions`:
+Aggiungere due colonne alla tabella `transactions`:
 
-```text
-transactions.transfer_id  uuid  NULLABLE  DEFAULT NULL
-```
-
-Questa colonna collega tra loro i movimenti generati da un singolo trasferimento. Le transazioni normali avranno `transfer_id = NULL`.
-
----
-
-## 2. Logica del trasferimento
-
-Alla conferma di un trasferimento con importo X e commissione C (opzionale):
-
-| # | Tipo | Conto | Importo | Descrizione | Categoria |
-|---|------|-------|---------|-------------|-----------|
-| 1 | expense | Conto origine | X | "Trasferimento verso [dest]" | nessuna |
-| 2 | income | Conto destinazione | X | "Trasferimento da [origine]" | nessuna |
-| 3 | expense | Conto origine | C | "Commissione trasferimento" | "Commissioni" (auto-creata) |
-
-Tutti i movimenti condividono lo stesso `transfer_id` (UUID generato lato client).
+| Colonna | Tipo | Default | Descrizione |
+|---------|------|---------|-------------|
+| `reconciliation_id` | uuid | NULL | Collega movimenti riconciliati tra loro |
+| `reconciliation_status` | text | 'none' | Stato: `none`, `partial`, `complete` |
 
 ---
 
-## 3. File da modificare
+## 2. Nuovo componente: Pannello Riconciliazione
 
-### `src/hooks/useTransactions.ts`
-- Aggiungere `transfer_id` opzionale alle interfacce `Transaction` e `CreateTransactionInput`
-- Creare un nuovo hook `useCreateTransfer()` che:
-  - Genera un UUID come `transfer_id`
-  - Cerca o crea la categoria "Commissioni" (tipo expense) se serve
-  - Inserisce 2 o 3 righe in `transactions` in un'unica operazione
-  - Invalida le query necessarie
+Creare `src/components/ReconciliationSheet.tsx` usando il componente Sheet (pannello laterale) gia presente nel progetto.
 
-### `src/components/TransactionDialog.tsx`
-- Aggiungere "Trasferimento" come terza opzione nel RadioGroup del tipo (con icona `ArrowLeftRight`)
-- Quando tipo = "transfer":
-  - Nascondere il campo "Conto" singolo
-  - Mostrare "Conto origine" (select tra conti attivi)
-  - Mostrare "Conto destinazione" (select tra conti attivi, escludendo l'origine)
-  - Mostrare campo "Commissione (opzionale)" numerico
-  - Nascondere la sezione categoria (non pertinente)
-  - Nascondere la sezione "Collega a scadenza"
-  - Pre-compilare la descrizione con "Trasferimento"
-- Alla conferma, chiamare `useCreateTransfer` invece di `useCreateTransaction`
-- In modifica, i trasferimenti non sono modificabili dal dialog standard (troppo complesso)
+Il pannello mostra:
+- **Sezione superiore**: dettagli della transazione selezionata (importo, conto, data, descrizione)
+- **Elenco movimenti compatibili**: transazioni di **altri conti** filtrate per compatibilita (stesso importo oppure stessa data, con tolleranza di +/- 3 giorni). I movimenti gia riconciliati con la stessa transazione sono evidenziati
+- **Checkbox** per selezionare uno o piu movimenti da collegare
+- **Pulsante "Riconcilia"**: collega i movimenti selezionati assegnando lo stesso `reconciliation_id` e aggiornando lo stato
+- **Pulsante "Rimuovi riconciliazione"**: per scollegare movimenti gia riconciliati
 
-### `src/pages/Transactions.tsx`
-- Nella colonna "Importo", gestire la visualizzazione delle transazioni con `transfer_id`:
-  - Mostrare un'icona o badge "Trasf." per identificare visivamente i trasferimenti
-- Nessun impatto sul calcolo saldi (entrate e uscite si bilanciano gia)
+### Logica stato riconciliazione
+- `none`: nessun `reconciliation_id` assegnato
+- `partial`: ha un `reconciliation_id` ma il totale entrate != totale uscite nel gruppo
+- `complete`: il totale entrate == totale uscite nel gruppo riconciliato
 
 ---
 
-## 4. Categoria "Commissioni"
+## 3. Nuovo hook: `useReconciliation`
 
-La categoria "Commissioni" (tipo expense) viene cercata tra le categorie esistenti dell'utente. Se non esiste, viene creata automaticamente al momento del trasferimento con commissione. Questo evita di richiedere una migrazione dati.
+Creare `src/hooks/useReconciliation.ts` con:
+
+- **`useReconcile()`**: mutation che riceve un array di ID transazione, genera un UUID, aggiorna `reconciliation_id` per tutte, poi calcola e aggiorna `reconciliation_status` (partial o complete)
+- **`useUnreconcile()`**: mutation che rimuove il `reconciliation_id` e resetta lo stato a `none` per tutte le transazioni del gruppo
+- **`useCompatibleTransactions(transactionId)`**: query che recupera le transazioni compatibili per riconciliazione (stesso importo o date vicine, conti diversi)
 
 ---
 
-## 5. Riepilogo file
+## 4. Colonna "Riconciliazione" nella tabella
+
+In `src/pages/Transactions.tsx`, aggiungere una colonna tra "Importo" e "Azioni":
+
+| Stato | Icona | Colore |
+|-------|-------|--------|
+| `none` | `Circle` | Grigio (text-muted-foreground) |
+| `partial` | `CircleDot` | Arancione (text-orange-500) |
+| `complete` | `CircleCheck` | Verde (text-success) |
+
+Cliccando sull'icona si apre il pannello laterale `ReconciliationSheet`.
+
+---
+
+## 5. Filtro "Riconciliazione" nei filtri
+
+In `src/components/TransactionFilters.tsx` e `src/hooks/useFilteredTransactions.ts`:
+
+- Aggiungere campo `reconciliation` al tipo `TransactionFilters` con valori: `"all"` | `"none"` | `"partial"` | `"complete"`
+- Aggiungere un Select nei filtri con opzioni: "Tutti", "Non riconciliati", "Parziali", "Riconciliati"
+- Filtrare lato server con `.eq("reconciliation_status", value)` quando selezionato
+
+---
+
+## 6. Riepilogo file
 
 | File | Azione |
 |------|--------|
-| Migrazione SQL | Aggiungere colonna `transfer_id` a `transactions` |
-| `src/hooks/useTransactions.ts` | Aggiungere `transfer_id` alle interfacce, creare `useCreateTransfer()` |
-| `src/components/TransactionDialog.tsx` | Aggiungere tipo "Trasferimento" con UI dedicata (origine, destinazione, commissione) |
-| `src/pages/Transactions.tsx` | Badge visivo per transazioni di trasferimento |
+| Migrazione SQL | Aggiungere colonne `reconciliation_id` e `reconciliation_status` |
+| `src/hooks/useReconciliation.ts` | **Nuovo** - Hook per riconciliazione e movimenti compatibili |
+| `src/hooks/useTransactions.ts` | Aggiornare interfacce `Transaction` e `TransactionWithCategory` |
+| `src/hooks/useFilteredTransactions.ts` | Aggiungere filtro `reconciliation` |
+| `src/components/ReconciliationSheet.tsx` | **Nuovo** - Pannello laterale riconciliazione |
+| `src/components/TransactionFilters.tsx` | Aggiungere Select per filtro riconciliazione |
+| `src/pages/Transactions.tsx` | Aggiungere colonna icona + apertura pannello |
+
+---
+
+## 7. Sicurezza
+
+- Nessun movimento viene creato o eliminato
+- Solo i campi `reconciliation_id` e `reconciliation_status` vengono modificati
+- I saldi non vengono alterati in alcun modo
+- Le RLS esistenti proteggono gia le transazioni per utente
 
