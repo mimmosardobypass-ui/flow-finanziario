@@ -14,6 +14,13 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { TransactionWithCategory } from "@/hooks/useTransactions";
 import {
   useCompatibleTransactions,
@@ -31,9 +38,11 @@ interface Props {
 
 export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [reconciliationType, setReconciliationType] = useState<string>("transfer");
 
   const reconciliationId = (transaction as any)?.reconciliation_id as string | null;
   const reconciliationStatus = (transaction as any)?.reconciliation_status as string | undefined;
+  const currentReconciliationType = (transaction as any)?.reconciliation_type as string | null;
 
   const { data: compatibleTxns = [], isLoading: loadingCompatible } =
     useCompatibleTransactions(transaction);
@@ -70,7 +79,10 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
   const handleReconcile = async () => {
     if (!transaction || selectedIds.size === 0) return;
     try {
-      await reconcileMutation.mutateAsync([transaction.id, ...Array.from(selectedIds)]);
+      await reconcileMutation.mutateAsync({
+        transactionIds: [transaction.id, ...Array.from(selectedIds)],
+        reconciliationType,
+      });
       toast({ title: "Movimenti riconciliati" });
       setSelectedIds(new Set());
       onOpenChange(false);
@@ -131,7 +143,14 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
           {isReconciled && otherGroupMembers.length > 0 && (
             <>
               <div>
-                <p className="text-sm font-medium mb-2">Movimenti già riconciliati</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium">Movimenti già riconciliati</p>
+                  {currentReconciliationType && (
+                    <Badge variant="secondary">
+                      {currentReconciliationType === "transfer" ? "Transfer" : currentReconciliationType === "pagamento" ? "Pagamento" : "Altro"}
+                    </Badge>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {otherGroupMembers.map((t) => (
                     <TransactionRow key={t.id} transaction={t} />
@@ -153,6 +172,23 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
               </Button>
               <Separator />
             </>
+          )}
+
+          {/* Reconciliation type selector */}
+          {!isReconciled && (
+            <div>
+              <p className="text-sm font-medium mb-2">Tipo di riconciliazione</p>
+              <Select value={reconciliationType} onValueChange={setReconciliationType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="transfer">Transfer — Trasferimento tra conti</SelectItem>
+                  <SelectItem value="pagamento">Pagamento — Pagamento/incasso collegato</SelectItem>
+                  <SelectItem value="altro">Altro — Altro tipo di collegamento</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           )}
 
           {/* Compatible transactions */}
