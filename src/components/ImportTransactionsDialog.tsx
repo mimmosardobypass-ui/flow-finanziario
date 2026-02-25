@@ -44,12 +44,16 @@ interface MappingState {
   data: string;
   descrizione: string;
   importo: string;
+  addebiti: string;
+  accrediti: string;
 }
 
-const AUTO_MAP_KEYS: Record<keyof MappingState, string[]> = {
+const AUTO_MAP_KEYS: Partial<Record<keyof MappingState, string[]>> = {
   data: ["data", "date", "fecha", "datum", "data contabile"],
   descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
   importo: ["importo", "amount", "importo (eur)", "importo (euro)", "ammontare", "valore", "value"],
+  addebiti: ["addebiti", "addebiti (euro)", "dare"],
+  accrediti: ["accrediti", "accrediti (euro)", "avere"],
 };
 
 const DATE_FORMATS = [
@@ -120,7 +124,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
   const [fileName, setFileName] = useState("");
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
-  const [mapping, setMapping] = useState<MappingState>({ data: "", descrizione: "", importo: "" });
+  const [mapping, setMapping] = useState<MappingState>({ data: "", descrizione: "", importo: "", addebiti: "", accrediti: "" });
   const [excludedRows, setExcludedRows] = useState<Set<number>>(new Set());
   const [importResult, setImportResult] = useState<{
     imported: number;
@@ -142,7 +146,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     setFileName("");
     setColumns([]);
     setRows([]);
-    setMapping({ data: "", descrizione: "", importo: "" });
+    setMapping({ data: "", descrizione: "", importo: "", addebiti: "", accrediti: "" });
     setExcludedRows(new Set());
     setImportResult(null);
     setImporting(false);
@@ -206,7 +210,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
         setExcludedRows(new Set());
 
         // auto-map
-        const autoMapping: MappingState = { data: "", descrizione: "", importo: "" };
+        const autoMapping: MappingState = { data: "", descrizione: "", importo: "", addebiti: "", accrediti: "" };
         for (const [field, keywords] of Object.entries(AUTO_MAP_KEYS)) {
           const match = cols.find((c) => keywords.includes(c.toLowerCase().trim()));
           if (match) autoMapping[field as keyof MappingState] = match;
@@ -241,7 +245,10 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     [processFile]
   );
 
-  const isMappingValid = mapping.data && mapping.descrizione && mapping.importo && selectedContoId;
+  const isSplitMode = !mapping.importo && !!mapping.addebiti && !!mapping.accrediti;
+
+  const isMappingValid = mapping.data && mapping.descrizione && selectedContoId &&
+    (mapping.importo || (mapping.addebiti && mapping.accrediti));
 
   const handleImport = async () => {
     if (!isMappingValid) return;
@@ -258,7 +265,18 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
 
         const row = rows[i];
         const date = tryParseDate(row[mapping.data]);
-        const amount = tryParseAmount(row[mapping.importo]);
+        let amount: number | null = null;
+        if (isSplitMode) {
+          const addebito = tryParseAmount(row[mapping.addebiti]);
+          const accredito = tryParseAmount(row[mapping.accrediti]);
+          if (addebito != null && addebito !== 0) {
+            amount = -Math.abs(addebito);
+          } else if (accredito != null && accredito !== 0) {
+            amount = Math.abs(accredito);
+          }
+        } else {
+          amount = tryParseAmount(row[mapping.importo]);
+        }
         const description = row[mapping.descrizione] != null ? String(row[mapping.descrizione]).trim() : "";
 
         if (!date || amount == null || amount === 0) {
@@ -340,7 +358,10 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
           <div className="space-y-6">
             {/* Column mapping */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {(["data", "descrizione", "importo"] as const).map((field) => (
+              {(isSplitMode
+                ? (["data", "descrizione", "addebiti", "accrediti"] as const)
+                : (["data", "descrizione", "importo"] as const)
+              ).map((field) => (
                 <div key={field} className="space-y-2">
                   <Label className="capitalize">{field} *</Label>
                   <Select
