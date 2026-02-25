@@ -1,42 +1,94 @@
 
 
-# Correzione Formattazione Importi con Segno
+# Supporto Formato Postepay con Colonne Separate (Addebiti/Accrediti)
 
 ## Problema
 
-Nella pagina di anteprima importazione (`/import-transazioni`), gli importi negativi perdono il segno perche il codice usa `Math.abs()` nella formattazione UI. Un importo di `-36,90` viene mostrato come `€36,90` senza segno.
+Il file Postepay puo avere due formati diversi:
+1. **Colonna singola**: "Importo (euro)" con segno positivo/negativo (gia supportato)
+2. **Colonne separate**: "Addebiti (euro)" e "Accrediti (euro)" (non supportato)
+
+Il sistema deve rilevare automaticamente quale formato usare.
+
+## Approccio
+
+Introdurre una modalita "split" che si attiva automaticamente quando il file contiene le colonne "Addebiti (euro)" e "Accrediti (euro)". In questa modalita, il campo "importo" nel mapping viene sostituito da due campi (addebiti e accrediti), e l'importo viene calcolato come `-addebiti` o `+accrediti`.
 
 ## Modifiche
 
 ### `src/pages/ImportTransazioni.tsx`
 
-**1. Correggere la formattazione importi nella tabella anteprima (riga ~576)**
+**1. Estendere MappingState (riga 42-46)**
 
-Attualmente:
+Aggiungere campi opzionali per le colonne split:
+```typescript
+interface MappingState {
+  data: string;
+  descrizione: string;
+  importo: string;        // usato in modalita singola
+  addebiti: string;       // usato in modalita split
+  accrediti: string;      // usato in modalita split
+}
 ```
-{r.amount >= 0 ? "+" : ""}€{Math.abs(r.amount).toLocaleString("it-IT", ...)}
+
+**2. Aggiungere auto-detection nel processFile (riga 270-282)**
+
+Dopo l'auto-map esistente, rilevare se le colonne contengono "addebiti (euro)" e "accrediti (euro)". Se si, popolare `addebiti` e `accrediti` nel mapping e lasciare `importo` vuoto. Se esiste "importo (euro)", usare la logica attuale.
+
+Aggiungere keywords nell'AUTO_MAP_KEYS:
+```
+addebiti: ["addebiti", "addebiti (euro)", "dare"]
+accrediti: ["accrediti", "accrediti (euro)", "avere"]
 ```
 
-Corretto:
+**3. Derivare isSplitMode**
+
+Un `useMemo` che calcola `isSplitMode = !mapping.importo && !!mapping.addebiti && !!mapping.accrediti`.
+
+**4. Modificare parsedRows (riga 145-158)**
+
+In modalita split, calcolare l'importo dalla riga:
+- Se `addebiti` ha valore numerico -> `amount = -Math.abs(valore)`
+- Se `accrediti` ha valore numerico -> `amount = +Math.abs(valore)`
+- Se entrambi o nessuno -> hasError = true
+
+**5. Modificare la validazione isMappingValid (riga 312-313)**
+
+```typescript
+const isMappingValid = mapping.data && mapping.descrizione && selectedContoId &&
+  (mapping.importo || (mapping.addebiti && mapping.accrediti));
 ```
-{r.amount >= 0 ? "+" : "-"}€{Math.abs(r.amount).toLocaleString("it-IT", ...)}
-```
 
-Il problema e che per valori negativi non viene aggiunto alcun prefisso. Basta aggiungere `"-"` nel ramo negativo. `Math.abs()` resta necessario qui solo per evitare il doppio segno meno nella formattazione (es. `-€-36,90`).
+**6. Modificare la UI dei selettori colonna (riga 444-466)**
 
-**2. Correggere i totali nell'header (riga ~321-330)**
+In modalita split, mostrare i selettori "Addebiti" e "Accrediti" al posto di "Importo". Usare un rendering condizionale basato su `isSplitMode`.
 
-Attualmente i totali mostrano gia `+€` e `-€` correttamente -- nessuna modifica necessaria qui.
+**7. Nessuna modifica al rendering della tabella anteprima**
 
-### Nessuna modifica al database
+La tabella usa gia `r.amount` per visualizzare segno e colore -- funzionera automaticamente perche `parsedRows` calcolera il valore con il segno corretto.
 
-Il salvataggio in `useImportTransactions.ts` con `Math.abs(t.amount)` e corretto: il database usa il pattern `amount` (sempre positivo) + `type` (`income`/`expense`). Questo e coerente con tutte le altre visualizzazioni (Transactions, Dashboard, Reconciliation).
+### `src/components/ImportTransactionsDialog.tsx`
 
-## Riepilogo
+Applicare le stesse modifiche al dialog di importazione (usato altrove):
+- Estendere MappingState con addebiti/accrediti
+- Aggiungere auto-detection
+- Modificare parsedRows per la modalita split
+- Aggiornare isMappingValid
+- Aggiornare i selettori colonna nella UI
 
-| File | Modifica |
-|------|----------|
-| `src/pages/ImportTransazioni.tsx` | Aggiungere `"-"` per importi negativi nell'anteprima |
+### Nessuna modifica al backend
 
-Una sola riga da modificare.
+`useImportTransactions.ts` riceve gia `ParsedTransaction[]` con `amount` che include il segno. Non servono modifiche.
+
+## Dettagli Tecnici
+
+| File | Tipo modifica |
+|------|--------------|
+| `src/pages/ImportTransazioni.tsx` | Estendere mapping, auto-detect split, calcolo importo, UI selettori |
+| `src/components/ImportTransactionsDialog.tsx` | Stesse modifiche per il dialog |
+
+La logica di auto-detection funziona cosi:
+1. Se trovata colonna "importo (euro)" -> modalita singola (come ora)
+2. Se trovate colonne "addebiti (euro)" E "accrediti (euro)" -> modalita split
+3. Se trovata solo una delle due -> l'utente puo mappare manualmente l'altra
 
