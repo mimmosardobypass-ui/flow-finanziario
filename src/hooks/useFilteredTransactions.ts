@@ -13,6 +13,7 @@ export interface TransactionFilters {
   amountMin?: number;
   amountMax?: number;
   reconciliation?: "all" | "none" | "partial" | "complete";
+  reconciliationType?: "all" | "transfer" | "payment" | "other";
 }
 
 export function useFilteredTransactions(filters: TransactionFilters) {
@@ -28,6 +29,7 @@ export function useFilteredTransactions(filters: TransactionFilters) {
     amountMin: filters.amountMin,
     amountMax: filters.amountMax,
     reconciliation: filters.reconciliation,
+    reconciliationType: filters.reconciliationType,
   };
 
   return useQuery({
@@ -84,6 +86,10 @@ export function useFilteredTransactions(filters: TransactionFilters) {
 
       if (filters.reconciliation && filters.reconciliation !== "all") {
         query = query.eq("reconciliation_status", filters.reconciliation);
+      }
+
+      if (filters.reconciliationType && filters.reconciliationType !== "all") {
+        query = query.eq("reconciliation_type", filters.reconciliationType);
       }
 
       const { data, error } = await query.order("date", { ascending: false });

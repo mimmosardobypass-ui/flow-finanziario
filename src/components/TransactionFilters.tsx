@@ -117,6 +117,7 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
       amountMin: undefined,
       amountMax: undefined,
       reconciliation: "all",
+      reconciliationType: "all",
     });
   };
 
@@ -130,6 +131,7 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
     filters.amountMin,
     filters.amountMax,
     filters.reconciliation && filters.reconciliation !== "all",
+    filters.reconciliationType && filters.reconciliationType !== "all",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFiltersCount > 0;
@@ -362,6 +364,27 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
           </SelectContent>
         </Select>
 
+        {/* Tipo Riconciliazione */}
+        <Select
+          value={filters.reconciliationType || "all"}
+          onValueChange={(v) =>
+            onFiltersChange({
+              ...filters,
+              reconciliationType: v as "all" | "transfer" | "payment" | "other",
+            })
+          }
+        >
+          <SelectTrigger className="w-[160px] bg-secondary border-border">
+            <SelectValue placeholder="Tipo ric." />
+          </SelectTrigger>
+          <SelectContent className="bg-popover border-border">
+            <SelectItem value="all">Tutti i tipi</SelectItem>
+            <SelectItem value="transfer">Transfer</SelectItem>
+            <SelectItem value="payment">Pagamento</SelectItem>
+            <SelectItem value="other">Altro</SelectItem>
+          </SelectContent>
+        </Select>
+
         {/* Pulisci filtri */}
         {hasActiveFilters && (
           <Button
@@ -469,6 +492,21 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
                 className="h-3 w-3 cursor-pointer"
                 onClick={() =>
                   onFiltersChange({ ...filters, reconciliation: "all" })
+                }
+              />
+            </Badge>
+          )}
+          {filters.reconciliationType && filters.reconciliationType !== "all" && (
+            <Badge variant="secondary" className="gap-1">
+              {filters.reconciliationType === "transfer"
+                ? "Transfer"
+                : filters.reconciliationType === "payment"
+                ? "Pagamento"
+                : "Altro"}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() =>
+                  onFiltersChange({ ...filters, reconciliationType: "all" })
                 }
               />
             </Badge>
