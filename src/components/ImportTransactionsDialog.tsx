@@ -227,9 +227,17 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
           toast({ title: "Nessun dato", description: "Il foglio non contiene righe di dati", variant: "destructive" });
           return;
         }
-        const cols = Object.keys(json[0]);
+        const rawCols = Object.keys(json[0]);
+        const cols = rawCols.map(c => c.trim());
+        const cleanedRows = json.map(row => {
+          const clean: Record<string, unknown> = {};
+          for (const key of rawCols) {
+            clean[key.trim()] = row[key];
+          }
+          return clean;
+        });
         setColumns(cols);
-        setRows(json);
+        setRows(cleanedRows);
         setFileName(file.name);
         setExcludedRows(new Set());
 
@@ -239,6 +247,16 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
           const match = cols.find((c) => keywords.includes(c.toLowerCase().trim()));
           if (match) autoMapping[field as keyof MappingState] = match;
         }
+
+        if (!autoMapping.importo && !(autoMapping.addebiti && autoMapping.accrediti)) {
+          toast({
+            title: "Formato non riconosciuto",
+            description: "Il file non contiene colonne 'Importo (euro)' né 'Addebiti/Accrediti (euro)'.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         setMapping(autoMapping);
         setStep("mapping");
       } catch {
