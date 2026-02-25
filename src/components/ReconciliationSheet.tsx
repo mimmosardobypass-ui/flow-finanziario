@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Link2, Unlink, Loader2 } from "lucide-react";
@@ -66,6 +66,16 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
     () => compatibleTxns.filter((t) => !groupIds.has(t.id)),
     [compatibleTxns, groupIds]
   );
+
+  // Auto-detect: if selected transactions are from different accounts, set type to "transfer"
+  useEffect(() => {
+    if (selectedIds.size === 0 || !transaction) return;
+    const selectedTxns = availableCompatible.filter((t) => selectedIds.has(t.id));
+    const hasDifferentAccount = selectedTxns.some((t) => t.conto_id !== transaction.conto_id);
+    if (hasDifferentAccount) {
+      setReconciliationType("transfer");
+    }
+  }, [selectedIds, availableCompatible, transaction]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -147,7 +157,7 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
                   <p className="text-sm font-medium">Movimenti già riconciliati</p>
                   {currentReconciliationType && (
                     <Badge variant="secondary">
-                      {currentReconciliationType === "transfer" ? "Transfer" : currentReconciliationType === "pagamento" ? "Pagamento" : "Altro"}
+                      {currentReconciliationType === "transfer" ? "Transfer" : currentReconciliationType === "payment" ? "Pagamento" : "Altro"}
                     </Badge>
                   )}
                 </div>
@@ -184,8 +194,8 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="transfer">Transfer — Trasferimento tra conti</SelectItem>
-                  <SelectItem value="pagamento">Pagamento — Pagamento/incasso collegato</SelectItem>
-                  <SelectItem value="altro">Altro — Altro tipo di collegamento</SelectItem>
+                  <SelectItem value="payment">Pagamento — Pagamento/incasso collegato</SelectItem>
+                  <SelectItem value="other">Altro — Altro tipo di collegamento</SelectItem>
                 </SelectContent>
               </Select>
             </div>
