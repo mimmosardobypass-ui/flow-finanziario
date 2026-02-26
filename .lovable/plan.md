@@ -1,37 +1,81 @@
 
+# Consolidamento definitivo logica riconciliazione
 
-# Fix: Pallino "suggested" deve essere ROSSO, non blu
+## Audit stato attuale
 
-## Diagnosi
+La logica degli stati (none/suggested/reconciled) e i colori UI (grigio/rosso/verde) sono gia corretti. Tuttavia ci sono **2 bug reali** che compromettono il comportamento desiderato:
 
-Il sistema funziona correttamente a livello logico:
+### Bug 1: Le suggestion rifiutate vengono ri-create al ricalcolo
 
-- `generateSuggestionsForIds` imposta `reconciliation_status = 'suggested'` (NON `reconciled`)
-- `useAcceptSuggestion` imposta `reconciliation_status = 'reconciled'` solo dopo click utente
-- La separazione suggested vs reconciled e corretta nel backend
+In `generateSuggestionsForIds` (riga 207-212), il codice **elimina tutte** le vecchie suggestion per le transazioni sorgente prima di reinserire. Cio significa che se l'utente rifiuta una proposta e poi viene eseguito un ricalcolo (manuale o automatico), la proposta rifiutata riappare.
 
-Il problema e **puramente visivo**: in `Transactions.tsx` riga 356, lo stato `suggested` usa `text-primary` (blu), che l'utente percepisce come "gia accettato/confermato". Deve essere rosso/ambra per comunicare "attenzione, proposta disponibile".
+**Fix**: prima di cancellare, salvare le coppie gia `dismissed` e filtrare i nuovi suggerimenti per non reinserire coppie gia rifiutate.
 
-## Modifica
+### Bug 2: Dopo rifiuto di tutte le suggestion, il pallino resta rosso
 
-Un singolo file, una singola riga:
+Quando l'utente rifiuta (dismiss) tutte le suggestion di una transazione, `reconciliation_status` resta `suggested` (pallino rosso) anche se non ci sono piu proposte attive. Il pallino rosso resta ma cliccando si vede "Nessuna proposta trovata".
 
-**`src/pages/Transactions.tsx`** (riga 356):
+**Fix**: in `useDismissSuggestion`, dopo il dismiss, verificare se restano suggestion attive (non dismissed) per quella transazione. Se zero, aggiornare `reconciliation_status` a `none`.
 
-```typescript
-// PRIMA (blu = sembra accettato)
-<CircleDot className="h-4 w-4 text-primary" />
+## Modifiche pianificate
 
-// DOPO (rosso = attenzione, proposta da verificare)
-<CircleDot className="h-4 w-4 text-destructive" />
+### 1. `src/hooks/useReconciliationSuggestions.ts` - `generateSuggestionsForIds`
+
+**Prima di eliminare le vecchie suggestion** (riga 207):
+- Query le coppie dismissed esistenti per le transazioni sorgente
+- Salvarle in un Set di coppie `source+candidate`
+- Dopo il calcolo, filtrare `allSuggestions` per escludere coppie gia rifiutate
+- Poi procedere con delete + insert come prima
+
+```text
+Flusso:
+1. Fetch dismissed pairs -> Set<"srcId|candId">
+2. Compute suggestions
+3. Filter out dismissed pairs
+4. Delete old non-dismissed
+5. Insert filtered suggestions
+6. Update status
 ```
 
-## Riepilogo stati visivi risultanti
+### 2. `src/hooks/useReconciliationSuggestions.ts` - `useDismissSuggestion`
 
-| Stato | Icona | Colore | Significato |
-|-------|-------|--------|-------------|
-| `none` | `Circle` | grigio (`text-muted-foreground`) | Nessuna proposta |
-| `suggested` | `CircleDot` | **rosso** (`text-destructive`) | Proposta disponibile, da verificare |
-| `reconciled` | `CircleCheck` | verde (`text-success`) | Riconciliato dall'utente |
+Dopo il dismiss, aggiungere logica di rollback status:
+- Query `reconciliation_suggestions` per la transazione associata (sia come source che candidate)
+- Contare quante hanno `dismissed = false`
+- Se 0 attive rimaste: `UPDATE transactions SET reconciliation_status = 'none'` per quella transazione
+- Invalidare query cache
 
-Nessuna modifica al backend: la logica di generazione/accettazione e gia corretta.
+Per fare questo serve passare il `transactionId` al dismiss (non solo `suggestionId`). Modificare l'interfaccia di `useDismissSuggestion` per accettare `{ suggestionId, transactionId }`.
+
+### 3. `src/components/ReconciliationSheet.tsx` - Aggiornare chiamata dismiss
+
+Passare `transaction.id` nella chiamata `handleDismiss` per supportare il rollback status:
+
+```typescript
+handleDismiss({ suggestionId: suggestion.id, transactionId: transaction.id })
+```
+
+### 4. Miglioramento UI proposte nel ReconciliationSheet
+
+Aggiungere badge tipo visibile (non solo nel tooltip):
+- Estrarre il tipo principale dalla `reason` (es. `internal_transfer`, `same_amount_abs`)
+- Mostrare come Badge colorato accanto allo score
+- Mostrare differenza giorni come testo secondario
+
+## Riepilogo state machine finale
+
+```text
+none ──[backfill/generate crea suggestions]──> suggested
+suggested ──[utente clicca Accetta]──> reconciled  
+suggested ──[utente rifiuta TUTTE le suggestions]──> none
+reconciled ──[utente clicca Rimuovi riconciliazione]──> none
+```
+
+## File modificati
+
+| File | Modifica |
+|------|----------|
+| `useReconciliationSuggestions.ts` | Preservare dismissed pairs nel ricalcolo; rollback status su dismiss totale |
+| `ReconciliationSheet.tsx` | Passare transactionId al dismiss; badge tipo visibile |
+
+Nessuna migrazione DB necessaria. Nessun nuovo file.
