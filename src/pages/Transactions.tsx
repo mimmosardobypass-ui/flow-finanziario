@@ -211,14 +211,19 @@ export default function Transactions() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => recalcMutation.mutate(undefined, {
-              onSuccess: (count) => {
-                toast({ title: `Riconciliazione ricalcolata per ${count} transazioni` });
-              },
-              onError: () => {
-                toast({ title: "Errore nel ricalcolo", variant: "destructive" });
-              },
-            })}
+            onClick={() => {
+              console.log("[RIC_RECALC_UI] click");
+              recalcMutation.mutate(undefined, {
+                onSuccess: (count) => {
+                  console.log(`[RIC_RECALC_UI] success count=${count}`);
+                  toast({ title: `Riconciliazione ricalcolata per ${count} transazioni` });
+                },
+                onError: (err) => {
+                  console.error(`[RIC_RECALC_UI] error=`, err);
+                  toast({ title: "Errore nel ricalcolo", variant: "destructive" });
+                },
+              });
+            }}
             disabled={recalcMutation.isPending}
             title="Ricalcola proposte di riconciliazione"
           >
