@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Link2, Unlink, Loader2 } from "lucide-react";
+import { Link2, Unlink, Loader2, Search, Check, X } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -11,23 +11,26 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { TransactionWithCategory } from "@/hooks/useTransactions";
 import {
-  useCompatibleTransactions,
   useReconciliationGroup,
-  useReconcile,
   useUnreconcile,
 } from "@/hooks/useReconciliation";
+import {
+  useSuggestionsForTransaction,
+  useAcceptSuggestion,
+  useDismissSuggestion,
+  useGenerateSuggestionsForTransaction,
+} from "@/hooks/useReconciliationSuggestions";
+import { useTransactions } from "@/hooks/useTransactions";
 import { toast } from "@/hooks/use-toast";
 
 interface Props {
@@ -37,69 +40,38 @@ interface Props {
 }
 
 export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [reconciliationType, setReconciliationType] = useState<string>("transfer");
-
   const reconciliationId = (transaction as any)?.reconciliation_id as string | null;
   const reconciliationStatus = (transaction as any)?.reconciliation_status as string | undefined;
-  const currentReconciliationType = (transaction as any)?.reconciliation_type as string | null;
 
-  const { data: compatibleTxns = [], isLoading: loadingCompatible } =
-    useCompatibleTransactions(transaction);
   const { data: groupTxns = [], isLoading: loadingGroup } =
     useReconciliationGroup(reconciliationId);
+  const { data: suggestions = [], isLoading: loadingSuggestions } =
+    useSuggestionsForTransaction(transaction?.id ?? null);
+  const { data: allTransactions = [] } = useTransactions();
 
-  const reconcileMutation = useReconcile();
   const unreconcileMutation = useUnreconcile();
+  const acceptMutation = useAcceptSuggestion();
+  const dismissMutation = useDismissSuggestion();
+  const generateMutation = useGenerateSuggestionsForTransaction();
 
-  const isReconciled = reconciliationStatus && reconciliationStatus !== "none";
+  const isReconciled = reconciliationStatus === "reconciled";
 
-  // Group members excluding the selected transaction
   const otherGroupMembers = useMemo(
     () => groupTxns.filter((t) => t.id !== transaction?.id),
-    [groupTxns, transaction?.id]
+    [groupTxns, transaction?.id],
   );
 
-  // Compatible transactions excluding already reconciled ones in same group
-  const groupIds = useMemo(() => new Set(groupTxns.map((t) => t.id)), [groupTxns]);
-  const availableCompatible = useMemo(
-    () => compatibleTxns.filter((t) => !groupIds.has(t.id)),
-    [compatibleTxns, groupIds]
-  );
-
-  // Auto-detect: if selected transactions are from different accounts, set type to "transfer"
-  useEffect(() => {
-    if (selectedIds.size === 0 || !transaction) return;
-    const selectedTxns = availableCompatible.filter((t) => selectedIds.has(t.id));
-    const hasDifferentAccount = selectedTxns.some((t) => t.conto_id !== transaction.conto_id);
-    if (hasDifferentAccount) {
-      setReconciliationType("transfer");
-    }
-  }, [selectedIds, availableCompatible, transaction]);
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleReconcile = async () => {
-    if (!transaction || selectedIds.size === 0) return;
-    try {
-      await reconcileMutation.mutateAsync({
-        transactionIds: [transaction.id, ...Array.from(selectedIds)],
-        reconciliationType,
-      });
-      toast({ title: "Movimenti riconciliati" });
-      setSelectedIds(new Set());
-      onOpenChange(false);
-    } catch {
-      toast({ title: "Errore nella riconciliazione", variant: "destructive" });
-    }
-  };
+  // Map suggestion other_transaction_id to actual transaction data
+  const suggestionsWithTxn = useMemo(() => {
+    if (!suggestions.length || !allTransactions.length) return [];
+    const txnMap = new Map(allTransactions.map((t) => [t.id, t]));
+    return suggestions
+      .map((s: any) => ({
+        suggestion: s,
+        transaction: txnMap.get(s.other_transaction_id),
+      }))
+      .filter((s) => s.transaction != null);
+  }, [suggestions, allTransactions]);
 
   const handleUnreconcile = async () => {
     if (!reconciliationId) return;
@@ -112,8 +84,40 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
     }
   };
 
+  const handleAccept = async (suggestion: any) => {
+    if (!transaction) return;
+    try {
+      await acceptMutation.mutateAsync({
+        sourceId: transaction.id,
+        candidateId: suggestion.other_transaction_id,
+      });
+      toast({ title: "Movimenti riconciliati" });
+      onOpenChange(false);
+    } catch {
+      toast({ title: "Errore nella riconciliazione", variant: "destructive" });
+    }
+  };
+
+  const handleDismiss = async (suggestion: any) => {
+    try {
+      await dismissMutation.mutateAsync(suggestion.id);
+      toast({ title: "Proposta rifiutata" });
+    } catch {
+      toast({ title: "Errore", variant: "destructive" });
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!transaction) return;
+    try {
+      await generateMutation.mutateAsync(transaction.id);
+      toast({ title: "Proposte aggiornate" });
+    } catch {
+      toast({ title: "Errore nel ricalcolo", variant: "destructive" });
+    }
+  };
+
   const handleOpenChange = (v: boolean) => {
-    if (!v) setSelectedIds(new Set());
     onOpenChange(v);
   };
 
@@ -137,7 +141,8 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
               <div>
                 <p className="font-medium">{transaction.description || "—"}</p>
                 <p className="text-sm text-muted-foreground">
-                  {transaction.conti?.nome_conto} · {format(new Date(transaction.date), "dd MMM yyyy", { locale: it })}
+                  {transaction.conti?.nome_conto} ·{" "}
+                  {format(new Date(transaction.date), "dd MMM yyyy", { locale: it })}
                 </p>
               </div>
               <span
@@ -153,14 +158,7 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
           {isReconciled && otherGroupMembers.length > 0 && (
             <>
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium">Movimenti già riconciliati</p>
-                  {currentReconciliationType && (
-                    <Badge variant="secondary">
-                      {currentReconciliationType === "transfer" ? "Transfer" : currentReconciliationType === "payment" ? "Pagamento" : "Altro"}
-                    </Badge>
-                  )}
-                </div>
+                <p className="text-sm font-medium mb-2">Movimenti riconciliati</p>
                 <div className="space-y-2">
                   {otherGroupMembers.map((t) => (
                     <TransactionRow key={t.id} transaction={t} />
@@ -184,76 +182,101 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
             </>
           )}
 
-          {/* Reconciliation type selector */}
+          {/* Suggestions (for suggested or none status) */}
           {!isReconciled && (
             <div>
-              <p className="text-sm font-medium mb-2">Tipo di riconciliazione</p>
-              <Select value={reconciliationType} onValueChange={setReconciliationType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="transfer">Transfer — Trasferimento tra conti</SelectItem>
-                  <SelectItem value="payment">Pagamento — Pagamento/incasso collegato</SelectItem>
-                  <SelectItem value="other">Altro — Altro tipo di collegamento</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium">
+                  Proposte
+                  {loadingSuggestions && " (caricamento...)"}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1"
+                  onClick={handleSearch}
+                  disabled={generateMutation.isPending}
+                >
+                  {generateMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
+                  Cerca proposte
+                </Button>
+              </div>
 
-          {/* Compatible transactions */}
-          <div>
-            <p className="text-sm font-medium mb-2">
-              Movimenti compatibili
-              {loadingCompatible && " (caricamento...)"}
-            </p>
-            {availableCompatible.length === 0 && !loadingCompatible ? (
-              <p className="text-sm text-muted-foreground">Nessun movimento compatibile trovato.</p>
-            ) : (
-              <ScrollArea className="max-h-[40vh]">
-                <div className="space-y-2 pr-4">
-                  {availableCompatible.map((t) => (
-                    <label
-                      key={t.id}
-                      className="flex items-center gap-3 rounded-lg border border-border p-3 cursor-pointer hover:bg-secondary/50 transition-colors"
-                    >
-                      <Checkbox
-                        checked={selectedIds.has(t.id)}
-                        onCheckedChange={() => toggleSelect(t.id)}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{t.description || "—"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {t.conti?.nome_conto} · {format(new Date(t.date), "dd MMM yyyy", { locale: it })}
-                        </p>
-                      </div>
-                      <span
-                        className={`text-sm font-semibold whitespace-nowrap ${t.type === "income" ? "text-success" : "text-destructive"}`}
-                      >
-                        {t.type === "income" ? "+" : "-"}€
-                        {t.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-          </div>
-
-          {/* Reconcile button */}
-          {selectedIds.size > 0 && (
-            <Button
-              className="w-full gap-2"
-              onClick={handleReconcile}
-              disabled={reconcileMutation.isPending}
-            >
-              {reconcileMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+              {suggestionsWithTxn.length === 0 && !loadingSuggestions ? (
+                <p className="text-sm text-muted-foreground">
+                  Nessuna proposta trovata. Prova "Cerca proposte" per ricalcolare.
+                </p>
               ) : (
-                <Link2 className="h-4 w-4" />
+                <ScrollArea className="max-h-[50vh]">
+                  <div className="space-y-2 pr-4">
+                    <TooltipProvider>
+                      {suggestionsWithTxn.map(({ suggestion, transaction: candTxn }) => (
+                        <div
+                          key={suggestion.id}
+                          className="flex items-center gap-3 rounded-lg border border-border p-3"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium truncate">
+                                {candTxn!.description || "—"}
+                              </p>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Badge variant="secondary" className="text-[10px] shrink-0">
+                                    {suggestion.score}pt
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs">{suggestion.reason}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {candTxn!.conti?.nome_conto} ·{" "}
+                              {format(new Date(candTxn!.date), "dd MMM yyyy", { locale: it })}
+                            </p>
+                          </div>
+                          <span
+                            className={`text-sm font-semibold whitespace-nowrap ${candTxn!.type === "income" ? "text-success" : "text-destructive"}`}
+                          >
+                            {candTxn!.type === "income" ? "+" : "-"}€
+                            {candTxn!.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                          </span>
+                          <div className="flex gap-1 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-success hover:text-success"
+                              onClick={() => handleAccept(suggestion)}
+                              disabled={acceptMutation.isPending}
+                            >
+                              {acceptMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Check className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleDismiss(suggestion)}
+                              disabled={dismissMutation.isPending}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </TooltipProvider>
+                  </div>
+                </ScrollArea>
               )}
-              Riconcilia ({selectedIds.size} moviment{selectedIds.size === 1 ? "o" : "i"})
-            </Button>
+            </div>
           )}
         </div>
       </SheetContent>
@@ -267,7 +290,8 @@ function TransactionRow({ transaction }: { transaction: TransactionWithCategory 
       <div className="min-w-0">
         <p className="text-sm font-medium truncate">{transaction.description || "—"}</p>
         <p className="text-xs text-muted-foreground">
-          {transaction.conti?.nome_conto} · {format(new Date(transaction.date), "dd MMM yyyy", { locale: it })}
+          {transaction.conti?.nome_conto} ·{" "}
+          {format(new Date(transaction.date), "dd MMM yyyy", { locale: it })}
         </p>
       </div>
       <span

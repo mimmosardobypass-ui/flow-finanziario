@@ -68,6 +68,54 @@ export type Database = {
         }
         Relationships: []
       }
+      reconciliation_suggestions: {
+        Row: {
+          candidate_transaction_id: string
+          created_at: string
+          dismissed: boolean
+          id: string
+          reason: string | null
+          score: number
+          source_transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          candidate_transaction_id: string
+          created_at?: string
+          dismissed?: boolean
+          id?: string
+          reason?: string | null
+          score: number
+          source_transaction_id: string
+          user_id: string
+        }
+        Update: {
+          candidate_transaction_id?: string
+          created_at?: string
+          dismissed?: boolean
+          id?: string
+          reason?: string | null
+          score?: number
+          source_transaction_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reconciliation_suggestions_candidate_transaction_id_fkey"
+            columns: ["candidate_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reconciliation_suggestions_source_transaction_id_fkey"
+            columns: ["source_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scadenze_rate: {
         Row: {
           created_at: string
