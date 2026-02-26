@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { generateSuggestionsForIds } from "./useReconciliationSuggestions";
 
 export interface Transaction {
   id: string;
@@ -134,10 +135,16 @@ export function useCreateTransaction() {
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["scadenziario"] });
       queryClient.invalidateQueries({ queryKey: ["scadenze_rate_unpaid"] });
+      // Auto-generate suggestions for new transaction
+      if (data?.id && user) {
+        generateSuggestionsForIds([data.id], user.id).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+        }).catch(console.error);
+      }
     },
   });
 }
@@ -164,8 +171,14 @@ export function useUpdateTransaction() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      // Re-generate suggestions for updated transaction
+      if (data?.id) {
+        generateSuggestionsForIds([data.id], data.user_id).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+        }).catch(console.error);
+      }
     },
   });
 }
@@ -273,6 +286,7 @@ export function useDeleteTransaction() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
     },
   });
 }

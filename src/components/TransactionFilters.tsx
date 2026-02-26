@@ -117,7 +117,6 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
       amountMin: undefined,
       amountMax: undefined,
       reconciliation: "all",
-      reconciliationType: "all",
     });
   };
 
@@ -131,7 +130,6 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
     filters.amountMin,
     filters.amountMax,
     filters.reconciliation && filters.reconciliation !== "all",
-    filters.reconciliationType && filters.reconciliationType !== "all",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFiltersCount > 0;
@@ -348,40 +346,19 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
           onValueChange={(v) =>
             onFiltersChange({
               ...filters,
-              reconciliation: v as "all" | "none" | "partial" | "complete",
+              reconciliation: v as "all" | "none" | "suggested" | "reconciled" | "not_reconciled",
             })
           }
         >
-          <SelectTrigger className="w-[160px] bg-secondary border-border">
+          <SelectTrigger className="w-[170px] bg-secondary border-border">
             <Link2 className="h-4 w-4 mr-2" />
             <SelectValue placeholder="Riconciliazione" />
           </SelectTrigger>
           <SelectContent className="bg-popover border-border">
             <SelectItem value="all">Tutti</SelectItem>
-            <SelectItem value="none">Non riconciliati</SelectItem>
-            <SelectItem value="partial">Parziali</SelectItem>
-            <SelectItem value="complete">Riconciliati</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Tipo Riconciliazione */}
-        <Select
-          value={filters.reconciliationType || "all"}
-          onValueChange={(v) =>
-            onFiltersChange({
-              ...filters,
-              reconciliationType: v as "all" | "transfer" | "payment" | "other",
-            })
-          }
-        >
-          <SelectTrigger className="w-[160px] bg-secondary border-border">
-            <SelectValue placeholder="Tipo ric." />
-          </SelectTrigger>
-          <SelectContent className="bg-popover border-border">
-            <SelectItem value="all">Tutti i tipi</SelectItem>
-            <SelectItem value="transfer">Transfer</SelectItem>
-            <SelectItem value="payment">Pagamento</SelectItem>
-            <SelectItem value="other">Altro</SelectItem>
+            <SelectItem value="suggested">Con proposte</SelectItem>
+            <SelectItem value="not_reconciled">Non riconciliati</SelectItem>
+            <SelectItem value="reconciled">Riconciliati</SelectItem>
           </SelectContent>
         </Select>
 
@@ -483,30 +460,17 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
           )}
           {filters.reconciliation && filters.reconciliation !== "all" && (
             <Badge variant="secondary" className="gap-1">
-              {filters.reconciliation === "none"
+              {filters.reconciliation === "suggested"
+                ? "Con proposte"
+                : filters.reconciliation === "not_reconciled"
                 ? "Non riconciliati"
-                : filters.reconciliation === "partial"
-                ? "Parziali"
-                : "Riconciliati"}
+                : filters.reconciliation === "reconciled"
+                ? "Riconciliati"
+                : filters.reconciliation}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() =>
                   onFiltersChange({ ...filters, reconciliation: "all" })
-                }
-              />
-            </Badge>
-          )}
-          {filters.reconciliationType && filters.reconciliationType !== "all" && (
-            <Badge variant="secondary" className="gap-1">
-              {filters.reconciliationType === "transfer"
-                ? "Transfer"
-                : filters.reconciliationType === "payment"
-                ? "Pagamento"
-                : "Altro"}
-              <X
-                className="h-3 w-3 cursor-pointer"
-                onClick={() =>
-                  onFiltersChange({ ...filters, reconciliationType: "all" })
                 }
               />
             </Badge>

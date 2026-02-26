@@ -311,10 +311,10 @@ export default function Transactions() {
                             setReconciliationOpen(true);
                           }}
                         >
-                          {(transaction as any).reconciliation_status === "complete" ? (
+                          {(transaction as any).reconciliation_status === "reconciled" ? (
                             <CircleCheck className="h-4 w-4 text-success" />
-                          ) : (transaction as any).reconciliation_status === "partial" ? (
-                            <CircleDot className="h-4 w-4 text-orange-500" />
+                          ) : (transaction as any).reconciliation_status === "suggested" ? (
+                            <CircleDot className="h-4 w-4 text-primary" />
                           ) : (
                             <Circle className="h-4 w-4 text-muted-foreground" />
                           )}

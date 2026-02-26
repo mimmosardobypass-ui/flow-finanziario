@@ -12,8 +12,7 @@ export interface TransactionFilters {
   dateTo?: string;
   amountMin?: number;
   amountMax?: number;
-  reconciliation?: "all" | "none" | "partial" | "complete";
-  reconciliationType?: "all" | "transfer" | "payment" | "other";
+  reconciliation?: "all" | "none" | "suggested" | "reconciled" | "not_reconciled";
 }
 
 export function useFilteredTransactions(filters: TransactionFilters) {
@@ -29,7 +28,6 @@ export function useFilteredTransactions(filters: TransactionFilters) {
     amountMin: filters.amountMin,
     amountMax: filters.amountMax,
     reconciliation: filters.reconciliation,
-    reconciliationType: filters.reconciliationType,
   };
 
   return useQuery({
@@ -85,11 +83,11 @@ export function useFilteredTransactions(filters: TransactionFilters) {
       }
 
       if (filters.reconciliation && filters.reconciliation !== "all") {
-        query = query.eq("reconciliation_status", filters.reconciliation);
-      }
-
-      if (filters.reconciliationType && filters.reconciliationType !== "all") {
-        query = query.eq("reconciliation_type", filters.reconciliationType);
+        if (filters.reconciliation === "not_reconciled") {
+          query = query.in("reconciliation_status", ["none", "suggested"]);
+        } else {
+          query = query.eq("reconciliation_status", filters.reconciliation);
+        }
       }
 
       const { data, error } = await query.order("date", { ascending: false });
