@@ -67,15 +67,9 @@ export function useReconciliationGroup(reconciliationId: string | null) {
   });
 }
 
-function computeStatus(transactions: { type: string; amount: number }[]): "partial" | "complete" {
-  const totalIncome = transactions
-    .filter((t) => t.type === "income")
-    .reduce((sum, t) => sum + t.amount, 0);
-  const totalExpense = transactions
-    .filter((t) => t.type === "expense")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  return Math.abs(totalIncome - totalExpense) < 0.01 ? "complete" : "partial";
+// Legacy computeStatus aligned to official state machine: always returns "reconciled"
+function computeStatus(_transactions: { type: string; amount: number }[]): "reconciled" {
+  return "reconciled";
 }
 
 export function useReconcile() {
@@ -143,7 +137,7 @@ export function useUnreconcile() {
     mutationFn: async (reconciliationId: string) => {
       const { error } = await supabase
         .from("transactions")
-        .update({ reconciliation_id: null, reconciliation_status: "none", reconciliation_type: null } as any)
+        .update({ reconciliation_id: null, reconciliation_status: "none" as string, reconciliation_type: null } as any)
         .eq("reconciliation_id", reconciliationId);
 
       if (error) throw error;

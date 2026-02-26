@@ -33,19 +33,22 @@ import { useRecalculateAllSuggestions } from "@/hooks/useReconciliationSuggestio
 import { toast } from "@/hooks/use-toast";
 
 /* ─── deterministic Ric. indicator (single source of truth) ─── */
+type ReconciliationStatus = "none" | "suggested" | "reconciled";
+
 function getRicIndicator(status: string): { Icon: LucideIcon; className: string } {
   switch (status) {
     case "reconciled":
       return { Icon: CircleCheck, className: "text-success" };
     case "suggested":
       return { Icon: CircleDot, className: "text-destructive" };
+    case "none":
+      return { Icon: Circle, className: "text-muted-foreground" };
     default:
+      // Unexpected status - log warning, treat as none
+      console.warn(`[RIC_RENDER] Unexpected reconciliation_status: "${status}"`);
       return { Icon: Circle, className: "text-muted-foreground" };
   }
 }
-
-// Temporary debug IDs for POSTAGIRO verification
-const RIC_DEBUG_IDS = ["b13f8ccc", "3d134d53"];
 
 export default function Transactions() {
   const navigate = useNavigate();
@@ -358,11 +361,8 @@ export default function Transactions() {
                       <TableCell className="print:hidden">
                         {(() => {
                           const status = (transaction as any).reconciliation_status || "none";
+                          console.log(`[RIC_RENDER] id=${transaction.id.slice(0, 8)} status=${status}`);
                           const { Icon, className } = getRicIndicator(status);
-                          // Temporary debug logging for POSTAGIRO
-                          if (RIC_DEBUG_IDS.some((d) => transaction.id.startsWith(d))) {
-                            console.log(`[RIC_DEBUG] render id=${transaction.id.slice(0, 12)} status=${status} → icon=${Icon.displayName}`);
-                          }
                           return (
                             <Button
                               variant="ghost"
