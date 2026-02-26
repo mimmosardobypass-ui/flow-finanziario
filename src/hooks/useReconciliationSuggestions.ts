@@ -171,11 +171,15 @@ async function syncReconciliationStatusForTransactions(transactionIds: string[])
   const uniqueIds = [...new Set(transactionIds)];
 
   // Fetch current status for all IDs
-  const { data: txns } = await supabase
+  const { data: txns, error: fetchErr } = await supabase
     .from("transactions")
     .select("id, reconciliation_status")
     .in("id", uniqueIds);
 
+  if (fetchErr) {
+    console.error("[RIC_SYNC] Error fetching transactions:", fetchErr);
+    throw fetchErr;
+  }
   if (!txns || txns.length === 0) return;
 
   // Skip already reconciled
@@ -185,19 +189,29 @@ async function syncReconciliationStatusForTransactions(transactionIds: string[])
   const idsToCheck = nonReconciled.map((t) => t.id);
 
   // Fetch all active suggestions involving these IDs (as source or candidate)
-  const { data: asSource } = await supabase
+  const { data: asSource, error: srcErr } = await supabase
     .from("reconciliation_suggestions" as any)
     .select("source_transaction_id")
     .in("source_transaction_id", idsToCheck)
     .eq("dismissed", false)
     .limit(2000);
 
-  const { data: asCandidate } = await supabase
+  if (srcErr) {
+    console.error("[RIC_SYNC] Error fetching source suggestions:", srcErr);
+    throw srcErr;
+  }
+
+  const { data: asCandidate, error: candErr } = await supabase
     .from("reconciliation_suggestions" as any)
     .select("candidate_transaction_id")
     .in("candidate_transaction_id", idsToCheck)
     .eq("dismissed", false)
     .limit(2000);
+
+  if (candErr) {
+    console.error("[RIC_SYNC] Error fetching candidate suggestions:", candErr);
+    throw candErr;
+  }
 
   const hasActiveSuggestion = new Set<string>();
   (asSource || []).forEach((r: any) => hasActiveSuggestion.add(r.source_transaction_id));
@@ -207,28 +221,38 @@ async function syncReconciliationStatusForTransactions(transactionIds: string[])
   const DEBUG_IDS = ["b13f8ccc", "3d134d53"];
   for (const t of nonReconciled) {
     if (DEBUG_IDS.some((d) => t.id.startsWith(d))) {
-      console.log(`[RIC_DEBUG] syncStatus id=${t.id.slice(0, 12)} current=${t.reconciliation_status} hasActive=${hasActiveSuggestion.has(t.id)} → ${hasActiveSuggestion.has(t.id) ? "suggested" : "none"}`);
+      console.log(`[RIC_SYNC] id=${t.id.slice(0, 12)} current=${t.reconciliation_status} hasActive=${hasActiveSuggestion.has(t.id)} → ${hasActiveSuggestion.has(t.id) ? "suggested" : "none"}`);
     }
   }
 
-  // Set suggested for those with active suggestions (only if currently not suggested)
+  // Set suggested for those with active suggestions
   const toSuggest = idsToCheck.filter((id) => hasActiveSuggestion.has(id));
   if (toSuggest.length > 0) {
-    await supabase
+    const { error: sugErr } = await supabase
       .from("transactions")
       .update({ reconciliation_status: "suggested" })
       .in("id", toSuggest)
       .neq("reconciliation_status", "suggested");
+    if (sugErr) {
+      console.error("[RIC_SYNC] Error setting suggested:", sugErr);
+      throw sugErr;
+    }
+    console.log(`[RIC_SYNC] Set ${toSuggest.length} transactions to 'suggested'`);
   }
 
-  // Set none for those without active suggestions (only if currently suggested)
+  // Set none for those without active suggestions
   const toNone = idsToCheck.filter((id) => !hasActiveSuggestion.has(id));
   if (toNone.length > 0) {
-    await supabase
+    const { error: noneErr } = await supabase
       .from("transactions")
       .update({ reconciliation_status: "none" })
       .in("id", toNone)
       .eq("reconciliation_status", "suggested");
+    if (noneErr) {
+      console.error("[RIC_SYNC] Error setting none:", noneErr);
+      throw noneErr;
+    }
+    console.log(`[RIC_SYNC] Set ${toNone.length} transactions to 'none'`);
   }
 }
 
@@ -412,9 +436,10 @@ export function useDismissSuggestion() {
       }
       await syncReconciliationStatusForTransactions([...new Set(idsToSync)]);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      await queryClient.refetchQueries({ queryKey: ["transactions"], type: "active" });
     },
   });
 }
@@ -450,10 +475,11 @@ export function useAcceptSuggestion() {
         .update({ dismissed: true })
         .or(`source_transaction_id.in.(${sourceId},${candidateId}),candidate_transaction_id.in.(${sourceId},${candidateId})`);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
       queryClient.invalidateQueries({ queryKey: ["reconciliation-group"] });
+      await queryClient.refetchQueries({ queryKey: ["transactions"], type: "active" });
     },
   });
 }
