@@ -1,79 +1,140 @@
 
 
-# Parsing basato su indici colonna (array di array)
+# Riconciliazione Automatica con Proposte
 
-## Problema
+## Panoramica
 
-Il parsing attuale usa `sheet_to_json` con header automatici, che non e affidabile con i file XLSX di Poste Italiane perche i nomi colonna possono variare o contenere caratteri nascosti.
+Dopo l'importazione (o la creazione/modifica di transazioni), il sistema calcolerà automaticamente le proposte di riconciliazione e le salverà in una nuova tabella. L'utente vedrà subito quali movimenti hanno proposte pronte, senza dover cliccare su ciascuno.
 
-## Approccio
+## 1. Nuova tabella `reconciliation_suggestions`
 
-Riscrivere `processFile` in entrambi i file per usare esclusivamente `sheet_to_json(ws, { header: 1 })` (array di array) e individuare le colonne tramite indice, non per nome.
+Migrazione SQL per creare la tabella:
 
-## Logica nuova di `processFile`
-
-1. Leggere ogni worksheet come array di array
-2. Cercare nelle prime **200 righe** una riga che contiene una cella con "data contabile" (case-insensitive, con trim)
-3. Da quella riga header, trovare gli indici colonna cercando match parziali (`.includes()`):
-   - `dateIndex`: cella che contiene "data contabile"
-   - `descrIndex`: cella che contiene "descrizione"
-   - `debitIndex`: cella che contiene "addebiti"
-   - `creditIndex`: cella che contiene "accrediti"
-   - `importoIndex`: cella che contiene "importo"
-4. Tutte le righe dopo l'header diventano i dati
-5. Per ogni riga dati, leggere i valori tramite indice (`row[dateIndex]`, `row[descrIndex]`, ecc.)
-6. Calcolo importo:
-   - Se `debitIndex` presente e la cella e valorizzata: `amount = -Number(cella)`
-   - Altrimenti se `creditIndex` presente e valorizzato: `amount = +Number(cella)`
-   - Altrimenti se `importoIndex` presente: `amount = Number(cella)` preservando il segno
-7. Validazione: se nessun indice data trovato, mostrare errore
-
-## Cosa viene rimosso/semplificato
-
-- **`AUTO_MAP_KEYS`**: non piu necessario (la detection usa `.includes()` sulle celle header)
-- **`MappingState` e selettori colonna manuali**: sostituiti da indici trovati automaticamente. L'utente non deve piu selezionare le colonne
-- **`columns` state**: non piu necessario
-- Il selettore **Tipo file** resta disponibile ma diventa opzionale/informativo; la detection e unica e gestisce sia importo singolo che addebiti/accrediti automaticamente in base alle colonne trovate
-
-## Cosa resta invariato
-
-- `tryParseDate` e `tryParseAmount` (funzioni helper)
-- Logica di esclusione righe, import verso Supabase, selezione conto
-- UI della tabella di anteprima e del bottone importa
-- Scansione multi-sheet (ora estesa a 200 righe)
-
-## Dettagli tecnici
-
-### Struttura dati interna
-
-Le righe vengono salvate come `Record<string, unknown>` con chiavi sintetiche (`date`, `description`, `amount`) gia calcolate durante il parsing, cosi il resto del componente non cambia.
-
-```typescript
-// Dopo aver trovato headerRowIndex e gli indici:
-const dataRows = rawRows.slice(headerRowIndex + 1);
-const parsed = dataRows
-  .filter(row => Array.isArray(row) && row.length > 0)
-  .map(row => {
-    const dateRaw = row[dateIndex];
-    const descrRaw = descrIndex >= 0 ? row[descrIndex] : "";
-    let amountRaw: number | null = null;
-    if (debitIndex >= 0 && row[debitIndex] != null && row[debitIndex] !== "") {
-      amountRaw = tryParseAmount(row[debitIndex]);
-      if (amountRaw != null) amountRaw = -Math.abs(amountRaw);
-    } else if (creditIndex >= 0 && row[creditIndex] != null && row[creditIndex] !== "") {
-      amountRaw = tryParseAmount(row[creditIndex]);
-      if (amountRaw != null) amountRaw = Math.abs(amountRaw);
-    } else if (importoIndex >= 0) {
-      amountRaw = tryParseAmount(row[importoIndex]);
-    }
-    return { date: dateRaw, description: descrRaw, amount: amountRaw };
-  });
+```text
+reconciliation_suggestions
+  - id (uuid, PK)
+  - user_id (uuid, NOT NULL)
+  - source_transaction_id (uuid, NOT NULL, FK -> transactions.id)
+  - candidate_transaction_id (uuid, NOT NULL, FK -> transactions.id)
+  - score (numeric, NOT NULL) -- punteggio di matching
+  - reason (text) -- es. "same_amount_abs + keyword:SUMUP + date_delta:2"
+  - created_at (timestamptz, DEFAULT now())
+  - dismissed (boolean, DEFAULT false) -- per "Rifiuta"
+  - UNIQUE(source_transaction_id, candidate_transaction_id)
 ```
 
-### File modificati
+RLS: solo il proprietario (user_id = auth.uid()) puo leggere/scrivere/cancellare.
+
+Aggiornamento `reconciliation_status` sulla tabella `transactions`: i valori validi diventano `none`, `suggested`, `reconciled` (rimuovendo `partial` e `complete`).
+
+## 2. Algoritmo di matching (client-side)
+
+Nuovo hook `src/hooks/useReconciliationSuggestions.ts` con:
+
+**`computeSuggestions(sourceTransaction, allTransactions)`**:
+
+1. Filtra solo transazioni di conti diversi, non gia riconciliate, non cancellate
+2. Finestra date: +-10 giorni dalla data del source
+3. Scoring:
+   - **Importo assoluto uguale**: +50 punti
+   - **Importo assoluto simile (+-5%)**: +30 punti
+   - **Date entro 3 giorni**: +20 punti, entro 10 giorni: +10 punti
+   - **Segno opposto** (expense vs income): +10 punti (tipico di transfer)
+   - **Keyword match**: normalizza testo (lowercase, rimuovi accenti/punteggiatura, split token), confronta parole "forti" (sumup, payout, postepay, bonifico, giroconto, compass, ecc.) -> +15 per keyword comune
+   - **ID comune** (CRO/TRN/sequenze alfanumeriche lunghe >=8 caratteri presenti in entrambe le descrizioni): +25 punti
+4. Soglia minima: score >= 30 per essere salvata come proposta
+5. Ordina per score decrescente
+
+**`useGenerateSuggestions()`** - mutation che:
+
+- Riceve una lista di transaction IDs (o "tutte le non riconciliate")
+- Per ogni transazione, calcola i match
+- Elimina vecchie suggestions per quelle transazioni
+- Inserisce le nuove in `reconciliation_suggestions`
+- Aggiorna `reconciliation_status = 'suggested'` sulle transazioni che hanno almeno una proposta
+- Aggiorna `reconciliation_status = 'none'` su quelle che non ne hanno piu
+
+## 3. Auto-proposta dopo import
+
+In `src/hooks/useImportTransactions.ts`, dopo l'inserimento delle righe:
+
+1. Recupera tutte le transazioni dell'utente non riconciliate (limit 2000)
+2. Chiama `computeSuggestions` per ogni transazione appena importata
+3. Bulk-insert le suggestions trovate
+4. Aggiorna `reconciliation_status` a `suggested` dove necessario
+
+Lo stesso ricalcolo avviene anche in `useCreateTransaction` e `useUpdateTransaction` (per la singola transazione modificata).
+
+## 4. UI - Colonna "Ric." semplificata
+
+In `src/pages/Transactions.tsx`, la colonna Ric. mostra:
+
+- **Pallino spento** (grigio, `Circle`): `reconciliation_status = 'none'` -- nessuna proposta
+- **Pallino attivo** (pulsante evidenziato, `CircleDot` con colore primary/amber): `reconciliation_status = 'suggested'` -- ci sono proposte
+- **Icona check** (`CircleCheck` verde): `reconciliation_status = 'reconciled'` -- gia riconciliata
+
+Click apre il `ReconciliationSheet`.
+
+## 5. ReconciliationSheet aggiornato
+
+In `src/components/ReconciliationSheet.tsx`:
+
+- **Top**: movimento selezionato (invariato)
+- **Se `reconciled`**: mostra gruppo riconciliato + bottone "Rimuovi riconciliazione"
+- **Se `suggested`**: lista "Proposte" ordinate per score, con reason come tooltip. Per ogni proposta:
+  - Bottone "Accetta" -> crea riconciliazione (UUID comune, status `reconciled`)
+  - Bottone "Rifiuta" -> segna `dismissed = true` sulla suggestion
+- **Se `none`**: messaggio "Nessuna proposta" + bottone "Cerca proposte" che ricalcola solo per quella riga
+- Bottone "Cerca altre" sempre visibile per ricalcolo on-demand
+
+**Accettazione riconciliazione**:
+- Imposta `reconciliation_id` uguale su entrambe le transazioni
+- Set `reconciliation_status = 'reconciled'` su entrambe
+- Cancella tutte le suggestions per entrambe le transazioni (o le segna dismissed)
+
+## 6. Filtri aggiornati
+
+In `src/components/TransactionFilters.tsx`, il filtro "Riconciliazione" diventa:
+
+- Tutti
+- Con proposte (`suggested`)
+- Non riconciliati (`none` + `suggested`)
+- Riconciliati (`reconciled`)
+
+Rimuovere il filtro "Tipo riconciliazione" (non piu rilevante con il nuovo sistema).
+
+In `src/hooks/useFilteredTransactions.ts`: aggiornare la logica per supportare il filtro combinato `none+suggested` per "Non riconciliati".
+
+## 7. Ricalcolo su modifica
+
+- `useUpdateTransaction`: dopo update, ricalcola suggestions per quella transazione
+- `useDeleteTransaction`: dopo delete, rimuovi suggestions collegate
+- `useCreateTransaction`: dopo insert, ricalcola per la nuova transazione
+
+## Sequenza implementazione
+
+1. Migrazione DB: creare tabella `reconciliation_suggestions`
+2. Migrazione DB: aggiornare valori di `reconciliation_status` (convertire `partial`/`complete` in `reconciled`)
+3. Creare `src/hooks/useReconciliationSuggestions.ts` con logica di scoring e mutations
+4. Aggiornare `src/hooks/useImportTransactions.ts` per auto-generare suggestions dopo import
+5. Aggiornare `src/hooks/useReconciliation.ts` per il nuovo flusso accetta/rifiuta
+6. Aggiornare `src/components/ReconciliationSheet.tsx` con nuova UI proposte
+7. Aggiornare `src/pages/Transactions.tsx` con nuovi stati pallino
+8. Aggiornare `src/components/TransactionFilters.tsx` e `src/hooks/useFilteredTransactions.ts` con nuovi filtri
+9. Aggiornare `src/hooks/useTransactions.ts` per ricalcolo su create/update/delete
+10. Aggiornare `src/integrations/supabase/types.ts` NON si tocca (generato automaticamente)
+
+## File coinvolti
 
 | File | Modifica |
 |------|----------|
-| `src/pages/ImportTransazioni.tsx` | Riscrittura `processFile` con logica indici, rimozione `AUTO_MAP_KEYS`, semplificazione mapping |
-| `src/components/ImportTransactionsDialog.tsx` | Stesse modifiche |
+| Migrazione SQL | Nuova tabella + update status values |
+| `src/hooks/useReconciliationSuggestions.ts` | **NUOVO** - logica scoring + mutations |
+| `src/hooks/useImportTransactions.ts` | Auto-genera suggestions post-import |
+| `src/hooks/useReconciliation.ts` | Semplifica: accetta/rifiuta/rimuovi |
+| `src/hooks/useTransactions.ts` | Trigger ricalcolo su CRUD |
+| `src/components/ReconciliationSheet.tsx` | Nuova UI con proposte ordinate per score |
+| `src/pages/Transactions.tsx` | Pallini semplificati (spento/attivo/check) |
+| `src/components/TransactionFilters.tsx` | Filtri aggiornati |
+| `src/hooks/useFilteredTransactions.ts` | Supporto filtro "non riconciliati" combinato |
 
