@@ -53,27 +53,83 @@ interface MinimalTxn {
   reconciliation_id: string | null;
 }
 
+// POSTAGIRO debug IDs
+const POSTAGIRO_IDS = ["b13f8ccc", "3d134d53"];
+
+export interface DiscardMetrics {
+  discard_same_transaction: number;
+  discard_same_account: number;
+  discard_deleted: number;
+  discard_already_reconciled: number;
+  discard_date_out_of_range: number;
+  discard_not_opposite_type: number;
+  discard_score_below_threshold: number;
+  discard_top3_trimmed: number;
+  candidate_pairs_evaluated: number;
+  suggestions_kept: number;
+}
+
+function emptyMetrics(): DiscardMetrics {
+  return {
+    discard_same_transaction: 0,
+    discard_same_account: 0,
+    discard_deleted: 0,
+    discard_already_reconciled: 0,
+    discard_date_out_of_range: 0,
+    discard_not_opposite_type: 0,
+    discard_score_below_threshold: 0,
+    discard_top3_trimmed: 0,
+    candidate_pairs_evaluated: 0,
+    suggestions_kept: 0,
+  };
+}
+
 export function computeSuggestionsForTransaction(
   source: MinimalTxn,
   allTransactions: MinimalTxn[],
   userId: string,
+  metrics?: DiscardMetrics,
 ): SuggestionRow[] {
   const sourceDate = new Date(source.date).getTime();
   const TEN_DAYS = 10 * 86400_000;
   const results: SuggestionRow[] = [];
+  const isPostagiroSource = POSTAGIRO_IDS.some((d) => source.id.startsWith(d));
 
   const sourceTokens = source.description ? extractTokens(source.description) : [];
   const sourceIds = source.description ? extractIds(source.description) : [];
 
   for (const candidate of allTransactions) {
-    if (candidate.id === source.id) continue;
-    if (candidate.conto_id === source.conto_id) continue;
-    if (candidate.deleted_at) continue;
-    if (candidate.reconciliation_status === "reconciled") continue;
+    const isPostagiroPair = isPostagiroSource && POSTAGIRO_IDS.some((d) => candidate.id.startsWith(d));
+
+    if (candidate.id === source.id) {
+      if (metrics) metrics.discard_same_transaction++;
+      continue;
+    }
+    if (candidate.conto_id === source.conto_id) {
+      if (metrics) metrics.discard_same_account++;
+      if (isPostagiroPair) console.log(`[RIC_POSTAGIRO] source=${source.id.slice(0,8)} candidate=${candidate.id.slice(0,8)} excluded_by=same_account`);
+      continue;
+    }
+    if (candidate.deleted_at) {
+      if (metrics) metrics.discard_deleted++;
+      if (isPostagiroPair) console.log(`[RIC_POSTAGIRO] source=${source.id.slice(0,8)} candidate=${candidate.id.slice(0,8)} excluded_by=deleted`);
+      continue;
+    }
+    if (candidate.reconciliation_status === "reconciled") {
+      if (metrics) metrics.discard_already_reconciled++;
+      if (isPostagiroPair) console.log(`[RIC_POSTAGIRO] source=${source.id.slice(0,8)} candidate=${candidate.id.slice(0,8)} excluded_by=already_reconciled`);
+      continue;
+    }
 
     const candDate = new Date(candidate.date).getTime();
     const dateDelta = Math.abs(sourceDate - candDate);
-    if (dateDelta > TEN_DAYS) continue;
+    if (dateDelta > TEN_DAYS) {
+      if (metrics) metrics.discard_date_out_of_range++;
+      if (isPostagiroPair) console.log(`[RIC_POSTAGIRO] source=${source.id.slice(0,8)} candidate=${candidate.id.slice(0,8)} excluded_by=date_out_of_range delta=${Math.round(dateDelta/86400_000)}d`);
+      continue;
+    }
+
+    if (metrics) metrics.candidate_pairs_evaluated++;
 
     let score = 0;
     const reasons: string[] = [];
@@ -147,6 +203,10 @@ export function computeSuggestionsForTransaction(
       }
     }
 
+    if (isPostagiroPair) {
+      console.log(`[RIC_POSTAGIRO] source=${source.id.slice(0,8)} candidate=${candidate.id.slice(0,8)} score=${score} reasons=${reasons.join("+")} oppositeType=${oppositeType} srcType=${source.type} candType=${candidate.type} ${score >= 40 ? "KEPT" : "excluded_by=score_below_threshold"}`);
+    }
+
     if (score >= 40) {
       results.push({
         source_transaction_id: source.id,
@@ -155,12 +215,18 @@ export function computeSuggestionsForTransaction(
         reason: reasons.join(" + "),
         user_id: userId,
       });
+    } else {
+      if (metrics) metrics.discard_score_below_threshold++;
     }
   }
 
   results.sort((a, b) => b.score - a.score);
-  // Limit to top 3 suggestions per source transaction
-  return results.slice(0, 3);
+  const trimmed = results.slice(0, 3);
+  if (metrics) {
+    metrics.discard_top3_trimmed += results.length - trimmed.length;
+    metrics.suggestions_kept += trimmed.length;
+  }
+  return trimmed;
 }
 
 /* ─── centralised status sync (single source of truth) ─── */
@@ -267,10 +333,11 @@ async function syncReconciliationStatusForTransactions(transactionIds: string[])
 export async function generateSuggestionsForIds(
   transactionIds: string[],
   userId: string,
-) {
-  if (transactionIds.length === 0) return;
+): Promise<DiscardMetrics> {
+  const metrics = emptyMetrics();
+  if (transactionIds.length === 0) return metrics;
 
-  console.log(`[suggestions] generateSuggestionsForIds called with ${transactionIds.length} IDs`);
+  console.log(`[RIC_RECALC] generateSuggestionsForIds batch size=${transactionIds.length}`);
 
   // Fetch all non-deleted transactions for the user
   const { data: allTxns, error } = await supabase
@@ -281,15 +348,15 @@ export async function generateSuggestionsForIds(
     .limit(2000);
 
   if (error || !allTxns) {
-    console.error("[suggestions] Error fetching transactions:", error);
-    return;
+    console.error("[RIC_RECALC] Error fetching transactions:", error);
+    return metrics;
   }
-  console.log(`[suggestions] Total transactions fetched: ${allTxns.length}`);
+  console.log(`[RIC_RECALC] Total transactions fetched: ${allTxns.length}`);
 
   const sourceTxns = allTxns.filter((t) => transactionIds.includes(t.id));
   const allSuggestions: SuggestionRow[] = [];
 
-  console.log(`[suggestions] Source transactions to process: ${sourceTxns.length}`);
+  console.log(`[RIC_RECALC] Source transactions to process: ${sourceTxns.length}`);
 
   for (const src of sourceTxns) {
     if (src.reconciliation_status === "reconciled") continue;
@@ -297,14 +364,16 @@ export async function generateSuggestionsForIds(
       src as MinimalTxn,
       allTxns as MinimalTxn[],
       userId,
+      metrics,
     );
     allSuggestions.push(...suggestions);
   }
 
-  console.log(`[suggestions] Total suggestions generated: ${allSuggestions.length}`);
+  console.log(`[RIC_RECALC] Total suggestions generated: ${allSuggestions.length}`);
 
   // Fetch dismissed pairs to preserve them across recalculation
   const dismissedPairs = new Set<string>();
+  let discard_previously_dismissed = 0;
   if (transactionIds.length > 0) {
     const { data: dismissedRows } = await supabase
       .from("reconciliation_suggestions" as any)
@@ -318,9 +387,14 @@ export async function generateSuggestionsForIds(
   }
 
   // Filter out previously dismissed pairs
-  const filteredSuggestions = allSuggestions.filter(
-    (s) => !dismissedPairs.has(`${s.source_transaction_id}|${s.candidate_transaction_id}`),
-  );
+  const filteredSuggestions = allSuggestions.filter((s) => {
+    const key = `${s.source_transaction_id}|${s.candidate_transaction_id}`;
+    if (dismissedPairs.has(key)) {
+      discard_previously_dismissed++;
+      return false;
+    }
+    return true;
+  });
 
   // Delete old non-dismissed suggestions for these source transactions
   if (transactionIds.length > 0) {
@@ -332,13 +406,34 @@ export async function generateSuggestionsForIds(
   }
 
   // Insert new suggestions in chunks
+  let insertedCount = 0;
   if (filteredSuggestions.length > 0) {
     const chunkSize = 100;
     for (let i = 0; i < filteredSuggestions.length; i += chunkSize) {
       const chunk = filteredSuggestions.slice(i, i + chunkSize);
-      await supabase.from("reconciliation_suggestions" as any).insert(chunk);
+      const { error: insertErr } = await supabase.from("reconciliation_suggestions" as any).insert(chunk);
+      if (insertErr) {
+        console.error("[RIC_RECALC] Insert error:", insertErr);
+      } else {
+        insertedCount += chunk.length;
+      }
     }
   }
+
+  console.log(`[RIC_METRICS_BATCH] ${JSON.stringify({
+    input_candidate_ids: transactionIds.length,
+    candidate_pairs_evaluated: metrics.candidate_pairs_evaluated,
+    suggestions_inserted: insertedCount,
+    discard_same_transaction: metrics.discard_same_transaction,
+    discard_same_account: metrics.discard_same_account,
+    discard_deleted: metrics.discard_deleted,
+    discard_already_reconciled: metrics.discard_already_reconciled,
+    discard_date_out_of_range: metrics.discard_date_out_of_range,
+    discard_not_opposite_type: metrics.discard_not_opposite_type,
+    discard_score_below_threshold: metrics.discard_score_below_threshold,
+    discard_previously_dismissed: discard_previously_dismissed,
+    discard_top3_trimmed: metrics.discard_top3_trimmed,
+  })}`);
 
   // Collect all affected IDs (source + candidate) for sync
   const affectedIds = new Set<string>();
@@ -350,6 +445,26 @@ export async function generateSuggestionsForIds(
 
   // Use centralised sync to set correct status
   await syncReconciliationStatusForTransactions(Array.from(affectedIds));
+
+  // Log POSTAGIRO result after sync
+  for (const pid of POSTAGIRO_IDS) {
+    const match = Array.from(affectedIds).find((id) => id.startsWith(pid));
+    if (match) {
+      const { data: txn } = await supabase
+        .from("transactions")
+        .select("id, reconciliation_status")
+        .eq("id", match)
+        .single();
+      const { data: links } = await supabase
+        .from("reconciliation_suggestions" as any)
+        .select("id")
+        .or(`source_transaction_id.eq.${match},candidate_transaction_id.eq.${match}`)
+        .eq("dismissed", false);
+      console.log(`[RIC_POSTAGIRO_RESULT] id=${match.slice(0,8)} status=${txn?.reconciliation_status} active_links=${(links || []).length}`);
+    }
+  }
+
+  return metrics;
 }
 
 /* ─── React hooks ─── */
@@ -497,35 +612,65 @@ export function useRecalculateAllSuggestions() {
   return useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Non autenticato");
+      console.log(`[RIC_RECALC] start user=${user.id.slice(0,8)}`);
 
-      // Fetch all non-reconciled transaction IDs
+      // Fetch all non-reconciled transaction IDs (none + suggested — NOT "unreconciled" which doesn't exist)
       const { data: txns, error } = await supabase
         .from("transactions")
-        .select("id")
+        .select("id, reconciliation_status")
         .eq("user_id", user.id)
         .is("deleted_at", null)
-        .in("reconciliation_status", ["none", "unreconciled"])
+        .neq("reconciliation_status", "reconciled")
         .limit(2000);
 
       if (error) throw error;
-      if (!txns || txns.length === 0) return 0;
+      if (!txns || txns.length === 0) {
+        console.log("[RIC_RECALC] No eligible transactions found");
+        return 0;
+      }
+
+      // Log status distribution
+      const dist: Record<string, number> = {};
+      txns.forEach((t) => { dist[t.reconciliation_status] = (dist[t.reconciliation_status] || 0) + 1; });
+      console.log(`[RIC_RECALC] status_distribution ${JSON.stringify(dist)}`);
 
       const ids = txns.map((t) => t.id);
-      console.log(`[suggestions] Recalculating for ${ids.length} transactions`);
+      console.log(`[RIC_RECALC] eligible_ids=${ids.length}`);
 
       // Process in batches of 50
       const batchSize = 50;
+      let totalInserted = 0;
+      const totalMetrics = emptyMetrics();
+
       for (let i = 0; i < ids.length; i += batchSize) {
         const batch = ids.slice(i, i + batchSize);
-        await generateSuggestionsForIds(batch, user.id);
+        console.log(`[RIC_RECALC] batch ${Math.floor(i/batchSize)+1}/${Math.ceil(ids.length/batchSize)} size=${batch.length}`);
+        const batchMetrics = await generateSuggestionsForIds(batch, user.id);
+        // Accumulate metrics
+        for (const key of Object.keys(totalMetrics) as (keyof DiscardMetrics)[]) {
+          totalMetrics[key] += batchMetrics[key];
+        }
       }
+
+      // Find main discard reason
+      const discardEntries = Object.entries(totalMetrics)
+        .filter(([k]) => k.startsWith("discard_"))
+        .sort((a, b) => (b[1] as number) - (a[1] as number));
+      const mainReason = discardEntries.length > 0 && (discardEntries[0][1] as number) > 0
+        ? discardEntries[0][0]
+        : "none";
+
+      console.log(`[RIC_METRICS_TOTAL] ${JSON.stringify({ ...totalMetrics, discard_main_reason: mainReason })}`);
+      console.log(`[RIC_RECALC] done processed=${ids.length}`);
 
       return ids.length;
     },
-    onSuccess: (count) => {
+    onSuccess: async (count) => {
+      console.log(`[RIC_RECALC_UI] success count=${count}`);
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
-      console.log(`[suggestions] Recalculation complete for ${count} transactions`);
+      await queryClient.refetchQueries({ queryKey: ["transactions"], type: "active" });
+      await queryClient.refetchQueries({ queryKey: ["reconciliation-suggestions"], type: "active" });
     },
   });
 }
