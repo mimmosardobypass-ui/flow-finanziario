@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, CircleDot, CircleCheck, RefreshCw, type LucideIcon } from "lucide-react";
+import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, Check, RefreshCw, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -35,16 +35,15 @@ import { toast } from "@/hooks/use-toast";
 /* ─── deterministic Ric. indicator (single source of truth) ─── */
 type ReconciliationStatus = "none" | "suggested" | "reconciled";
 
-function getRicIndicator(status: string): { Icon: LucideIcon; className: string } {
+function getRicIndicator(status: string): { Icon: LucideIcon; className: string; fill?: boolean } {
   switch (status) {
     case "reconciled":
-      return { Icon: CircleCheck, className: "text-success" };
+      return { Icon: Check, className: "text-success" };
     case "suggested":
-      return { Icon: CircleDot, className: "text-destructive" };
+      return { Icon: Circle, className: "text-destructive", fill: true };
     case "none":
       return { Icon: Circle, className: "text-muted-foreground" };
     default:
-      // Unexpected status - log warning, treat as none
       console.warn(`[RIC_RENDER] Unexpected reconciliation_status: "${status}"`);
       return { Icon: Circle, className: "text-muted-foreground" };
   }
@@ -319,7 +318,14 @@ export default function Transactions() {
                 </TableHeader>
                 <TableBody>
                   {transactions.map((transaction) => (
-                    <TableRow key={transaction.id}>
+                    <TableRow
+                      key={transaction.id}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        setReconciliationTransaction(transaction);
+                        setReconciliationOpen(true);
+                      }}
+                    >
                       <TableCell className="font-medium">
                         {format(new Date(transaction.date), "dd MMM yyyy", {
                           locale: it,
@@ -366,20 +372,9 @@ export default function Transactions() {
                       <TableCell className="print:hidden">
                         {(() => {
                           const status = (transaction as any).reconciliation_status || "none";
-                          console.log(`[RIC_RENDER] id=${transaction.id.slice(0, 8)} status=${status}`);
-                          const { Icon, className } = getRicIndicator(status);
+                          const { Icon, className, fill } = getRicIndicator(status);
                           return (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => {
-                                setReconciliationTransaction(transaction);
-                                setReconciliationOpen(true);
-                              }}
-                            >
-                              <Icon className={`h-4 w-4 ${className}`} />
-                            </Button>
+                            <Icon className={`h-4 w-4 ${className}`} fill={fill ? "currentColor" : "none"} />
                           );
                         })()}
                       </TableCell>
@@ -388,14 +383,14 @@ export default function Transactions() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleEdit(transaction)}
+                            onClick={(e) => { e.stopPropagation(); handleEdit(transaction); }}
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleDelete(transaction)}
+                            onClick={(e) => { e.stopPropagation(); handleDelete(transaction); }}
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
