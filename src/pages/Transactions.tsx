@@ -353,7 +353,7 @@ export default function Transactions() {
                           {(transaction as any).reconciliation_status === "reconciled" ? (
                             <CircleCheck className="h-4 w-4 text-success" />
                           ) : (transaction as any).reconciliation_status === "suggested" ? (
-                            <CircleDot className="h-4 w-4 text-primary" />
+                            <CircleDot className="h-4 w-4 text-destructive" />
                           ) : (
                             <Circle className="h-4 w-4 text-muted-foreground" />
                           )}
