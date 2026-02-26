@@ -99,8 +99,9 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
   };
 
   const handleDismiss = async (suggestion: any) => {
+    if (!transaction) return;
     try {
-      await dismissMutation.mutateAsync(suggestion.id);
+      await dismissMutation.mutateAsync({ suggestionId: suggestion.id, transactionId: transaction.id });
       toast({ title: "Proposta rifiutata" });
     } catch {
       toast({ title: "Errore", variant: "destructive" });
@@ -220,10 +221,25 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
                           className="flex items-center gap-3 rounded-lg border border-border p-3"
                         >
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <p className="text-sm font-medium truncate">
                                 {candTxn!.description || "—"}
                               </p>
+                              {(() => {
+                                const reason = suggestion.reason || "";
+                                const type = reason.includes("internal_transfer")
+                                  ? "Giroconto"
+                                  : reason.includes("same_amount")
+                                    ? "Importo"
+                                    : reason.includes("keyword")
+                                      ? "Keyword"
+                                      : "Match";
+                                return (
+                                  <Badge variant="outline" className="text-[10px] shrink-0">
+                                    {type}
+                                  </Badge>
+                                );
+                              })()}
                               <Tooltip>
                                 <TooltipTrigger>
                                   <Badge variant="secondary" className="text-[10px] shrink-0">
@@ -238,6 +254,15 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
                             <p className="text-xs text-muted-foreground">
                               {candTxn!.conti?.nome_conto} ·{" "}
                               {format(new Date(candTxn!.date), "dd MMM yyyy", { locale: it })}
+                              {(() => {
+                                if (!transaction) return null;
+                                const days = Math.abs(
+                                  Math.round(
+                                    (new Date(candTxn!.date).getTime() - new Date(transaction.date).getTime()) / 86400000
+                                  )
+                                );
+                                return days > 0 ? ` · Δ${days}gg` : null;
+                              })()}
                             </p>
                           </div>
                           <span
