@@ -1,0 +1,1 @@
+UPDATE public.transactions SET reconciliation_status = 'none' WHERE reconciliation_status = 'unreconciled';
