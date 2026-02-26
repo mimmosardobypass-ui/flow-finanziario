@@ -38,36 +38,7 @@ import {
 } from "@/hooks/useImportTransactions";
 import { useContiAttivi } from "@/hooks/useConti";
 
-type Step = "upload" | "mapping" | "result";
-
-type FileType = "postepay-importo" | "postepay-split";
-
-const FILE_TYPE_LABELS: Record<FileType, string> = {
-  "postepay-importo": "Postepay – Importo unico",
-  "postepay-split": "Postepay – Addebiti/Accrediti",
-};
-
-interface MappingState {
-  data: string;
-  descrizione: string;
-  importo: string;
-  addebiti: string;
-  accrediti: string;
-}
-
-const AUTO_MAP_KEYS: Record<FileType, Partial<Record<keyof MappingState, string[]>>> = {
-  "postepay-importo": {
-    data: ["data", "date", "data contabile"],
-    descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
-    importo: ["importo", "amount", "importo (eur)", "importo (euro)", "importo euro", "ammontare", "valore", "value"],
-  },
-  "postepay-split": {
-    data: ["data", "date", "data contabile"],
-    descrizione: ["descrizione", "description", "desc", "causale", "nota", "note", "descrizione operazioni"],
-    addebiti: ["addebiti", "addebiti (euro)", "addebiti euro", "dare"],
-    accrediti: ["accrediti", "accrediti (euro)", "accrediti euro", "avere"],
-  },
-};
+type Step = "upload" | "preview" | "result";
 
 const DATE_FORMATS = [
   "dd/MM/yyyy",
@@ -80,7 +51,6 @@ const DATE_FORMATS = [
 
 function tryParseDate(raw: unknown): string | null {
   if (raw == null) return null;
-
   if (typeof raw === "number") {
     try {
       const excelDate = XLSX.SSF.parse_date_code(raw);
@@ -88,27 +58,21 @@ function tryParseDate(raw: unknown): string | null {
         const d = new Date(excelDate.y, excelDate.m - 1, excelDate.d);
         if (isValid(d)) return format(d, "yyyy-MM-dd");
       }
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
     return null;
   }
-
   const str = String(raw).trim();
   if (!str) return null;
-
   for (const fmt of DATE_FORMATS) {
     const d = parse(str, fmt, new Date());
     if (isValid(d) && d.getFullYear() > 1900 && d.getFullYear() < 2100) {
       return format(d, "yyyy-MM-dd");
     }
   }
-
   const fallback = new Date(str);
   if (isValid(fallback) && fallback.getFullYear() > 1900) {
     return format(fallback, "yyyy-MM-dd");
   }
-
   return null;
 }
 
@@ -116,12 +80,77 @@ function tryParseAmount(raw: unknown): number | null {
   if (raw == null) return null;
   if (typeof raw === "number") return isNaN(raw) ? null : raw;
   let str = String(raw).trim().replace(/[€$£\s]/g, "");
-  // Italian format: 1.234,56 → remove thousand dots, then swap decimal comma
   if (str.includes(",")) {
     str = str.replace(/\./g, "").replace(",", ".");
   }
   const n = parseFloat(str);
   return isNaN(n) ? null : n;
+}
+
+interface ParsedRow {
+  date: string | null;
+  description: string;
+  amount: number | null;
+}
+
+function parseWorkbook(workbook: XLSX.WorkBook): ParsedRow[] | string {
+  for (const name of workbook.SheetNames) {
+    const ws = workbook.Sheets[name];
+    const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+    const limit = Math.min(raw.length, 200);
+
+    for (let i = 0; i < limit; i++) {
+      const row = raw[i];
+      if (!Array.isArray(row)) continue;
+
+      const headerCells = row.map((cell) =>
+        typeof cell === "string" ? cell.trim().toLowerCase() : ""
+      );
+
+      const dateIndex = headerCells.findIndex((c) => c.includes("data contabile"));
+      if (dateIndex < 0) continue;
+
+      const descrIndex = headerCells.findIndex((c) => c.includes("descrizione"));
+      const debitIndex = headerCells.findIndex((c) => c.includes("addebiti"));
+      const creditIndex = headerCells.findIndex((c) => c.includes("accrediti"));
+      const importoIndex = headerCells.findIndex((c) => c.includes("importo"));
+
+      const dataRows = raw.slice(i + 1);
+      const parsed: ParsedRow[] = [];
+
+      for (const dr of dataRows) {
+        if (!Array.isArray(dr) || dr.length === 0) continue;
+        const hasAnyValue = dr.some((c) => c != null && String(c).trim() !== "");
+        if (!hasAnyValue) continue;
+
+        const dateRaw = dr[dateIndex];
+        const descrRaw = descrIndex >= 0 ? dr[descrIndex] : "";
+
+        let amount: number | null = null;
+        if (debitIndex >= 0 && dr[debitIndex] != null && String(dr[debitIndex]).trim() !== "") {
+          const v = tryParseAmount(dr[debitIndex]);
+          if (v != null && v !== 0) amount = -Math.abs(v);
+        }
+        if (amount == null && creditIndex >= 0 && dr[creditIndex] != null && String(dr[creditIndex]).trim() !== "") {
+          const v = tryParseAmount(dr[creditIndex]);
+          if (v != null && v !== 0) amount = Math.abs(v);
+        }
+        if (amount == null && importoIndex >= 0) {
+          amount = tryParseAmount(dr[importoIndex]);
+        }
+
+        parsed.push({
+          date: tryParseDate(dateRaw),
+          description: descrRaw != null ? String(descrRaw).trim() : "",
+          amount,
+        });
+      }
+
+      return parsed;
+    }
+  }
+
+  return "Intestazione 'Data Contabile' non trovata nelle prime 200 righe.";
 }
 
 interface Props {
@@ -134,11 +163,8 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<Step>("upload");
-  const [fileType, setFileType] = useState<FileType>("postepay-importo");
   const [fileName, setFileName] = useState("");
-  const [columns, setColumns] = useState<string[]>([]);
-  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
-  const [mapping, setMapping] = useState<MappingState>({ data: "", descrizione: "", importo: "", addebiti: "", accrediti: "" });
+  const [rows, setRows] = useState<ParsedRow[]>([]);
   const [excludedRows, setExcludedRows] = useState<Set<number>>(new Set());
   const [importResult, setImportResult] = useState<{
     imported: number;
@@ -157,23 +183,17 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
 
   const reset = useCallback(() => {
     setStep("upload");
-    setFileType("postepay-importo");
     setFileName("");
-    setColumns([]);
     setRows([]);
-    setMapping({ data: "", descrizione: "", importo: "", addebiti: "", accrediti: "" });
     setExcludedRows(new Set());
-    setImportResult(null);
-    setImporting(false);
-    setSelectedContoId("");
     setImportResult(null);
     setImporting(false);
     setSelectedContoId("");
   }, []);
 
-  const handleOpenChange = (open: boolean) => {
-    if (!open) reset();
-    onOpenChange(open);
+  const handleOpenChange = (v: boolean) => {
+    if (!v) reset();
+    onOpenChange(v);
   };
 
   const toggleRow = useCallback((index: number) => {
@@ -193,7 +213,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     }
   }, [allSelected, rows]);
 
-  const processFile = useCallback((file: File, ft: FileType) => {
+  const processFile = useCallback((file: File) => {
     const validTypes = [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "text/csv",
@@ -216,91 +236,22 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
           return;
         }
 
-        let targetSheet: XLSX.WorkSheet | null = null;
-        let headerRowIndex = -1;
+        const result = parseWorkbook(workbook);
 
-        {
-          for (const name of workbook.SheetNames) {
-            const ws = workbook.Sheets[name];
-            const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
-            const limit = Math.min(raw.length, 50);
-            for (let i = 0; i < limit; i++) {
-              const row = raw[i];
-              if (
-                Array.isArray(row) &&
-                row.some(
-                  (cell) =>
-                    typeof cell === "string" &&
-                    cell.toLowerCase().includes("data contabile")
-                )
-              ) {
-                targetSheet = ws;
-                headerRowIndex = i;
-                break;
-              }
-            }
-            if (targetSheet) break;
-          }
-        }
-
-        if (!targetSheet) {
-          targetSheet = workbook.Sheets[workbook.SheetNames[0]];
-        }
-
-        const json: Record<string, unknown>[] =
-          headerRowIndex >= 0
-            ? XLSX.utils.sheet_to_json<Record<string, unknown>>(targetSheet, { range: headerRowIndex })
-            : XLSX.utils.sheet_to_json<Record<string, unknown>>(targetSheet);
-
-        if (json.length === 0) {
-          toast({ title: "Nessun dato", description: "Il foglio non contiene righe di dati", variant: "destructive" });
+        if (typeof result === "string") {
+          toast({ title: "Colonne non trovate", description: result, variant: "destructive" });
           return;
         }
-        const rawCols = Object.keys(json[0]);
-        const cols = rawCols.map(c => c.trim().replace(/\s+/g, ' '));
-        const cleanedRows = json.map(row => {
-          const clean: Record<string, unknown> = {};
-          for (const key of rawCols) {
-            clean[key.trim()] = row[key];
-          }
-          return clean;
-        });
-        setColumns(cols);
-        setRows(cleanedRows);
+
+        if (result.length === 0) {
+          toast({ title: "Nessun dato", description: "Nessuna riga dati trovata dopo l'intestazione.", variant: "destructive" });
+          return;
+        }
+
+        setRows(result);
         setFileName(file.name);
         setExcludedRows(new Set());
-
-        // auto-map based on file type
-        const autoMapping: MappingState = { data: "", descrizione: "", importo: "", addebiti: "", accrediti: "" };
-        const keywordsMap = AUTO_MAP_KEYS[ft];
-        for (const [field, keywords] of Object.entries(keywordsMap)) {
-          const match = cols.find((c) => keywords.includes(c.toLowerCase().trim().replace(/\s+/g, ' ')));
-          if (match) autoMapping[field as keyof MappingState] = match;
-        }
-
-        // Validate required columns
-        if (ft === "postepay-importo") {
-          if (!autoMapping.data || !autoMapping.descrizione || !autoMapping.importo) {
-            toast({
-              title: "Colonne mancanti per il formato scelto",
-              description: "Servono: Data Contabile, Descrizione operazioni, Importo (euro).",
-              variant: "destructive",
-            });
-            return;
-          }
-        } else if (ft === "postepay-split") {
-          if (!autoMapping.data || !autoMapping.descrizione || !autoMapping.addebiti || !autoMapping.accrediti) {
-            toast({
-              title: "Colonne mancanti per il formato scelto",
-              description: "Servono: Data Contabile, Descrizione operazioni, Addebiti (euro), Accrediti (euro).",
-              variant: "destructive",
-            });
-            return;
-          }
-        }
-
-        setMapping(autoMapping);
-        setStep("mapping");
+        setStep("preview");
       } catch {
         toast({ title: "Errore di lettura", description: "Il file potrebbe essere corrotto o in un formato non supportato", variant: "destructive" });
       }
@@ -315,67 +266,41 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     (e: React.DragEvent) => {
       e.preventDefault();
       const file = e.dataTransfer.files?.[0];
-      if (file) processFile(file, fileType);
+      if (file) processFile(file);
     },
-    [processFile, fileType]
+    [processFile]
   );
 
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (file) processFile(file, fileType);
+      if (file) processFile(file);
       e.target.value = "";
     },
-    [processFile, fileType]
+    [processFile]
   );
 
-  const isSplitMode = fileType === "postepay-split";
-
-  const isMappingValid = mapping.data && mapping.descrizione && selectedContoId &&
-    (mapping.importo || (mapping.addebiti && mapping.accrediti));
-
   const handleImport = async () => {
-    if (!isMappingValid) return;
+    if (!selectedContoId) return;
     setImporting(true);
 
     try {
       const categories = await ensureCategoriesMutation.mutateAsync();
-
       const parsed: ParsedTransaction[] = [];
       let skipped = 0;
 
       for (let i = 0; i < rows.length; i++) {
         if (excludedRows.has(i)) continue;
-
         const row = rows[i];
-        const date = tryParseDate(row[mapping.data]);
-        let amount: number | null = null;
-        if (isSplitMode) {
-          const addebito = tryParseAmount(row[mapping.addebiti]);
-          const accredito = tryParseAmount(row[mapping.accrediti]);
-          if (addebito != null && addebito !== 0) {
-            amount = -Math.abs(addebito);
-          } else if (accredito != null && accredito !== 0) {
-            amount = Math.abs(accredito);
-          }
-        } else {
-          amount = tryParseAmount(row[mapping.importo]);
-        }
-        const description = row[mapping.descrizione] != null ? String(row[mapping.descrizione]).trim() : "";
-
-        if (!date || amount == null || amount === 0) {
+        if (!row.date || row.amount == null || row.amount === 0) {
           skipped++;
           continue;
         }
-        parsed.push({ date, description, amount });
+        parsed.push({ date: row.date, description: row.description, amount: row.amount });
       }
 
       if (parsed.length === 0) {
-        toast({
-          title: "Nessuna riga valida",
-          description: `${skipped} righe non sono state importate perché contengono dati non validi.`,
-          variant: "destructive",
-        });
+        toast({ title: "Nessuna riga valida", description: `${skipped} righe non importate.`, variant: "destructive" });
         setImporting(false);
         return;
       }
@@ -402,12 +327,12 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>
             {step === "upload" && "Importa Transazioni"}
-            {step === "mapping" && "Mappa le colonne"}
+            {step === "preview" && "Anteprima Importazione"}
             {step === "result" && "Importazione completata"}
           </DialogTitle>
           <DialogDescription>
             {step === "upload" && "Carica un file Excel (.xlsx) o CSV per importare le transazioni."}
-            {step === "mapping" && `File: ${fileName} — ${rows.length} righe trovate`}
+            {step === "preview" && `File: ${fileName} — ${rows.length} righe trovate`}
             {step === "result" && "Le transazioni sono state importate con successo."}
           </DialogDescription>
         </DialogHeader>
@@ -415,27 +340,6 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
         {/* Step 1: Upload */}
         {step === "upload" && (
           <div className="space-y-4">
-            {/* File type selector */}
-            <div className="space-y-2">
-              <Label>Tipo file</Label>
-              <Select
-                value={fileType}
-                onValueChange={(v) => setFileType(v as FileType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.entries(FILE_TYPE_LABELS) as [FileType, string][]).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Drop zone */}
             <div
               className="border-2 border-dashed border-border rounded-lg p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
               onDragOver={(e) => e.preventDefault()}
@@ -443,71 +347,16 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
               onClick={() => fileInputRef.current?.click()}
             >
               <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-foreground font-medium mb-1">
-                Trascina un file qui o clicca per selezionarlo
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Formati supportati: .xlsx, .csv
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.csv"
-                className="hidden"
-                onChange={handleFileInput}
-              />
+              <p className="text-foreground font-medium mb-1">Trascina un file qui o clicca per selezionarlo</p>
+              <p className="text-sm text-muted-foreground">Formati supportati: .xlsx, .csv</p>
+              <input ref={fileInputRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={handleFileInput} />
             </div>
           </div>
         )}
 
-        {/* Step 2: Mapping */}
-        {step === "mapping" && (
+        {/* Step 2: Preview */}
+        {step === "preview" && (
           <div className="space-y-6">
-            {/* File type + Column mapping */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Tipo file</Label>
-                <Select
-                  value={fileType}
-                  onValueChange={(v) => setFileType(v as FileType)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.entries(FILE_TYPE_LABELS) as [FileType, string][]).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {(isSplitMode
-                ? (["data", "descrizione", "addebiti", "accrediti"] as const)
-                : (["data", "descrizione", "importo"] as const)
-              ).map((field) => (
-                <div key={field} className="space-y-2">
-                  <Label className="capitalize">{field} *</Label>
-                  <Select
-                    value={mapping[field]}
-                    onValueChange={(v) => setMapping((m) => ({ ...m, [field]: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleziona colonna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {columns.map((col) => (
-                        <SelectItem key={col} value={col}>
-                          {col}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
-            </div>
-
             {/* Conto destinazione */}
             <div className="space-y-2">
               <Label>Conto destinazione *</Label>
@@ -525,81 +374,43 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
               </Select>
             </div>
 
-            {/* Row counter */}
             <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                {includedCount} di {rows.length} righe selezionate
-              </p>
+              <p className="text-sm text-muted-foreground">{includedCount} di {rows.length} righe selezionate</p>
             </div>
 
-            {/* Preview table with checkboxes */}
             <ScrollArea className="h-[300px] rounded-md border border-border">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">
-                      <Checkbox
-                        checked={allSelected}
-                        onCheckedChange={toggleAll}
-                        aria-label="Seleziona tutto"
-                      />
+                      <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Seleziona tutto" />
                     </TableHead>
-                    {columns.map((col) => (
-                      <TableHead key={col} className="whitespace-nowrap text-xs">
-                        {col}
-                        {col === mapping.data && " 📅"}
-                        {col === mapping.descrizione && " 📝"}
-                        {col === mapping.importo && " 💰"}
-                      </TableHead>
-                    ))}
+                    <TableHead className="whitespace-nowrap text-xs">Data 📅</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs">Descrizione 📝</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs text-right">Importo 💰</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((row, i) => {
                     const isExcluded = excludedRows.has(i);
+                    const hasError = !row.date || row.amount == null || row.amount === 0;
 
                     return (
-                      <TableRow
-                        key={i}
-                        className={isExcluded ? "opacity-40" : ""}
-                      >
+                      <TableRow key={i} className={isExcluded ? "opacity-40" : hasError ? "opacity-40 bg-destructive/5" : ""}>
                         <TableCell className="w-10">
-                          <Checkbox
-                            checked={!isExcluded}
-                            onCheckedChange={() => toggleRow(i)}
-                            aria-label={`Riga ${i + 1}`}
-                          />
+                          <Checkbox checked={!isExcluded} onCheckedChange={() => toggleRow(i)} aria-label={`Riga ${i + 1}`} />
                         </TableCell>
-                        {columns.map((col) => {
-                          const raw = row[col] != null ? String(row[col]) : "";
-
-                          // Show interpreted values for mapped columns
-                          if (col === mapping.importo && !isExcluded) {
-                            const amt = tryParseAmount(row[col]);
-                            return (
-                              <TableCell key={col} className="whitespace-nowrap text-xs">
-                                <span className={amt != null ? (amt >= 0 ? "text-green-600" : "text-red-600") : ""}>
-                                  {amt != null ? `${amt >= 0 ? "+" : ""}${amt.toFixed(2)} €` : raw}
-                                </span>
-                              </TableCell>
-                            );
-                          }
-
-                          if (col === mapping.data && !isExcluded) {
-                            const parsed = tryParseDate(row[col]);
-                            return (
-                              <TableCell key={col} className="whitespace-nowrap text-xs">
-                                {parsed ? format(new Date(parsed), "dd/MM/yyyy") : raw}
-                              </TableCell>
-                            );
-                          }
-
-                          return (
-                            <TableCell key={col} className="whitespace-nowrap text-xs">
-                              {raw}
-                            </TableCell>
-                          );
-                        })}
+                        <TableCell className="whitespace-nowrap text-xs">
+                          {row.date ? format(new Date(row.date), "dd/MM/yyyy") : "—"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.description}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-right">
+                          {row.amount != null ? (
+                            <span className={row.amount >= 0 ? "text-green-600" : "text-red-600"}>
+                              {row.amount >= 0 ? "+" : ""}{row.amount.toFixed(2)} €
+                            </span>
+                          ) : "—"}
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -608,10 +419,8 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
             </ScrollArea>
 
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => { reset(); setStep("upload"); }}>
-                Indietro
-              </Button>
-              <Button onClick={handleImport} disabled={!isMappingValid || importing || includedCount === 0}>
+              <Button variant="outline" onClick={() => { reset(); setStep("upload"); }}>Indietro</Button>
+              <Button onClick={handleImport} disabled={!selectedContoId || importing || includedCount === 0}>
                 {importing ? "Importazione in corso..." : `Importa ${includedCount} righe`}
               </Button>
             </DialogFooter>
@@ -623,29 +432,18 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
           <div className="text-center space-y-4 py-4">
             <CheckCircle2 className="h-16 w-16 text-success mx-auto" />
             <div>
-              <p className="text-lg font-semibold text-foreground">
-                {importResult.imported} transazioni importate
-              </p>
+              <p className="text-lg font-semibold text-foreground">{importResult.imported} transazioni importate</p>
               {importResult.skipped > 0 && (
                 <p className="text-sm text-muted-foreground flex items-center justify-center gap-1 mt-1">
                   <AlertCircle className="h-4 w-4" />
                   {importResult.skipped} righe saltate (dati non validi)
                 </p>
               )}
-              <p className="text-sm text-muted-foreground mt-2">
-                Tutte le transazioni hanno categoria "Da classificare".
-              </p>
+              <p className="text-sm text-muted-foreground mt-2">Tutte le transazioni hanno categoria "Da classificare".</p>
             </div>
             <DialogFooter className="justify-center gap-2 sm:justify-center">
-              <Button variant="outline" onClick={() => handleOpenChange(false)}>
-                Chiudi
-              </Button>
-              <Button
-                onClick={() => {
-                  handleOpenChange(false);
-                  navigate(`/transactions?categoryId=${importResult.categoryId}`);
-                }}
-              >
+              <Button variant="outline" onClick={() => handleOpenChange(false)}>Chiudi</Button>
+              <Button onClick={() => { handleOpenChange(false); navigate(`/transactions?categoryId=${importResult.categoryId}`); }}>
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 Vai a classificare
               </Button>
