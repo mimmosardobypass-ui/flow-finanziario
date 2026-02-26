@@ -79,13 +79,18 @@ export function computeSuggestionsForTransaction(
     const reasons: string[] = [];
     const dateDays = Math.round(dateDelta / 86400_000);
 
-    // Amount matching (absolute)
+    // Amount matching (absolute) — only score if opposite type (income vs expense)
     const srcAmt = source.amount;
     const candAmt = candidate.amount;
-    if (Math.abs(srcAmt - candAmt) < 0.01) {
+    const oppositeType = source.type !== candidate.type;
+
+    if (Math.abs(srcAmt - candAmt) < 0.01 && oppositeType) {
       score += 50;
       reasons.push("same_amount_abs");
-    } else if (Math.abs(srcAmt - candAmt) / Math.max(srcAmt, candAmt, 0.01) <= 0.05) {
+    } else if (
+      oppositeType &&
+      Math.abs(srcAmt - candAmt) / Math.max(srcAmt, candAmt, 0.01) <= 0.05
+    ) {
       score += 30;
       reasons.push(`similar_amount(${Math.round(Math.abs(srcAmt - candAmt) * 100) / 100})`);
     }
@@ -99,8 +104,8 @@ export function computeSuggestionsForTransaction(
       reasons.push(`date_delta:${dateDays}`);
     }
 
-    // Opposite sign (transfer pattern)
-    if (source.type !== candidate.type) {
+    // Opposite type bonus (transfer pattern)
+    if (oppositeType) {
       score += 10;
       reasons.push("opposite_type");
     }
@@ -142,7 +147,7 @@ export function computeSuggestionsForTransaction(
       }
     }
 
-    if (score >= 30) {
+    if (score >= 40) {
       results.push({
         source_transaction_id: source.id,
         candidate_transaction_id: candidate.id,
@@ -154,7 +159,8 @@ export function computeSuggestionsForTransaction(
   }
 
   results.sort((a, b) => b.score - a.score);
-  return results;
+  // Limit to top 3 suggestions per source transaction
+  return results.slice(0, 3);
 }
 
 /* ─── centralised status sync (single source of truth) ─── */
