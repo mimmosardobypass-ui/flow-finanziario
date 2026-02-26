@@ -16,7 +16,7 @@ function normalise(text: string): string {
 }
 
 const STRONG_KEYWORDS = new Set([
-  "sumup", "payout", "postepay", "bonifico", "giroconto", "compass",
+  "sumup", "payout", "postepay", "bonifico", "giroconto", "postagiro", "compass",
   "paypal", "stripe", "sepa", "addebito", "accredito", "trasferimento",
   "stipendio", "affitto", "bolletta", "rid", "mav", "rav",
 ]);
@@ -103,6 +103,21 @@ export function computeSuggestionsForTransaction(
     if (source.type !== candidate.type) {
       score += 10;
       reasons.push("opposite_type");
+    }
+
+    // Internal transfer bonus: same abs amount + opposite sign + transfer keyword
+    const TRANSFER_KEYWORDS = ["giroconto", "postagiro", "trasferimento"];
+    if (
+      source.type !== candidate.type &&
+      Math.abs(srcAmt - candAmt) < 0.01 &&
+      source.description && candidate.description
+    ) {
+      const srcHasTransfer = TRANSFER_KEYWORDS.some((kw) => normalise(source.description!).includes(kw));
+      const candHasTransfer = TRANSFER_KEYWORDS.some((kw) => normalise(candidate.description!).includes(kw));
+      if (srcHasTransfer || candHasTransfer) {
+        score += 15;
+        reasons.push("internal_transfer");
+      }
     }
 
     // Keyword matching
@@ -206,7 +221,7 @@ export async function generateSuggestionsForIds(
       .from("transactions")
       .update({ reconciliation_status: "suggested" })
       .in("id", toSuggest)
-      .eq("reconciliation_status", "none");
+      .in("reconciliation_status", ["none", "unreconciled"]);
   }
 
   // Also mark candidates as suggested if they were 'none'
@@ -235,7 +250,7 @@ export async function generateSuggestionsForIds(
         .from("transactions")
         .update({ reconciliation_status: "suggested" })
         .in("id", needUpdate)
-        .eq("reconciliation_status", "none");
+        .in("reconciliation_status", ["none", "unreconciled"]);
     }
   }
 

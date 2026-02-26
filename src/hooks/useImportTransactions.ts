@@ -94,6 +94,7 @@ export function useImportTransactions() {
 
       let imported = 0;
       const chunkSize = 100;
+      const importedIds: string[] = [];
 
       for (let i = 0; i < rows.length; i += chunkSize) {
         const chunk = rows.slice(i, i + chunkSize);
@@ -103,32 +104,16 @@ export function useImportTransactions() {
           .select("id");
         if (error) throw error;
         imported += data?.length ?? chunk.length;
+        importedIds.push(...(data || []).map((t) => t.id));
       }
-
-      // Collect imported IDs for suggestion generation
-      const importedIds: string[] = [];
-      // Re-fetch to get the IDs (we need to reconstruct from the chunks)
-      // Actually the data is returned from insert above, let's collect during insert
-      // We need to refactor the loop slightly - but IDs are returned in `data`
-      // Let's just re-query the most recent transactions for this user+conto
-      const { data: recentTxns } = await supabase
-        .from("transactions")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("conto_id", contoId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(transactions.length);
-
-      const recentIds = (recentTxns || []).map((t) => t.id);
 
       await queryClient.invalidateQueries({ queryKey: ["transactions"] });
       await queryClient.invalidateQueries({ queryKey: ["categories"] });
 
       // Auto-generate reconciliation suggestions for imported transactions
-      if (recentIds.length > 0) {
+      if (importedIds.length > 0) {
         try {
-          await generateSuggestionsForIds(recentIds, user.id);
+          await generateSuggestionsForIds(importedIds, user.id);
           await queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
         } catch (e) {
           console.error("Error generating reconciliation suggestions:", e);
