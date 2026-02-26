@@ -203,26 +203,46 @@ export async function generateSuggestionsForIds(
 
   console.log(`[suggestions] Total suggestions generated: ${allSuggestions.length}`);
 
-  // Delete old suggestions for these source transactions
+  // Fetch dismissed pairs to preserve them across recalculation
+  const dismissedPairs = new Set<string>();
+  if (transactionIds.length > 0) {
+    const { data: dismissedRows } = await supabase
+      .from("reconciliation_suggestions" as any)
+      .select("source_transaction_id, candidate_transaction_id")
+      .in("source_transaction_id", transactionIds)
+      .eq("dismissed", true);
+
+    (dismissedRows || []).forEach((r: any) => {
+      dismissedPairs.add(`${r.source_transaction_id}|${r.candidate_transaction_id}`);
+    });
+  }
+
+  // Filter out previously dismissed pairs
+  const filteredSuggestions = allSuggestions.filter(
+    (s) => !dismissedPairs.has(`${s.source_transaction_id}|${s.candidate_transaction_id}`),
+  );
+
+  // Delete old non-dismissed suggestions for these source transactions
   if (transactionIds.length > 0) {
     await supabase
       .from("reconciliation_suggestions" as any)
       .delete()
-      .in("source_transaction_id", transactionIds);
+      .in("source_transaction_id", transactionIds)
+      .eq("dismissed", false);
   }
 
   // Insert new suggestions in chunks
-  if (allSuggestions.length > 0) {
+  if (filteredSuggestions.length > 0) {
     const chunkSize = 100;
-    for (let i = 0; i < allSuggestions.length; i += chunkSize) {
-      const chunk = allSuggestions.slice(i, i + chunkSize);
+    for (let i = 0; i < filteredSuggestions.length; i += chunkSize) {
+      const chunk = filteredSuggestions.slice(i, i + chunkSize);
       await supabase.from("reconciliation_suggestions" as any).insert(chunk);
     }
   }
 
   // Update reconciliation_status for source transactions
-  const idsWithSuggestions = new Set(allSuggestions.map((s) => s.source_transaction_id));
-  const idsWithCandidates = new Set(allSuggestions.map((s) => s.candidate_transaction_id));
+  const idsWithSuggestions = new Set(filteredSuggestions.map((s) => s.source_transaction_id));
+  const idsWithCandidates = new Set(filteredSuggestions.map((s) => s.candidate_transaction_id));
 
   // Set 'suggested' for sources that got suggestions
   const toSuggest = transactionIds.filter((id) => idsWithSuggestions.has(id));
@@ -358,15 +378,40 @@ export function useDismissSuggestion() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (suggestionId: string) => {
+    mutationFn: async ({ suggestionId, transactionId }: { suggestionId: string; transactionId: string }) => {
       const { error } = await supabase
         .from("reconciliation_suggestions" as any)
         .update({ dismissed: true })
         .eq("id", suggestionId);
       if (error) throw error;
+
+      // Check if any active suggestions remain for this transaction
+      const { data: asSource } = await supabase
+        .from("reconciliation_suggestions" as any)
+        .select("id")
+        .eq("source_transaction_id", transactionId)
+        .eq("dismissed", false)
+        .limit(1);
+
+      const { data: asCandidate } = await supabase
+        .from("reconciliation_suggestions" as any)
+        .select("id")
+        .eq("candidate_transaction_id", transactionId)
+        .eq("dismissed", false)
+        .limit(1);
+
+      const remaining = (asSource?.length || 0) + (asCandidate?.length || 0);
+      if (remaining === 0) {
+        await supabase
+          .from("transactions")
+          .update({ reconciliation_status: "none" })
+          .eq("id", transactionId)
+          .eq("reconciliation_status", "suggested");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
     },
   });
 }
