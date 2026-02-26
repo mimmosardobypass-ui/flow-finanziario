@@ -1,140 +1,72 @@
 
 
-# Riconciliazione Automatica con Proposte
+# Fix: Riconciliazione non genera proposte per trasferimenti interni
 
-## Panoramica
+## Causa radice
 
-Dopo l'importazione (o la creazione/modifica di transazioni), il sistema calcolerà automaticamente le proposte di riconciliazione e le salverà in una nuova tabella. L'utente vedrà subito quali movimenti hanno proposte pronte, senza dover cliccare su ciascuno.
+La migrazione precedente converte `partial`/`complete` in `reconciled`, ma **non converte `unreconciled` in `none`**. Le transazioni importate con status `unreconciled` vengono ignorate silenziosamente dalle query di aggiornamento che filtrano per `reconciliation_status = 'none'`.
 
-## 1. Nuova tabella `reconciliation_suggestions`
+Inoltre manca "postagiro" tra le keyword forti e la raccolta degli ID dopo l'import e fragile.
 
-Migrazione SQL per creare la tabella:
+## Modifiche
 
-```text
-reconciliation_suggestions
-  - id (uuid, PK)
-  - user_id (uuid, NOT NULL)
-  - source_transaction_id (uuid, NOT NULL, FK -> transactions.id)
-  - candidate_transaction_id (uuid, NOT NULL, FK -> transactions.id)
-  - score (numeric, NOT NULL) -- punteggio di matching
-  - reason (text) -- es. "same_amount_abs + keyword:SUMUP + date_delta:2"
-  - created_at (timestamptz, DEFAULT now())
-  - dismissed (boolean, DEFAULT false) -- per "Rifiuta"
-  - UNIQUE(source_transaction_id, candidate_transaction_id)
+### 1. Nuova migrazione SQL
+
+Convertire tutti i valori `unreconciled` in `none`:
+
+```sql
+UPDATE public.transactions
+SET reconciliation_status = 'none'
+WHERE reconciliation_status = 'unreconciled';
 ```
 
-RLS: solo il proprietario (user_id = auth.uid()) puo leggere/scrivere/cancellare.
+### 2. `src/hooks/useReconciliationSuggestions.ts`
 
-Aggiornamento `reconciliation_status` sulla tabella `transactions`: i valori validi diventano `none`, `suggested`, `reconciled` (rimuovendo `partial` e `complete`).
+**a) Aggiungere "postagiro" a `STRONG_KEYWORDS`** (riga 18-22)
 
-## 2. Algoritmo di matching (client-side)
+```typescript
+const STRONG_KEYWORDS = new Set([
+  "sumup", "payout", "postepay", "bonifico", "giroconto", "postagiro", "compass",
+  "paypal", "stripe", "sepa", "addebito", "accredito", "trasferimento",
+  "stipendio", "affitto", "bolletta", "rid", "mav", "rav",
+]);
+```
 
-Nuovo hook `src/hooks/useReconciliationSuggestions.ts` con:
+**b) Rendere gli update di status piu robusti** (righe 209, 238)
 
-**`computeSuggestions(sourceTransaction, allTransactions)`**:
+Cambiare `.eq("reconciliation_status", "none")` in `.in("reconciliation_status", ["none", "unreconciled"])` come safety net, cosi anche eventuali valori legacy vengono aggiornati.
 
-1. Filtra solo transazioni di conti diversi, non gia riconciliate, non cancellate
-2. Finestra date: +-10 giorni dalla data del source
-3. Scoring:
-   - **Importo assoluto uguale**: +50 punti
-   - **Importo assoluto simile (+-5%)**: +30 punti
-   - **Date entro 3 giorni**: +20 punti, entro 10 giorni: +10 punti
-   - **Segno opposto** (expense vs income): +10 punti (tipico di transfer)
-   - **Keyword match**: normalizza testo (lowercase, rimuovi accenti/punteggiatura, split token), confronta parole "forti" (sumup, payout, postepay, bonifico, giroconto, compass, ecc.) -> +15 per keyword comune
-   - **ID comune** (CRO/TRN/sequenze alfanumeriche lunghe >=8 caratteri presenti in entrambe le descrizioni): +25 punti
-4. Soglia minima: score >= 30 per essere salvata come proposta
-5. Ordina per score decrescente
+**c) Bonus scoring per trasferimenti interni**
 
-**`useGenerateSuggestions()`** - mutation che:
+Quando una coppia ha: importo assoluto uguale + segno opposto + keyword transfer (giroconto/postagiro/trasferimento), aggiungere un bonus di +15 punti per "internal_transfer" pattern. Questo porta il punteggio totale del caso specifico a ~110-125, rendendo la proposta altamente prioritaria.
 
-- Riceve una lista di transaction IDs (o "tutte le non riconciliate")
-- Per ogni transazione, calcola i match
-- Elimina vecchie suggestions per quelle transazioni
-- Inserisce le nuove in `reconciliation_suggestions`
-- Aggiorna `reconciliation_status = 'suggested'` sulle transazioni che hanno almeno una proposta
-- Aggiorna `reconciliation_status = 'none'` su quelle che non ne hanno piu
+### 3. `src/hooks/useImportTransactions.ts`
 
-## 3. Auto-proposta dopo import
+Raccogliere gli ID direttamente dalle risposte di insert invece di ri-interrogare il DB:
 
-In `src/hooks/useImportTransactions.ts`, dopo l'inserimento delle righe:
+```typescript
+const importedIds: string[] = [];
+for (let i = 0; i < rows.length; i += chunkSize) {
+  const chunk = rows.slice(i, i + chunkSize);
+  const { error, data } = await supabase
+    .from("transactions")
+    .insert(chunk)
+    .select("id");
+  if (error) throw error;
+  imported += data?.length ?? chunk.length;
+  importedIds.push(...(data || []).map(t => t.id));
+}
+```
 
-1. Recupera tutte le transazioni dell'utente non riconciliate (limit 2000)
-2. Chiama `computeSuggestions` per ogni transazione appena importata
-3. Bulk-insert le suggestions trovate
-4. Aggiorna `reconciliation_status` a `suggested` dove necessario
-
-Lo stesso ricalcolo avviene anche in `useCreateTransaction` e `useUpdateTransaction` (per la singola transazione modificata).
-
-## 4. UI - Colonna "Ric." semplificata
-
-In `src/pages/Transactions.tsx`, la colonna Ric. mostra:
-
-- **Pallino spento** (grigio, `Circle`): `reconciliation_status = 'none'` -- nessuna proposta
-- **Pallino attivo** (pulsante evidenziato, `CircleDot` con colore primary/amber): `reconciliation_status = 'suggested'` -- ci sono proposte
-- **Icona check** (`CircleCheck` verde): `reconciliation_status = 'reconciled'` -- gia riconciliata
-
-Click apre il `ReconciliationSheet`.
-
-## 5. ReconciliationSheet aggiornato
-
-In `src/components/ReconciliationSheet.tsx`:
-
-- **Top**: movimento selezionato (invariato)
-- **Se `reconciled`**: mostra gruppo riconciliato + bottone "Rimuovi riconciliazione"
-- **Se `suggested`**: lista "Proposte" ordinate per score, con reason come tooltip. Per ogni proposta:
-  - Bottone "Accetta" -> crea riconciliazione (UUID comune, status `reconciled`)
-  - Bottone "Rifiuta" -> segna `dismissed = true` sulla suggestion
-- **Se `none`**: messaggio "Nessuna proposta" + bottone "Cerca proposte" che ricalcola solo per quella riga
-- Bottone "Cerca altre" sempre visibile per ricalcolo on-demand
-
-**Accettazione riconciliazione**:
-- Imposta `reconciliation_id` uguale su entrambe le transazioni
-- Set `reconciliation_status = 'reconciled'` su entrambe
-- Cancella tutte le suggestions per entrambe le transazioni (o le segna dismissed)
-
-## 6. Filtri aggiornati
-
-In `src/components/TransactionFilters.tsx`, il filtro "Riconciliazione" diventa:
-
-- Tutti
-- Con proposte (`suggested`)
-- Non riconciliati (`none` + `suggested`)
-- Riconciliati (`reconciled`)
-
-Rimuovere il filtro "Tipo riconciliazione" (non piu rilevante con il nuovo sistema).
-
-In `src/hooks/useFilteredTransactions.ts`: aggiornare la logica per supportare il filtro combinato `none+suggested` per "Non riconciliati".
-
-## 7. Ricalcolo su modifica
-
-- `useUpdateTransaction`: dopo update, ricalcola suggestions per quella transazione
-- `useDeleteTransaction`: dopo delete, rimuovi suggestions collegate
-- `useCreateTransaction`: dopo insert, ricalcola per la nuova transazione
-
-## Sequenza implementazione
-
-1. Migrazione DB: creare tabella `reconciliation_suggestions`
-2. Migrazione DB: aggiornare valori di `reconciliation_status` (convertire `partial`/`complete` in `reconciled`)
-3. Creare `src/hooks/useReconciliationSuggestions.ts` con logica di scoring e mutations
-4. Aggiornare `src/hooks/useImportTransactions.ts` per auto-generare suggestions dopo import
-5. Aggiornare `src/hooks/useReconciliation.ts` per il nuovo flusso accetta/rifiuta
-6. Aggiornare `src/components/ReconciliationSheet.tsx` con nuova UI proposte
-7. Aggiornare `src/pages/Transactions.tsx` con nuovi stati pallino
-8. Aggiornare `src/components/TransactionFilters.tsx` e `src/hooks/useFilteredTransactions.ts` con nuovi filtri
-9. Aggiornare `src/hooks/useTransactions.ts` per ricalcolo su create/update/delete
-10. Aggiornare `src/integrations/supabase/types.ts` NON si tocca (generato automaticamente)
-
-## File coinvolti
+## Riepilogo file
 
 | File | Modifica |
 |------|----------|
-| Migrazione SQL | Nuova tabella + update status values |
-| `src/hooks/useReconciliationSuggestions.ts` | **NUOVO** - logica scoring + mutations |
-| `src/hooks/useImportTransactions.ts` | Auto-genera suggestions post-import |
-| `src/hooks/useReconciliation.ts` | Semplifica: accetta/rifiuta/rimuovi |
-| `src/hooks/useTransactions.ts` | Trigger ricalcolo su CRUD |
-| `src/components/ReconciliationSheet.tsx` | Nuova UI con proposte ordinate per score |
-| `src/pages/Transactions.tsx` | Pallini semplificati (spento/attivo/check) |
-| `src/components/TransactionFilters.tsx` | Filtri aggiornati |
-| `src/hooks/useFilteredTransactions.ts` | Supporto filtro "non riconciliati" combinato |
+| Migrazione SQL | `UPDATE SET 'none' WHERE 'unreconciled'` |
+| `useReconciliationSuggestions.ts` | Aggiunta "postagiro", safety net su status update, bonus internal transfer |
+| `useImportTransactions.ts` | Raccolta ID diretta dalle insert |
+
+## Risultato atteso
+
+Dopo l'implementazione, i due movimenti POSTAGIRO (+100 / -100, stessa data, conti diversi) genereranno automaticamente una proposta con score ~110+ e appariranno con il pallino ambra nella colonna Ric.
 
