@@ -1,99 +1,48 @@
 
-Confermato: ho capito perfettamente l’obiettivo. Il pallino “Ric.” deve dipendere da una sola fonte (`reconciliation_status` da DB), con state machine rigida: `none` (grigio) / `suggested` (rosso) / `reconciled` (spunta).
 
-Stato attuale verificato (evidenza concreta)
-1. Renderer attuale
-- In `src/pages/Transactions.tsx` il mapping è già centralizzato in `getRicIndicator(status)`:
-  - `reconciled` -> verde/check
-  - `suggested` -> rosso/pieno
-  - default -> grigio
-- Il render usa `transaction.reconciliation_status` per scegliere icona/colore.
+# Riduzione falsi positivi nell'algoritmo di suggestion
 
-2. Log attuali
-- I log mostrano:
-  - `[RIC_DEBUG] render id=... status=suggested -> icon=CircleDot`
-- Quindi la UI sta leggendo `suggested` in render per quelle righe.
+## Diagnosi confermata
 
-3. Verifica DB reale
-- Query mismatch globale (`suggested` senza suggestion attive / `none` con suggestion attive): nessun mismatch trovato.
-- Per i due ID POSTAGIRO:
-  - `3d134d53...`: `reconciliation_status=suggested`, suggestion attive > 0
-  - `b13f8ccc...`: `reconciliation_status=suggested`, suggestion attive > 0
-- Quindi, nei casi campionati, il rosso è coerente con lo stato salvato.
+La verifica diretta a DB ha dimostrato che:
+- Il rendering UI e' corretto: legge `reconciliation_status` e basta
+- La sync e' corretta: `suggested` nel DB = suggestion attive presenti
+- **Il problema e' nell'algoritmo di generazione**: crea troppi match falsi positivi
 
-Interpretazione del problema residuo
-- Non emerge (sui campioni verificati) un bug di “colore calcolato da altro stato locale”.
-- Il rischio principale resta strutturale:
-  1) possibili finestre di stale cache dopo mutazioni,
-  2) aggiornamenti status non verificati con error handling forte,
-  3) possibili scritture legacy su `reconciliation_status` (hook `useReconcile` con valori `partial/complete`) che non rispettano la state machine ufficiale.
+Esempi concreti di match errati:
+- "Bar" (Cassa, €8.50) matchata con "PAYPAL TRENITALIAS" (Postepay, €8.50) solo per importo uguale
+- "Extra" (€1000) ha **19 suggestion attive** (praticamente ogni transazione con importo simile)
+- "Benzina Peugeot" (€20) ha 5 suggestion
 
-Implementazione definitiva proposta (hardening strutturale)
-1) Rendere il render tracciabile e incontestabile
-- In `Transactions.tsx` aggiungere logging temporaneo per tutte le righe visibili:
-  - `console.log('[RIC_RENDER]', transaction.id, transaction.reconciliation_status)`
-- Il mapping resta esclusivamente:
-  - `const indicator = getRicIndicator(transaction.reconciliation_status)`
+## Soluzione: restringere i criteri di matching
 
-2) Eliminare ambiguità sul campo status lato UI
-- Introdurre tipo esplicito:
-  - `type ReconciliationStatus = 'none' | 'suggested' | 'reconciled'`
-- `getRicIndicator` accetta solo questo tipo.
-- Se arriva valore anomalo, log warning diagnostico (temporaneo), ma nessuna logica alternativa basata su suggestions/count.
+### 1. Aumentare la soglia minima di score
 
-3) Rafforzare sync backend con error handling esplicito
-- In `syncReconciliationStatusForTransactions`:
-  - controllare ogni risposta Supabase (`error`) e fare throw in caso di errore.
-  - loggare risultato update (quanti record portati a `suggested` e quanti a `none`).
-- Obiettivo: garantire che “sync eseguita” significhi “sync committata”.
+Attualmente vengono salvate suggestion con score molto basso (match solo per importo simile). Alzare la soglia minima a **40** (attualmente probabilmente ~10-20) per eliminare match deboli.
 
-4) Forzare refresh deterministico post-mutation
-- Dopo `dismiss` e `accept`:
-  - mantenere `invalidateQueries(['transactions'])`,
-  - aggiungere `await queryClient.refetchQueries({ queryKey: ['transactions'], type: 'active' })`.
-- Questo riduce il rischio di UI su cache non ancora riallineata nel frame immediatamente successivo.
+### 2. Richiedere conti diversi per match di importo
 
-5) Verifica “single source of truth” nel codice
-- Audit finale su tutta la codebase per assicurare che la colonna Ric non usi:
-  - count suggestion,
-  - flag UI locali,
-  - derived booleans esterni allo status.
-- Dalle ricerche già fatte non risultano campi tipo `has_suggestions` usati per il pallino.
+I match basati solo su "stesso importo" devono richiedere che le due transazioni siano su **conti diversi** e di **tipo opposto** (income vs expense). Questo elimina match assurdi come Bar vs TRENITALIAS.
 
-6) Allineare il percorso legacy fuori state machine
-- `useReconcile` attualmente può scrivere `partial/complete` in `reconciliation_status`.
-- Va riallineato alla state machine ufficiale (oppure deprecato) per prevenire drift futuri.
+### 3. Limitare il numero di suggestion per transazione
 
-Verifica finale che consegnerò dopo implementazione
-1. DB -> UI mapping (campione POSTAGIRO):
-- Stampare:
-  - status DB
-  - numero suggestion attive
-  - `[RIC_RENDER]` della riga
-- Confermare coerenza 1:1.
+Massimo **3 suggestion per transazione** (le migliori per score). Questo evita casi come "Extra" con 19 match.
 
-2. Flusso mutazioni:
-- Dismiss totale -> DB `none` -> UI grigio.
-- Accept -> DB `reconciled` -> UI spunta.
-- Recalc -> mai `reconciled` automatico.
+### 4. Reset una tantum delle suggestion esistenti
 
-3. Query staleness:
-- Dopo dismiss/accept, verificare che il refetch porti subito in tabella il nuovo stato senza residui.
+Dopo aver aggiornato l'algoritmo, eseguire un ricalcolo completo che:
+- Elimini tutte le suggestion non-dismissed
+- Rigeneri con i nuovi criteri piu stretti
+- Sincronizzi gli stati (molte transazioni torneranno `none`)
 
-File coinvolti nel piano
-- `src/pages/Transactions.tsx`
-  - logging `[RIC_RENDER]` su righe visibili
-  - typing più stretto del mapping status->icona
-- `src/hooks/useReconciliationSuggestions.ts`
-  - error handling e logging robusto in sync
-  - refetch post-mutation oltre invalidazione
-- `src/hooks/useReconciliation.ts`
-  - riallineamento/eliminazione stati legacy `partial/complete`
+## File coinvolti
 
-Risultato atteso
-- Comportamento deterministico e verificabile:
-  - `none` -> grigio
-  - `suggested` -> rosso
-  - `reconciled` -> verde/check
-- Nessun criterio implicito aggiuntivo nel renderer.
-- Tracciabilità completa UI ↔ DB durante il debug.
+| File | Modifica |
+|---|---|
+| `src/hooks/useReconciliationSuggestions.ts` | Alzare soglia score minimo, limitare suggestion per transazione, richiedere conti diversi per match importo |
+
+## Risultato atteso
+
+- Molte meno transazioni con pallino rosso
+- Solo match significativi (giroconti reali, trasferimenti interni)
+- Meno "rumore" visivo nella lista transazioni
