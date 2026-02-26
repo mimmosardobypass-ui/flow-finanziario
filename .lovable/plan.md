@@ -1,72 +1,78 @@
 
+Esito verifica tecnica completata sul caso POSTAGIRO del 24/02/2026.
 
-# Fix: Riconciliazione non genera proposte per trasferimenti interni
+1) Verifica DB sul caso specifico (backend vs UI)
 
-## Causa radice
+- Ho identificato le 2 transazioni esatte:
+  - `b13f8ccc-b41f-4300-b892-653f37b0613b` (conto `001068113388`, `income`, importo `100`, stato `none`)
+  - `3d134d53-5bdc-4d15-84f0-5ac3e99c1d83` (conto `5333171194520975`, `expense`, importo `100`, stato `none`)
+- Query su `reconciliation_suggestions` per questi ID: risultato vuoto.
+- Query totale tabella `reconciliation_suggestions`: `0` righe totali, `0` attive.
 
-La migrazione precedente converte `partial`/`complete` in `reconciled`, ma **non converte `unreconciled` in `none`**. Le transazioni importate con status `unreconciled` vengono ignorate silenziosamente dalle query di aggiornamento che filtrano per `reconciliation_status = 'none'`.
+Conclusione: il problema è lato generazione/popolamento backend (non è un problema “solo UI”).
 
-Inoltre manca "postagiro" tra le keyword forti e la raccolta degli ID dopo l'import e fragile.
+2) Verifica regole richieste (bank↔bank, filtri, status, keyword)
 
-## Modifiche
+Nel codice attuale (`src/hooks/useReconciliationSuggestions.ts`):
 
-### 1. Nuova migrazione SQL
+- Matching avviene sulla stessa tabella `transactions` (quindi bank↔bank è supportato).
+- C’è vincolo `candidate.conto_id !== source.conto_id` (conti diversi).
+- Finestra data ±10 giorni presente.
+- Esclusione solo `reconciled` (quindi `none` entra correttamente).
+- `postagiro` e `giroconto` sono incluse nelle keyword forti.
+- Bonus `internal_transfer` è presente con:
+  - tipo opposto (`income` vs `expense`)
+  - stesso importo
+  - keyword di trasferimento
 
-Convertire tutti i valori `unreconciled` in `none`:
+Conferma tecnica sul vostro caso: tutte le condizioni risultano vere (importo uguale, segno opposto via `type`, stessa data, conti diversi, keyword presenti).
 
-```sql
-UPDATE public.transactions
-SET reconciliation_status = 'none'
-WHERE reconciliation_status = 'unreconciled';
-```
+3) Causa radice individuata (perché non vedete proposte)
 
-### 2. `src/hooks/useReconciliationSuggestions.ts`
+Il punto chiave non è la regola di matching, ma quando viene eseguita:
 
-**a) Aggiungere "postagiro" a `STRONG_KEYWORDS`** (riga 18-22)
+- Non esiste un worker/cron di backfill globale.
+- La generazione viene chiamata solo in questi eventi:
+  - import (`useImportTransactions`)
+  - create/update transazione (`useTransactions`)
+  - click manuale “Cerca proposte” nel `ReconciliationSheet`
 
-```typescript
-const STRONG_KEYWORDS = new Set([
-  "sumup", "payout", "postepay", "bonifico", "giroconto", "postagiro", "compass",
-  "paypal", "stripe", "sepa", "addebito", "accredito", "trasferimento",
-  "stipendio", "affitto", "bolletta", "rid", "mav", "rav",
-]);
-```
+Evidenza decisiva dai dati:
+- Ultima transazione utente creata: `2026-02-26 00:10:51`
+- Migrazione che crea `reconciliation_suggestions`: `2026-02-26 00:45:46`
+- Transazioni create dopo quella migrazione: `0`
 
-**b) Rendere gli update di status piu robusti** (righe 209, 238)
+Quindi i movimenti del caso test sono nati prima che la tabella/procedura fosse disponibile e non è mai stato fatto un ricalcolo globale successivo. Per questo `reconciliation_suggestions` è rimasta vuota.
 
-Cambiare `.eq("reconciliation_status", "none")` in `.in("reconciliation_status", ["none", "unreconciled"])` come safety net, cosi anche eventuali valori legacy vengono aggiornati.
+4) Risposta puntuale alle vostre richieste
 
-**c) Bonus scoring per trasferimenti interni**
+- “Vengono creati record per quei due ID?” → No, zero record (verificato).
+- “La query usa none/unreconciled?” → Ora la logica considera correttamente `none`; la migrazione `unreconciled -> none` è applicata.
+- “Internal transfer fa bank↔bank?” → Sì, è stesso dataset `transactions` con `conto_id` diverso.
+- “Esiste funzione/worker automatico dopo refresh?” → No worker su refresh; solo trigger da import/create/update o manuale “Cerca proposte”.
 
-Quando una coppia ha: importo assoluto uguale + segno opposto + keyword transfer (giroconto/postagiro/trasferimento), aggiungere un bonus di +15 punti per "internal_transfer" pattern. Questo porta il punteggio totale del caso specifico a ~110-125, rendendo la proposta altamente prioritaria.
+5) Intervento consigliato (prossimo step implementativo)
 
-### 3. `src/hooks/useImportTransactions.ts`
+Per chiudere definitivamente il gap e soddisfare l’obiettivo “proposte già pronte” anche su storico:
 
-Raccogliere gli ID direttamente dalle risposte di insert invece di ri-interrogare il DB:
+A. Aggiungere una mutation “Recalcola tutte le proposte” (backfill globale)
+- Prende tutte le transazioni utente non riconciliate (`none`)
+- Chiama `generateSuggestionsForIds` in batch
+- Aggiorna stati `suggested/none`
+- Mostra `inserted_count` nel toast/log
 
-```typescript
-const importedIds: string[] = [];
-for (let i = 0; i < rows.length; i += chunkSize) {
-  const chunk = rows.slice(i, i + chunkSize);
-  const { error, data } = await supabase
-    .from("transactions")
-    .insert(chunk)
-    .select("id");
-  if (error) throw error;
-  imported += data?.length ?? chunk.length;
-  importedIds.push(...(data || []).map(t => t.id));
-}
-```
+B. (Opzionale ma consigliato) Eseguire un backfill automatico una tantum
+- Al primo accesso a Transazioni, se `reconciliation_suggestions` è vuota e ci sono transazioni `none`
+- Lancia ricalcolo globale in background (con guard per evitare loop)
 
-## Riepilogo file
+C. Aggiungere logging tecnico temporaneo
+- Dentro `generateSuggestionsForIds`: numero sorgenti analizzate, suggerimenti generati, inseriti, aggiornati
 
-| File | Modifica |
-|------|----------|
-| Migrazione SQL | `UPDATE SET 'none' WHERE 'unreconciled'` |
-| `useReconciliationSuggestions.ts` | Aggiunta "postagiro", safety net su status update, bonus internal transfer |
-| `useImportTransactions.ts` | Raccolta ID diretta dalle insert |
+Con questi 3 punti, il vostro caso POSTAGIRO produce subito almeno 1 suggestion ad alto score e il pallino “attivo” compare correttamente.
 
-## Risultato atteso
+6) Nota extra emersa dai log console (non bloccante per questo bug)
 
-Dopo l'implementazione, i due movimenti POSTAGIRO (+100 / -100, stessa data, conti diversi) genereranno automaticamente una proposta con score ~110+ e appariranno con il pallino ambra nella colonna Ric.
-
+Sono presenti warning React su `ref` in:
+- `ReconciliationSheet`
+- `TransactionFilters`
+Questi non spiegano l’assenza di suggestions in DB, ma vanno corretti a parte per pulizia UI/runtime.
