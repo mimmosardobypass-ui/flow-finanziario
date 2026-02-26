@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, CircleDot, CircleCheck, RefreshCw } from "lucide-react";
+import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, CircleDot, CircleCheck, RefreshCw, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -31,6 +31,21 @@ import {
 } from "@/hooks/useTransactions";
 import { useRecalculateAllSuggestions } from "@/hooks/useReconciliationSuggestions";
 import { toast } from "@/hooks/use-toast";
+
+/* ─── deterministic Ric. indicator (single source of truth) ─── */
+function getRicIndicator(status: string): { Icon: LucideIcon; className: string } {
+  switch (status) {
+    case "reconciled":
+      return { Icon: CircleCheck, className: "text-success" };
+    case "suggested":
+      return { Icon: CircleDot, className: "text-destructive" };
+    default:
+      return { Icon: Circle, className: "text-muted-foreground" };
+  }
+}
+
+// Temporary debug IDs for POSTAGIRO verification
+const RIC_DEBUG_IDS = ["b13f8ccc", "3d134d53"];
 
 export default function Transactions() {
   const navigate = useNavigate();
@@ -341,23 +356,27 @@ export default function Transactions() {
                         </div>
                       </TableCell>
                       <TableCell className="print:hidden">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            setReconciliationTransaction(transaction);
-                            setReconciliationOpen(true);
-                          }}
-                        >
-                          {(transaction as any).reconciliation_status === "reconciled" ? (
-                            <CircleCheck className="h-4 w-4 text-success" />
-                          ) : (transaction as any).reconciliation_status === "suggested" ? (
-                            <CircleDot className="h-4 w-4 text-destructive" />
-                          ) : (
-                            <Circle className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </Button>
+                        {(() => {
+                          const status = (transaction as any).reconciliation_status || "none";
+                          const { Icon, className } = getRicIndicator(status);
+                          // Temporary debug logging for POSTAGIRO
+                          if (RIC_DEBUG_IDS.some((d) => transaction.id.startsWith(d))) {
+                            console.log(`[RIC_DEBUG] render id=${transaction.id.slice(0, 12)} status=${status} → icon=${Icon.displayName}`);
+                          }
+                          return (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => {
+                                setReconciliationTransaction(transaction);
+                                setReconciliationOpen(true);
+                              }}
+                            >
+                              <Icon className={`h-4 w-4 ${className}`} />
+                            </Button>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="print:hidden">
                         <div className="flex gap-1">

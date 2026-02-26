@@ -157,6 +157,81 @@ export function computeSuggestionsForTransaction(
   return results;
 }
 
+/* ─── centralised status sync (single source of truth) ─── */
+
+/**
+ * For each transactionId, sets reconciliation_status based on active suggestions:
+ * - reconciled → skip (never touch)
+ * - has active suggestions (as source OR candidate) → suggested
+ * - no active suggestions → none
+ */
+async function syncReconciliationStatusForTransactions(transactionIds: string[]) {
+  if (transactionIds.length === 0) return;
+
+  const uniqueIds = [...new Set(transactionIds)];
+
+  // Fetch current status for all IDs
+  const { data: txns } = await supabase
+    .from("transactions")
+    .select("id, reconciliation_status")
+    .in("id", uniqueIds);
+
+  if (!txns || txns.length === 0) return;
+
+  // Skip already reconciled
+  const nonReconciled = txns.filter((t) => t.reconciliation_status !== "reconciled");
+  if (nonReconciled.length === 0) return;
+
+  const idsToCheck = nonReconciled.map((t) => t.id);
+
+  // Fetch all active suggestions involving these IDs (as source or candidate)
+  const { data: asSource } = await supabase
+    .from("reconciliation_suggestions" as any)
+    .select("source_transaction_id")
+    .in("source_transaction_id", idsToCheck)
+    .eq("dismissed", false)
+    .limit(2000);
+
+  const { data: asCandidate } = await supabase
+    .from("reconciliation_suggestions" as any)
+    .select("candidate_transaction_id")
+    .in("candidate_transaction_id", idsToCheck)
+    .eq("dismissed", false)
+    .limit(2000);
+
+  const hasActiveSuggestion = new Set<string>();
+  (asSource || []).forEach((r: any) => hasActiveSuggestion.add(r.source_transaction_id));
+  (asCandidate || []).forEach((r: any) => hasActiveSuggestion.add(r.candidate_transaction_id));
+
+  // Debug logging for POSTAGIRO transactions
+  const DEBUG_IDS = ["b13f8ccc", "3d134d53"];
+  for (const t of nonReconciled) {
+    if (DEBUG_IDS.some((d) => t.id.startsWith(d))) {
+      console.log(`[RIC_DEBUG] syncStatus id=${t.id.slice(0, 12)} current=${t.reconciliation_status} hasActive=${hasActiveSuggestion.has(t.id)} → ${hasActiveSuggestion.has(t.id) ? "suggested" : "none"}`);
+    }
+  }
+
+  // Set suggested for those with active suggestions (only if currently not suggested)
+  const toSuggest = idsToCheck.filter((id) => hasActiveSuggestion.has(id));
+  if (toSuggest.length > 0) {
+    await supabase
+      .from("transactions")
+      .update({ reconciliation_status: "suggested" })
+      .in("id", toSuggest)
+      .neq("reconciliation_status", "suggested");
+  }
+
+  // Set none for those without active suggestions (only if currently suggested)
+  const toNone = idsToCheck.filter((id) => !hasActiveSuggestion.has(id));
+  if (toNone.length > 0) {
+    await supabase
+      .from("transactions")
+      .update({ reconciliation_status: "none" })
+      .in("id", toNone)
+      .eq("reconciliation_status", "suggested");
+  }
+}
+
 /* ─── bulk generation ─── */
 
 export async function generateSuggestionsForIds(
@@ -167,7 +242,7 @@ export async function generateSuggestionsForIds(
 
   console.log(`[suggestions] generateSuggestionsForIds called with ${transactionIds.length} IDs`);
 
-  // Fetch all non-reconciled, non-deleted transactions for the user
+  // Fetch all non-deleted transactions for the user
   const { data: allTxns, error } = await supabase
     .from("transactions")
     .select("id, date, amount, type, conto_id, description, reconciliation_status, deleted_at, reconciliation_id")
@@ -183,7 +258,6 @@ export async function generateSuggestionsForIds(
 
   const sourceTxns = allTxns.filter((t) => transactionIds.includes(t.id));
   const allSuggestions: SuggestionRow[] = [];
-  const affectedIds = new Set<string>();
 
   console.log(`[suggestions] Source transactions to process: ${sourceTxns.length}`);
 
@@ -195,10 +269,6 @@ export async function generateSuggestionsForIds(
       userId,
     );
     allSuggestions.push(...suggestions);
-    if (suggestions.length > 0) {
-      affectedIds.add(src.id);
-      suggestions.forEach((s) => affectedIds.add(s.candidate_transaction_id));
-    }
   }
 
   console.log(`[suggestions] Total suggestions generated: ${allSuggestions.length}`);
@@ -240,74 +310,16 @@ export async function generateSuggestionsForIds(
     }
   }
 
-  // Update reconciliation_status for source transactions
-  const idsWithSuggestions = new Set(filteredSuggestions.map((s) => s.source_transaction_id));
-  const idsWithCandidates = new Set(filteredSuggestions.map((s) => s.candidate_transaction_id));
+  // Collect all affected IDs (source + candidate) for sync
+  const affectedIds = new Set<string>();
+  transactionIds.forEach((id) => affectedIds.add(id));
+  filteredSuggestions.forEach((s) => {
+    affectedIds.add(s.source_transaction_id);
+    affectedIds.add(s.candidate_transaction_id);
+  });
 
-  // Set 'suggested' for sources that got suggestions
-  const toSuggest = transactionIds.filter((id) => idsWithSuggestions.has(id));
-  if (toSuggest.length > 0) {
-    await supabase
-      .from("transactions")
-      .update({ reconciliation_status: "suggested" })
-      .in("id", toSuggest)
-      .in("reconciliation_status", ["none", "unreconciled"]);
-  }
-
-  // Also mark candidates as suggested if they were 'none'
-  const candidatesToSuggest = Array.from(idsWithCandidates).filter(
-    (id) => !transactionIds.includes(id),
-  );
-  if (candidatesToSuggest.length > 0) {
-    // Check if they already have suggestions as source
-    const { data: existing } = await supabase
-      .from("reconciliation_suggestions" as any)
-      .select("source_transaction_id")
-      .in("source_transaction_id", candidatesToSuggest)
-      .eq("dismissed", false)
-      .limit(1000);
-
-    const alreadyHaveSuggestions = new Set(
-      (existing || []).map((e: any) => e.source_transaction_id),
-    );
-
-    // For candidates that don't have their own suggestions as source, still mark suggested
-    const needUpdate = candidatesToSuggest.filter(
-      (id) => !alreadyHaveSuggestions.has(id),
-    );
-    if (needUpdate.length > 0) {
-      await supabase
-        .from("transactions")
-        .update({ reconciliation_status: "suggested" })
-        .in("id", needUpdate)
-        .in("reconciliation_status", ["none", "unreconciled"]);
-    }
-  }
-
-  // Set 'none' for sources with no suggestions (only if currently 'suggested')
-  const toNone = transactionIds.filter((id) => !idsWithSuggestions.has(id));
-  if (toNone.length > 0) {
-    // Check they don't have suggestions as candidate either
-    const { data: asCandidateRows } = await supabase
-      .from("reconciliation_suggestions" as any)
-      .select("candidate_transaction_id")
-      .in("candidate_transaction_id", toNone)
-      .eq("dismissed", false)
-      .limit(1000);
-
-    const hasAsCandidate = new Set(
-      (asCandidateRows || []).map((r: any) => r.candidate_transaction_id),
-    );
-    const reallyNone = toNone.filter((id) => !hasAsCandidate.has(id));
-
-    if (reallyNone.length > 0) {
-      await supabase
-        .from("transactions")
-        .update({ reconciliation_status: "none" })
-        .in("id", reallyNone)
-        .eq("reconciliation_status", "suggested");
-    }
-  }
+  // Use centralised sync to set correct status
+  await syncReconciliationStatusForTransactions(Array.from(affectedIds));
 }
 
 /* ─── React hooks ─── */
@@ -379,35 +391,26 @@ export function useDismissSuggestion() {
 
   return useMutation({
     mutationFn: async ({ suggestionId, transactionId }: { suggestionId: string; transactionId: string }) => {
+      // Read the suggestion to get both transaction IDs before dismissing
+      const { data: suggestion } = await supabase
+        .from("reconciliation_suggestions" as any)
+        .select("source_transaction_id, candidate_transaction_id")
+        .eq("id", suggestionId)
+        .single();
+
       const { error } = await supabase
         .from("reconciliation_suggestions" as any)
         .update({ dismissed: true })
         .eq("id", suggestionId);
       if (error) throw error;
 
-      // Check if any active suggestions remain for this transaction
-      const { data: asSource } = await supabase
-        .from("reconciliation_suggestions" as any)
-        .select("id")
-        .eq("source_transaction_id", transactionId)
-        .eq("dismissed", false)
-        .limit(1);
-
-      const { data: asCandidate } = await supabase
-        .from("reconciliation_suggestions" as any)
-        .select("id")
-        .eq("candidate_transaction_id", transactionId)
-        .eq("dismissed", false)
-        .limit(1);
-
-      const remaining = (asSource?.length || 0) + (asCandidate?.length || 0);
-      if (remaining === 0) {
-        await supabase
-          .from("transactions")
-          .update({ reconciliation_status: "none" })
-          .eq("id", transactionId)
-          .eq("reconciliation_status", "suggested");
+      // Sync status for BOTH transactions (source + candidate), not just the one open in the panel
+      const idsToSync: string[] = [transactionId];
+      if (suggestion) {
+        const s = suggestion as any;
+        idsToSync.push(s.source_transaction_id, s.candidate_transaction_id);
       }
+      await syncReconciliationStatusForTransactions([...new Set(idsToSync)]);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
