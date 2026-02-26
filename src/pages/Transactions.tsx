@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, CircleDot, CircleCheck } from "lucide-react";
+import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, CircleDot, CircleCheck, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -29,6 +29,7 @@ import {
   useDeleteTransaction,
   TransactionWithCategory,
 } from "@/hooks/useTransactions";
+import { useRecalculateAllSuggestions } from "@/hooks/useReconciliationSuggestions";
 import { toast } from "@/hooks/use-toast";
 
 export default function Transactions() {
@@ -84,6 +85,28 @@ export default function Transactions() {
 
   const { data: transactions = [], isLoading, isPlaceholderData } = useFilteredTransactions(filters);
   const deleteMutation = useDeleteTransaction();
+  const recalcMutation = useRecalculateAllSuggestions();
+  const backfillDoneRef = useRef(false);
+
+  // Auto-backfill: on first load, if there are transactions but no suggestions yet
+  useEffect(() => {
+    if (backfillDoneRef.current || isLoading || transactions.length === 0) return;
+    const hasNone = transactions.some((t) => (t as any).reconciliation_status === "none");
+    const hasSuggested = transactions.some((t) => (t as any).reconciliation_status === "suggested");
+    if (hasNone && !hasSuggested) {
+      backfillDoneRef.current = true;
+      console.log("[suggestions] Auto-backfill triggered");
+      recalcMutation.mutate(undefined, {
+        onSuccess: (count) => {
+          if (count && count > 0) {
+            toast({ title: `Proposte di riconciliazione generate per ${count} transazioni` });
+          }
+        },
+      });
+    } else {
+      backfillDoneRef.current = true;
+    }
+  }, [isLoading, transactions]);
 
   // Calcola totali
   const totals = useMemo(() => {
@@ -167,6 +190,22 @@ export default function Transactions() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => recalcMutation.mutate(undefined, {
+              onSuccess: (count) => {
+                toast({ title: `Riconciliazione ricalcolata per ${count} transazioni` });
+              },
+              onError: () => {
+                toast({ title: "Errore nel ricalcolo", variant: "destructive" });
+              },
+            })}
+            disabled={recalcMutation.isPending}
+            title="Ricalcola proposte di riconciliazione"
+          >
+            <RefreshCw className={`h-4 w-4 ${recalcMutation.isPending ? "animate-spin" : ""}`} />
+          </Button>
           <Button variant="outline" className="gap-2" onClick={() => navigate("/import-transazioni")}>
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Importa</span>

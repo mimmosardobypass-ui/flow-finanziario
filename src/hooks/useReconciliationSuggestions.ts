@@ -165,6 +165,8 @@ export async function generateSuggestionsForIds(
 ) {
   if (transactionIds.length === 0) return;
 
+  console.log(`[suggestions] generateSuggestionsForIds called with ${transactionIds.length} IDs`);
+
   // Fetch all non-reconciled, non-deleted transactions for the user
   const { data: allTxns, error } = await supabase
     .from("transactions")
@@ -173,11 +175,17 @@ export async function generateSuggestionsForIds(
     .is("deleted_at", null)
     .limit(2000);
 
-  if (error || !allTxns) return;
+  if (error || !allTxns) {
+    console.error("[suggestions] Error fetching transactions:", error);
+    return;
+  }
+  console.log(`[suggestions] Total transactions fetched: ${allTxns.length}`);
 
   const sourceTxns = allTxns.filter((t) => transactionIds.includes(t.id));
   const allSuggestions: SuggestionRow[] = [];
   const affectedIds = new Set<string>();
+
+  console.log(`[suggestions] Source transactions to process: ${sourceTxns.length}`);
 
   for (const src of sourceTxns) {
     if (src.reconciliation_status === "reconciled") continue;
@@ -192,6 +200,8 @@ export async function generateSuggestionsForIds(
       suggestions.forEach((s) => affectedIds.add(s.candidate_transaction_id));
     }
   }
+
+  console.log(`[suggestions] Total suggestions generated: ${allSuggestions.length}`);
 
   // Delete old suggestions for these source transactions
   if (transactionIds.length > 0) {
@@ -396,6 +406,46 @@ export function useAcceptSuggestion() {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
       queryClient.invalidateQueries({ queryKey: ["reconciliation-group"] });
+    },
+  });
+}
+
+export function useRecalculateAllSuggestions() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Non autenticato");
+
+      // Fetch all non-reconciled transaction IDs
+      const { data: txns, error } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("user_id", user.id)
+        .is("deleted_at", null)
+        .in("reconciliation_status", ["none", "unreconciled"])
+        .limit(2000);
+
+      if (error) throw error;
+      if (!txns || txns.length === 0) return 0;
+
+      const ids = txns.map((t) => t.id);
+      console.log(`[suggestions] Recalculating for ${ids.length} transactions`);
+
+      // Process in batches of 50
+      const batchSize = 50;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        await generateSuggestionsForIds(batch, user.id);
+      }
+
+      return ids.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+      console.log(`[suggestions] Recalculation complete for ${count} transactions`);
     },
   });
 }
