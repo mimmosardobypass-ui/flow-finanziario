@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { CalendarIcon, Plus, Link, ArrowLeftRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -352,24 +352,18 @@ export function TransactionDialog({
                       <SelectValue placeholder={filteredTree.length === 0 ? "Nessuna categoria" : "Seleziona categoria"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {filteredTree.map((parent) =>
-                        parent.children.length > 0 ? (
-                          <SelectGroup key={parent.id}>
-                            <SelectItem value={parent.id} className="font-semibold">
-                              {parent.name}
-                            </SelectItem>
-                            {parent.children.map((child) => (
-                              <SelectItem key={child.id} value={child.id} className="pl-6">
-                                {child.name}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        ) : (
-                          <SelectItem key={parent.id} value={parent.id}>
+                    {filteredTree.map((parent) => (
+                        <React.Fragment key={parent.id}>
+                          <SelectItem value={parent.id} className={parent.children.length > 0 ? "font-semibold" : ""}>
                             {parent.name}
                           </SelectItem>
-                        )
-                      )}
+                          {parent.children.map((child) => (
+                            <SelectItem key={child.id} value={child.id} className="pl-6">
+                              ↳ {child.name}
+                            </SelectItem>
+                          ))}
+                        </React.Fragment>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
