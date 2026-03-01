@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
-import { ChevronRight, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { ChevronRight, ChevronDown, ChevronsUpDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -33,11 +34,31 @@ export function CategorySelect({
   );
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(allParentIds);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleOpenChange = (isOpen: boolean) => {
-    if (isOpen) setExpanded(new Set(allParentIds));
+    if (isOpen) {
+      setExpanded(new Set(allParentIds));
+      setSearchQuery("");
+    }
     setOpen(isOpen);
   };
+
+  const filteredCategories = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return categories;
+    return categories
+      .map((parent) => {
+        if (parent.name.toLowerCase().includes(q)) return parent;
+        const matchedChildren = parent.children.filter((c) =>
+          c.name.toLowerCase().includes(q)
+        );
+        if (matchedChildren.length > 0)
+          return { ...parent, children: matchedChildren };
+        return null;
+      })
+      .filter(Boolean) as CategoryWithChildren[];
+  }, [categories, searchQuery]);
 
   // Find the selected category name
   const selectedLabel = useMemo(() => {
@@ -86,9 +107,20 @@ export function CategorySelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <div className="p-2 border-b">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Cerca categoria..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 h-9"
+            />
+          </div>
+        </div>
         <ScrollArea className="max-h-60">
           <div className="py-1">
-            {showAllOption && (
+            {showAllOption && !searchQuery && (
               <button
                 type="button"
                 className={cn(
@@ -100,7 +132,7 @@ export function CategorySelect({
                 Tutte le categorie
               </button>
             )}
-            {categories.map((parent) => {
+            {filteredCategories.map((parent) => {
               const hasChildren = parent.children.length > 0;
               const isExpanded = expanded.has(parent.id);
 
@@ -155,9 +187,9 @@ export function CategorySelect({
                 </div>
               );
             })}
-            {categories.length === 0 && (
+            {filteredCategories.length === 0 && (
               <p className="px-3 py-2 text-sm text-muted-foreground">
-                Nessuna categoria
+                {searchQuery ? "Nessun risultato" : "Nessuna categoria"}
               </p>
             )}
           </div>
