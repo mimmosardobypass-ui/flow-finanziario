@@ -355,9 +355,9 @@ export function TransactionDialog({
                       {filteredTree.map((parent) =>
                         parent.children.length > 0 ? (
                           <SelectGroup key={parent.id}>
-                            <SelectLabel className="text-xs font-semibold text-muted-foreground px-2 py-1.5">
+                            <SelectItem value={parent.id} className="font-semibold">
                               {parent.name}
-                            </SelectLabel>
+                            </SelectItem>
                             {parent.children.map((child) => (
                               <SelectItem key={child.id} value={child.id} className="pl-6">
                                 {child.name}
