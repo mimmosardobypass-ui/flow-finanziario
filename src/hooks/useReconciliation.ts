@@ -121,11 +121,57 @@ export function useReconcile() {
         .in("id", allIds);
 
       if (error) throw error;
+
+      // Auto-assign "Giroconti" category for transfer reconciliations
+      if (reconciliationType === "transfer") {
+        // Find or create the "Giroconti" category
+        const { data: existingCat } = await supabase
+          .from("categories")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("name", "Giroconti")
+          .maybeSingle();
+
+        let girocontiCatId = existingCat?.id;
+
+        if (!girocontiCatId) {
+          const { data: newCat, error: catError } = await supabase
+            .from("categories")
+            .insert({ user_id: user.id, name: "Giroconti", type: "expense" })
+            .select("id")
+            .single();
+          if (catError) throw catError;
+          girocontiCatId = newCat.id;
+        }
+
+        // Assign category only to transactions without one
+        const uncategorizedIds = allTxns
+          .filter((t) => !(t as any).category_id)
+          .map((t) => t.id);
+
+        if (uncategorizedIds.length > 0) {
+          // Need to fetch full records to check category_id since our select didn't include it
+          const { data: fullTxns } = await supabase
+            .from("transactions")
+            .select("id, category_id")
+            .in("id", allIds)
+            .is("category_id", null);
+
+          const idsToUpdate = fullTxns?.map((t) => t.id) || [];
+          if (idsToUpdate.length > 0) {
+            await supabase
+              .from("transactions")
+              .update({ category_id: girocontiCatId })
+              .in("id", idsToUpdate);
+          }
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["reconciliation-group"] });
       queryClient.invalidateQueries({ queryKey: ["compatible-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
     },
   });
 }
@@ -133,8 +179,29 @@ export function useReconcile() {
 export function useUnreconcile() {
   const queryClient = useQueryClient();
 
+  const { user } = useAuth();
+
   return useMutation({
     mutationFn: async (reconciliationId: string) => {
+      if (!user) throw new Error("Not authenticated");
+
+      // Find "Giroconti" category to remove it from affected transactions
+      const { data: girocontiCat } = await supabase
+        .from("categories")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("name", "Giroconti")
+        .maybeSingle();
+
+      if (girocontiCat) {
+        // Reset category only for transactions that have "Giroconti"
+        await supabase
+          .from("transactions")
+          .update({ category_id: null })
+          .eq("reconciliation_id", reconciliationId)
+          .eq("category_id", girocontiCat.id);
+      }
+
       const { error } = await supabase
         .from("transactions")
         .update({ reconciliation_id: null, reconciliation_status: "none" as string, reconciliation_type: null } as any)
@@ -146,6 +213,7 @@ export function useUnreconcile() {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["reconciliation-group"] });
       queryClient.invalidateQueries({ queryKey: ["compatible-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
     },
   });
 }
