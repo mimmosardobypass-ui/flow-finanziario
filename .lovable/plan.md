@@ -1,17 +1,20 @@
 
 
-# Migliorare la barra di scorrimento nel selettore categorie
+# Rendere la barra di scorrimento sempre visibile nel selettore categorie
 
 ## Problema
 
-Quando una categoria ha molte sottocategorie, la lista nel dropdown non mostra una barra di scorrimento visibile, rendendo difficile capire che ci sono altre voci sotto.
+La `ScrollArea` di Radix nasconde la scrollbar di default. Anche con `type="auto"`, la barra appare solo durante lo scroll e puo' essere poco visibile.
 
 ## Soluzione
 
-Nel file `src/components/CategorySelect.tsx`:
+Nel file `src/components/CategorySelect.tsx`, cambiare il prop `type` della `ScrollArea` da `"auto"` a `"always"` per far si' che la barra di scorrimento sia sempre visibile quando il contenuto eccede l'altezza, esattamente come nello screenshot di riferimento.
 
-1. Aumentare l'altezza massima della `ScrollArea` da `max-h-60` (240px) a `max-h-80` (320px) per mostrare piu' voci
-2. Assicurarsi che la barra di scorrimento verticale di Radix sia sempre visibile quando il contenuto eccede l'altezza, usando la classe `data-[state=visible]:bg-border` sul thumb per renderla piu' evidente
+### Dettaglio tecnico
 
-Un solo file da modificare, una riga.
+| File | Modifica |
+|------|----------|
+| `src/components/CategorySelect.tsx` (riga ~225) | Cambiare `type="auto"` in `type="always"` sulla `ScrollArea` |
+
+Una sola parola da modificare.
 
