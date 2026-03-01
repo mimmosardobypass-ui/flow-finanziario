@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { TransactionWithCategory } from "@/hooks/useTransactions";
+import { isInternalTransfer } from "@/hooks/useDashboardStats";
 
 export function exportToExcel(
   transactions: TransactionWithCategory[],
@@ -15,23 +16,31 @@ export function exportToExcel(
     Categoria: t.categories?.name || "-",
     Descrizione: t.description || "-",
     Importo: t.type === "income" ? t.amount : -t.amount,
+    Giroconto: isInternalTransfer(t) ? "Sì" : "No",
   }));
 
-  // Calcola i totali
-  const totaleEntrate = transactions
+  // Filtra i giroconti per i totali statistici
+  const realTransactions = transactions.filter((t) => !isInternalTransfer(t));
+  const transferTransactions = transactions.filter((t) => isInternalTransfer(t));
+
+  // Calcola i totali (solo operazioni reali)
+  const totaleEntrate = realTransactions
     .filter((t) => t.type === "income")
     .reduce((sum, t) => sum + t.amount, 0);
   
-  const totaleUscite = transactions
+  const totaleUscite = realTransactions
     .filter((t) => t.type === "expense")
     .reduce((sum, t) => sum + t.amount, 0);
   
   const saldo = totaleEntrate - totaleUscite;
 
+  const totaleGiroconti = transferTransactions.reduce((sum, t) => sum + t.amount, 0);
+
   // Prepara riepilogo per categoria
   const categorySummary: Record<string, { tipo: string; totale: number }> = {};
   
-  transactions.forEach((t) => {
+  // Build category summary from real transactions only
+  realTransactions.forEach((t) => {
     const catName = t.categories?.name || "Senza categoria";
     if (!categorySummary[catName]) {
       categorySummary[catName] = {
@@ -44,9 +53,11 @@ export function exportToExcel(
 
   // Dati foglio riepilogo
   const summaryData = [
-    { Voce: "Totale Entrate", Importo: totaleEntrate },
-    { Voce: "Totale Uscite", Importo: totaleUscite },
+    { Voce: "Totale Entrate (esclusi giroconti)", Importo: totaleEntrate },
+    { Voce: "Totale Uscite (esclusi giroconti)", Importo: totaleUscite },
     { Voce: "Saldo", Importo: saldo },
+    { Voce: "", Importo: "" },
+    { Voce: "Totale Giroconti (esclusi dalle statistiche)", Importo: totaleGiroconti },
     { Voce: "", Importo: "" },
     { Voce: "RIEPILOGO PER CATEGORIA", Importo: "" },
   ];
@@ -71,6 +82,7 @@ export function exportToExcel(
     { wch: 20 }, // Categoria
     { wch: 30 }, // Descrizione
     { wch: 15 }, // Importo
+    { wch: 12 }, // Giroconto
   ];
   
   XLSX.utils.book_append_sheet(wb, ws1, "Transazioni");
@@ -78,7 +90,7 @@ export function exportToExcel(
   // Foglio 2: Riepilogo
   const ws2 = XLSX.utils.json_to_sheet(summaryData);
   ws2["!cols"] = [
-    { wch: 30 }, // Voce
+    { wch: 45 }, // Voce
     { wch: 15 }, // Importo
   ];
   

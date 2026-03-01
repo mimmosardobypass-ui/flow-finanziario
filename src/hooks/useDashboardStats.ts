@@ -14,6 +14,16 @@ import {
 } from "date-fns";
 import { TransactionWithCategory } from "./useTransactions";
 
+/** A transaction is an internal transfer (giroconto) if it was created via
+ *  the transfer function OR manually reconciled as a transfer. These must be
+ *  excluded from income/expense statistics (but NOT from balance calculations). */
+export function isInternalTransfer(t: TransactionWithCategory): boolean {
+  return (
+    !!t.transfer_id ||
+    (t.reconciliation_type === "transfer" && t.reconciliation_status === "reconciled")
+  );
+}
+
 export type PeriodType = "thisMonth" | "threeMonths" | "year" | "custom";
 
 export interface CategoryBreakdown {
@@ -223,8 +233,10 @@ export function useDashboardStats(
       totalBalance += amount;
     });
 
-    // Calculate period stats from periodTransactions only
+    // Calculate period stats from periodTransactions only (excluding internal transfers)
     periodTransactions.forEach((t) => {
+      if (isInternalTransfer(t)) return; // Skip giroconti
+
       if (t.type === "income") {
         periodIncome += t.amount;
 
@@ -351,6 +363,8 @@ export function usePeriodComparison(
     let previousExpenses = 0;
 
     transactions.forEach((t) => {
+      if (isInternalTransfer(t)) return; // Skip giroconti
+
       if (isInRange(t.date, currentRange)) {
         if (t.type === "income") {
           currentIncome += t.amount;
