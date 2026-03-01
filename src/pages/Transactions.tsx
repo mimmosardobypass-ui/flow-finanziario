@@ -29,6 +29,7 @@ import {
   useDeleteTransaction,
   TransactionWithCategory,
 } from "@/hooks/useTransactions";
+import { useCategories } from "@/hooks/useCategories";
 import { useRecalculateAllSuggestions } from "@/hooks/useReconciliationSuggestions";
 import { toast } from "@/hooks/use-toast";
 
@@ -101,7 +102,20 @@ export default function Transactions() {
   }, [filters, setSearchParams]);
 
   const { data: transactions = [], isLoading, isPlaceholderData } = useFilteredTransactions(filters);
+  const { data: allCategories = [] } = useCategories();
   const deleteMutation = useDeleteTransaction();
+
+  // Build a map: categoryId -> parent category name
+  const categoryParentMap = useMemo(() => {
+    const map = new Map<string, string>();
+    allCategories.forEach((cat) => {
+      if (cat.parent_id) {
+        const parent = allCategories.find((p) => p.id === cat.parent_id);
+        if (parent) map.set(cat.id, parent.name);
+      }
+    });
+    return map;
+  }, [allCategories]);
   const recalcMutation = useRecalculateAllSuggestions();
   const backfillDoneRef = useRef(false);
 
@@ -339,9 +353,16 @@ export default function Transactions() {
                       </TableCell>
                       <TableCell>
                         {transaction.categories ? (
-                          <Badge variant="secondary">
-                            {transaction.categories.name}
-                          </Badge>
+                          <div className="flex flex-col gap-0.5">
+                            {categoryParentMap.has(transaction.categories.id) && (
+                              <span className="text-xs text-muted-foreground">
+                                {categoryParentMap.get(transaction.categories.id)}
+                              </span>
+                            )}
+                            <Badge variant="secondary">
+                              {transaction.categories.name}
+                            </Badge>
+                          </div>
                         ) : (
                           "-"
                         )}
