@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useCategories } from "./useCategories";
 import { 
   parseISO, 
   startOfDay, 
@@ -32,6 +33,7 @@ export interface CategoryBreakdown {
   amount: number;
   percentage: number;
   color: string;
+  children?: CategoryBreakdown[];
 }
 
 export interface PeriodComparison {
@@ -203,19 +205,18 @@ export function useDashboardStats(
   transactions: TransactionWithCategory[],
   periodDateRange: DateRange
 ): DashboardStats {
+  const { data: allCategories = [] } = useCategories();
+
   return useMemo(() => {
     const { startDate, endDate } = periodDateRange;
 
-    // Helper to check if date is in period - using parseISO for consistent date handling
     const isInPeriod = (dateStr: string): boolean => {
       const txDate = parseISO(dateStr);
       return isWithinInterval(txDate, { start: startDate, end: endDate });
     };
 
-    // 1. Filter all transactions for the current period FIRST (single source of truth)
     const periodTransactions = transactions.filter((t) => isInPeriod(t.date));
 
-    // 2. Calculate totals from periodTransactions
     let totalBalance = 0;
     let periodIncome = 0;
     let periodExpenses = 0;
@@ -224,28 +225,45 @@ export function useDashboardStats(
     let uncategorizedIncomeCount = 0;
     let uncategorizedExpensesCount = 0;
 
-    const categoryTotals: Record<string, { id: string; name: string; amount: number }> = {};
-    const incomeCategoryTotals: Record<string, { id: string; name: string; amount: number }> = {};
+    // Build parent lookup
+    const parentMap = new Map<string, string>();
+    allCategories.forEach((c) => {
+      if (c.parent_id) parentMap.set(c.id, c.parent_id);
+    });
 
-    // Calculate total balance from ALL transactions
+    const categoryTotals: Record<string, { id: string; name: string; amount: number; children: Record<string, { id: string; name: string; amount: number }> }> = {};
+    const incomeCategoryTotals: Record<string, { id: string; name: string; amount: number; children: Record<string, { id: string; name: string; amount: number }> }> = {};
+
     transactions.forEach((t) => {
       const amount = t.type === "income" ? t.amount : -t.amount;
       totalBalance += amount;
     });
 
-    // Calculate period stats from periodTransactions only (excluding internal transfers)
     periodTransactions.forEach((t) => {
-      if (isInternalTransfer(t)) return; // Skip giroconti
+      if (isInternalTransfer(t)) return;
 
       if (t.type === "income") {
         periodIncome += t.amount;
 
         if (t.categories) {
           const catId = t.categories.id;
-          if (!incomeCategoryTotals[catId]) {
-            incomeCategoryTotals[catId] = { id: catId, name: t.categories.name, amount: 0 };
+          const parentId = parentMap.get(catId);
+          const rootId = parentId || catId;
+          const rootName = parentId
+            ? allCategories.find((c) => c.id === parentId)?.name || t.categories.name
+            : t.categories.name;
+
+          if (!incomeCategoryTotals[rootId]) {
+            incomeCategoryTotals[rootId] = { id: rootId, name: rootName, amount: 0, children: {} };
           }
-          incomeCategoryTotals[catId].amount += t.amount;
+          incomeCategoryTotals[rootId].amount += t.amount;
+
+          if (parentId) {
+            if (!incomeCategoryTotals[rootId].children[catId]) {
+              incomeCategoryTotals[rootId].children[catId] = { id: catId, name: t.categories.name, amount: 0 };
+            }
+            incomeCategoryTotals[rootId].children[catId].amount += t.amount;
+          }
         } else {
           uncategorizedIncome += t.amount;
           uncategorizedIncomeCount++;
@@ -255,10 +273,23 @@ export function useDashboardStats(
 
         if (t.categories) {
           const catId = t.categories.id;
-          if (!categoryTotals[catId]) {
-            categoryTotals[catId] = { id: catId, name: t.categories.name, amount: 0 };
+          const parentId = parentMap.get(catId);
+          const rootId = parentId || catId;
+          const rootName = parentId
+            ? allCategories.find((c) => c.id === parentId)?.name || t.categories.name
+            : t.categories.name;
+
+          if (!categoryTotals[rootId]) {
+            categoryTotals[rootId] = { id: rootId, name: rootName, amount: 0, children: {} };
           }
-          categoryTotals[catId].amount += t.amount;
+          categoryTotals[rootId].amount += t.amount;
+
+          if (parentId) {
+            if (!categoryTotals[rootId].children[catId]) {
+              categoryTotals[rootId].children[catId] = { id: catId, name: t.categories.name, amount: 0 };
+            }
+            categoryTotals[rootId].children[catId].amount += t.amount;
+          }
         } else {
           uncategorizedExpenses += t.amount;
           uncategorizedExpensesCount++;
@@ -266,18 +297,34 @@ export function useDashboardStats(
       }
     });
 
-    // Build sorted categories with "Senza Categoria" included
-    const sortedCategories: CategoryBreakdown[] = Object.values(categoryTotals)
-      .sort((a, b) => b.amount - a.amount)
-      .map((cat, index) => ({
-        id: cat.id,
-        name: cat.name,
-        amount: cat.amount,
-        percentage: periodExpenses > 0 ? Math.round((cat.amount / periodExpenses) * 100) : 0,
-        color: EXPENSE_COLORS[index % EXPENSE_COLORS.length],
-      }));
+    const buildBreakdown = (
+      totals: typeof categoryTotals,
+      total: number,
+      colors: string[]
+    ): CategoryBreakdown[] => {
+      const sorted = Object.values(totals)
+        .sort((a, b) => b.amount - a.amount)
+        .map((cat, index) => ({
+          id: cat.id,
+          name: cat.name,
+          amount: cat.amount,
+          percentage: total > 0 ? Math.round((cat.amount / total) * 100) : 0,
+          color: colors[index % colors.length],
+          children: Object.values(cat.children)
+            .sort((a, b) => b.amount - a.amount)
+            .map((child, ci) => ({
+              id: child.id,
+              name: child.name,
+              amount: child.amount,
+              percentage: cat.amount > 0 ? Math.round((child.amount / cat.amount) * 100) : 0,
+              color: colors[(index + ci + 1) % colors.length],
+            })),
+        }));
+      return sorted;
+    };
 
-    // Add uncategorized expenses if any
+    const sortedCategories = buildBreakdown(categoryTotals, periodExpenses, EXPENSE_COLORS);
+
     if (uncategorizedExpenses > 0) {
       sortedCategories.push({
         id: "uncategorized",
@@ -288,17 +335,8 @@ export function useDashboardStats(
       });
     }
 
-    const sortedIncomeCategories: CategoryBreakdown[] = Object.values(incomeCategoryTotals)
-      .sort((a, b) => b.amount - a.amount)
-      .map((cat, index) => ({
-        id: cat.id,
-        name: cat.name,
-        amount: cat.amount,
-        percentage: periodIncome > 0 ? Math.round((cat.amount / periodIncome) * 100) : 0,
-        color: INCOME_COLORS[index % INCOME_COLORS.length],
-      }));
+    const sortedIncomeCategories = buildBreakdown(incomeCategoryTotals, periodIncome, INCOME_COLORS);
 
-    // Add uncategorized income if any
     if (uncategorizedIncome > 0) {
       sortedIncomeCategories.push({
         id: "uncategorized",
@@ -309,15 +347,13 @@ export function useDashboardStats(
       });
     }
 
-    // Insights
     const topExpenseCategory = sortedCategories.length > 0 ? sortedCategories[0] : null;
     const topIncomeCategory = sortedIncomeCategories.length > 0 ? sortedIncomeCategories[0] : null;
     const savingsRate = periodIncome > 0 ? Math.round(((periodIncome - periodExpenses) / periodIncome) * 100) : 0;
     const periodDays = Math.max(1, differenceInDays(endDate, startDate) + 1);
     const avgDailyExpense = periodExpenses / periodDays;
 
-    // Get recent transactions from the period (or global if none)
-    const recentTransactions = periodTransactions.length > 0 
+    const recentTransactions = periodTransactions.length > 0
       ? periodTransactions.slice(0, 5)
       : transactions.slice(0, 5);
 
@@ -338,12 +374,11 @@ export function useDashboardStats(
       topIncomeCategory,
       savingsRate,
       avgDailyExpense,
-      // Comparisons will be calculated separately
       incomeComparison: { current: periodIncome, previous: 0, delta: 0, deltaPercent: 0, isPositive: true },
       expensesComparison: { current: periodExpenses, previous: 0, delta: 0, deltaPercent: 0, isPositive: true },
       netComparison: { current: periodIncome - periodExpenses, previous: 0, delta: 0, deltaPercent: 0, isPositive: true },
     };
-  }, [transactions, periodDateRange]);
+  }, [transactions, periodDateRange, allCategories]);
 }
 
 export function usePeriodComparison(

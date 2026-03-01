@@ -1,29 +1,33 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Tag, TrendingUp, TrendingDown } from "lucide-react";
+import { Plus, Pencil, Trash2, Tag, TrendingUp, TrendingDown, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { useCategories, Category } from "@/hooks/useCategories";
+import { useCategories, Category, useCategoryTree, CategoryWithChildren } from "@/hooks/useCategories";
 import { useDeleteCategory } from "@/hooks/useCategoryMutations";
 import { CategoryDialog } from "@/components/CategoryDialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { toast } from "@/hooks/use-toast";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export default function Categories() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [defaultParentId, setDefaultParentId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
 
   const { data: categories, isLoading } = useCategories();
+  const categoryTree = useCategoryTree();
   const deleteMutation = useDeleteCategory();
 
-  const incomeCategories = categories?.filter((c) => c.type === "income") || [];
-  const expenseCategories = categories?.filter((c) => c.type === "expense") || [];
+  const incomeTree = categoryTree.filter((c) => c.type === "income");
+  const expenseTree = categoryTree.filter((c) => c.type === "expense");
 
   const handleEdit = (category: Category) => {
     setSelectedCategory(category);
+    setDefaultParentId(null);
     setDialogOpen(true);
   };
 
@@ -50,6 +54,13 @@ export default function Categories() {
 
   const handleAddNew = () => {
     setSelectedCategory(null);
+    setDefaultParentId(null);
+    setDialogOpen(true);
+  };
+
+  const handleAddSubcategory = (parentId: string) => {
+    setSelectedCategory(null);
+    setDefaultParentId(parentId);
     setDialogOpen(true);
   };
 
@@ -68,6 +79,113 @@ export default function Categories() {
     );
   }
 
+  const CategoryItem = ({ category }: { category: Category }) => (
+    <li className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+      <div className="flex items-center gap-2">
+        <Tag className="h-4 w-4 text-muted-foreground" />
+        <span className="font-medium">{category.name}</span>
+      </div>
+      <div className="flex gap-1">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(category)}>
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive hover:text-destructive"
+          onClick={() => handleDelete(category.id)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </li>
+  );
+
+  const ParentCategoryItem = ({ category }: { category: CategoryWithChildren }) => {
+    const hasChildren = category.children.length > 0;
+
+    if (!hasChildren) {
+      return (
+        <li className="space-y-1">
+          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+            <div className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{category.name}</span>
+            </div>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-primary hover:text-primary"
+                onClick={() => handleAddSubcategory(category.id)}
+                title="Aggiungi sottocategoria"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(category)}>
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive hover:text-destructive"
+                onClick={() => handleDelete(category.id)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </li>
+      );
+    }
+
+    return (
+      <li>
+        <Collapsible defaultOpen>
+          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+            <CollapsibleTrigger className="flex items-center gap-2 group cursor-pointer">
+              <ChevronDown className="h-4 w-4 text-muted-foreground group-data-[state=closed]:hidden" />
+              <ChevronRight className="h-4 w-4 text-muted-foreground group-data-[state=open]:hidden" />
+              <span className="font-medium">{category.name}</span>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                {category.children.length}
+              </Badge>
+            </CollapsibleTrigger>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-primary hover:text-primary"
+                onClick={() => handleAddSubcategory(category.id)}
+                title="Aggiungi sottocategoria"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(category)}>
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive hover:text-destructive"
+                onClick={() => handleDelete(category.id)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <CollapsibleContent>
+            <ul className="pl-6 mt-1 space-y-1">
+              {category.children.map((child) => (
+                <CategoryItem key={child.id} category={child} />
+              ))}
+            </ul>
+          </CollapsibleContent>
+        </Collapsible>
+      </li>
+    );
+  };
+
   const CategoryList = ({
     title,
     icon: Icon,
@@ -76,16 +194,14 @@ export default function Categories() {
   }: {
     title: string;
     icon: typeof TrendingUp;
-    items: Category[];
+    items: CategoryWithChildren[];
     type: "income" | "expense";
   }) => (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Icon
-            className={`h-5 w-5 ${
-              type === "income" ? "text-success" : "text-destructive"
-            }`}
+            className={`h-5 w-5 ${type === "income" ? "text-success" : "text-destructive"}`}
           />
           {title}
           <Badge variant="secondary" className="ml-auto">
@@ -101,33 +217,7 @@ export default function Categories() {
         ) : (
           <ul className="space-y-2">
             {items.map((category) => (
-              <li
-                key={category.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Tag className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{category.name}</span>
-                </div>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => handleEdit(category)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(category.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </li>
+              <ParentCategoryItem key={category.id} category={category} />
             ))}
           </ul>
         )}
@@ -161,18 +251,8 @@ export default function Categories() {
         </Card>
       ) : (
         <div className="grid md:grid-cols-2 gap-6">
-          <CategoryList
-            title="Entrate"
-            icon={TrendingUp}
-            items={incomeCategories}
-            type="income"
-          />
-          <CategoryList
-            title="Uscite"
-            icon={TrendingDown}
-            items={expenseCategories}
-            type="expense"
-          />
+          <CategoryList title="Entrate" icon={TrendingUp} items={incomeTree} type="income" />
+          <CategoryList title="Uscite" icon={TrendingDown} items={expenseTree} type="expense" />
         </div>
       )}
 
@@ -180,6 +260,7 @@ export default function Categories() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         category={selectedCategory}
+        defaultParentId={defaultParentId}
       />
 
       <DeleteConfirmDialog

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { TransactionWithCategory } from "./useTransactions";
+import { useGetCategoryWithChildrenIds } from "./useCategories";
 
 export interface TransactionFilters {
   searchText?: string;
@@ -17,11 +18,17 @@ export interface TransactionFilters {
 
 export function useFilteredTransactions(filters: TransactionFilters) {
   const { user } = useAuth();
+  const getCategoryWithChildrenIds = useGetCategoryWithChildrenIds();
+
+  // Resolve category filter to include subcategories
+  const resolvedCategoryIds = filters.categoryId
+    ? getCategoryWithChildrenIds(filters.categoryId)
+    : undefined;
 
   // queryKey SENZA searchText - il filtro testuale è lato client e non deve causare refetch
   const serverFilters = {
     type: filters.type,
-    categoryId: filters.categoryId,
+    categoryIds: resolvedCategoryIds,
     contoId: filters.contoId,
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,
@@ -60,11 +67,13 @@ export function useFilteredTransactions(filters: TransactionFilters) {
         query = query.eq("type", filters.type);
       }
 
-      if (filters.categoryId) {
-        if (filters.categoryId === "uncategorized") {
+      if (resolvedCategoryIds) {
+        if (resolvedCategoryIds.includes("uncategorized")) {
           query = query.is("category_id", null);
+        } else if (resolvedCategoryIds.length === 1) {
+          query = query.eq("category_id", resolvedCategoryIds[0]);
         } else {
-          query = query.eq("category_id", filters.categoryId);
+          query = query.in("category_id", resolvedCategoryIds);
         }
       }
 
