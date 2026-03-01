@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { 
   getYear,
   eachDayOfInterval,
@@ -11,7 +11,8 @@ import {
   isSameDay,
   isSameMonth,
   differenceInDays,
-  parseISO
+  parseISO,
+  isWithinInterval
 } from "date-fns";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -107,6 +108,25 @@ export default function Dashboard() {
     to: undefined,
   });
   const [showCumulative, setShowCumulative] = useState(false);
+  const hasAutoDetected = useRef(false);
+
+  // Auto-detect: if current month has no transactions, switch to "threeMonths"
+  useEffect(() => {
+    if (hasAutoDetected.current || isLoading || transactions.length === 0) return;
+    hasAutoDetected.current = true;
+
+    const now = new Date();
+    const monthStart = startOfMonth(now);
+    const monthEnd = endOfMonth(now);
+    const hasCurrentMonthTx = transactions.some((t) => {
+      const d = parseISO(t.date);
+      return isWithinInterval(d, { start: monthStart, end: monthEnd });
+    });
+
+    if (!hasCurrentMonthTx) {
+      setPeriodType("threeMonths");
+    }
+  }, [transactions, isLoading]);
 
   // Get available years from transactions
   const availableYears = useMemo(() => {
