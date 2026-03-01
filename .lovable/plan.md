@@ -1,59 +1,41 @@
 
 
-# Redesign pagina Categorie
+# Fix visibilita sottocategorie nel selettore categoria
 
-## Cosa cambia
+## Problema identificato
 
-La pagina Categorie viene ridisegnata per avere un layout pulito e compatto come nello screenshot: lista unica in una Card con campo di ricerca in alto, quadratini colorati per le categorie padre, sottocategorie indentate con prefisso "/".
+Le sottocategorie esistono nel database e il codice le gestisce correttamente. Il problema e' che nel componente `CategorySelect`, tutte le categorie padre partono **chiuse** (collapsed), quindi le sottocategorie non sono immediatamente visibili. L'utente deve cliccare la piccola freccia accanto alla categoria padre per espandere e vedere le figlie -- un comportamento facilmente ignorabile.
 
-## Layout finale
+## Soluzione proposta
 
-```text
-Categorie                         [+ Nuova Categoria]
+Modificare `CategorySelect.tsx` per **espandere automaticamente** tutte le categorie padre che hanno figli, cosi le sottocategorie sono subito visibili quando si apre il dropdown.
 
-┌───────────────────────────────────────────────────┐
-│  🔍 Cerca o crea una categoria                    │
-├───────────────────────────────────────────────────┤
-│  ■ Accredito da Minis...         ✏️  ➕  🗑️      │
-│  ■ Accredito Finanzia...         ✏️  ➕  🗑️      │
-│    / Cofidis                                      │
-│    / Compass                                      │
-│    / Findomestic                                  │
-│  ■ Accredito POS                 ✏️  ➕  🗑️      │
-│    / BCC Bancomat                                 │
-│  ■ Affitto                       ✏️  ➕  🗑️      │
-└───────────────────────────────────────────────────┘
+## Dettaglio tecnico
+
+### `src/components/CategorySelect.tsx`
+
+Cambiare l'inizializzazione dello stato `expanded` da un Set vuoto a un Set contenente tutti gli ID delle categorie che hanno figli. Questo viene calcolato con un `useMemo` basato sulla prop `categories`:
+
+```tsx
+// Prima (tutto chiuso):
+const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+// Dopo (auto-espande categorie con figli):
+const parentIds = useMemo(
+  () => new Set(categories.filter(c => c.children.length > 0).map(c => c.id)),
+  [categories]
+);
 ```
 
-## Dettagli
+Usare un `useEffect` per sincronizzare lo stato `expanded` con `parentIds` quando le categorie cambiano, oppure usare direttamente `parentIds` come valore iniziale e aggiornarlo all'apertura del popover.
 
-### Campo di ricerca
-- Input con icona Search in alto nella Card
-- Filtra categorie in tempo reale (sia padre che figlie)
-- Placeholder: "Cerca o crea una categoria"
+L'approccio piu' pulito: resettare `expanded` a "tutti aperti" ogni volta che il Popover si apre, cosi l'utente vede sempre tutte le sottocategorie disponibili.
 
-### Categorie padre
-- Quadratino colorato (colore generato da hash del nome, pastello)
-- Nome troncato con ellipsis se troppo lungo
-- 3 pulsanti inline a destra: modifica (matita), aggiungi sottocategoria (+), elimina (cestino)
+### Riepilogo modifiche
 
-### Sottocategorie
-- Indentate sotto il padre, prefisso "/" prima del nome
-- Pulsanti modifica e elimina visibili al hover
-- Nessun quadratino colorato
+| File | Modifica |
+|------|----------|
+| `src/components/CategorySelect.tsx` | Auto-espandere categorie padre con figli all'apertura del dropdown |
 
-### Colori automatici
-Funzione helper che converte il nome categoria in un colore HSL pastello consistente (stesso nome = stesso colore sempre).
-
-## File modificato
-
-### `src/pages/Categories.tsx`
-- Aggiungere stato `searchQuery` per il filtro
-- Aggiungere funzione `stringToColor(name)` per generare colori pastello
-- Rimuovere la divisione in due colonne (incomeTree/expenseTree)
-- Usare `categoryTree` completo, filtrato per searchQuery
-- Nuovo layout: Card singola con input di ricerca + lista unificata
-- Categorie padre: quadratino colorato + nome + azioni inline
-- Sottocategorie: indentate con "/" + azioni al hover
-- Mantenere i dialog esistenti (CategoryDialog, DeleteConfirmDialog) senza modifiche
+Nessun altro file necessita di modifiche -- il `TransactionDialog`, `useCategories` e il database funzionano gia' correttamente.
 
