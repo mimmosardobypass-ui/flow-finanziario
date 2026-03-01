@@ -222,7 +222,7 @@ export function CategorySelect({
               </Button>
             )}
           </div>
-          <ScrollArea className="max-h-80" type="auto">
+          <ScrollArea className="max-h-80" type="always">
             <div className="py-1">
               {showAllOption && !searchQuery && (
                 <button
