@@ -1,26 +1,17 @@
 
 
-# Invertire evidenziazione categoria nella tabella transazioni
+# Migliorare la barra di scorrimento nel selettore categorie
 
-## Modifica
+## Problema
 
-Nel file `src/pages/Transactions.tsx`, nella colonna "Categoria" della tabella, invertire lo stile:
+Quando una categoria ha molte sottocategorie, la lista nel dropdown non mostra una barra di scorrimento visibile, rendendo difficile capire che ci sono altre voci sotto.
 
-- **Categoria madre**: mostrata dentro un `Badge` (evidenziata)
-- **Sottocategoria**: mostrata sotto in testo piccolo (`text-xs text-muted-foreground`)
+## Soluzione
 
-Se la transazione ha solo una categoria padre (senza sottocategoria), viene mostrata normalmente nel Badge.
+Nel file `src/components/CategorySelect.tsx`:
 
-## Dettaglio tecnico
+1. Aumentare l'altezza massima della `ScrollArea` da `max-h-60` (240px) a `max-h-80` (320px) per mostrare piu' voci
+2. Assicurarsi che la barra di scorrimento verticale di Radix sia sempre visibile quando il contenuto eccede l'altezza, usando la classe `data-[state=visible]:bg-border` sul thumb per renderla piu' evidente
 
-### `src/pages/Transactions.tsx`
-
-Modificare il blocco della cella categoria (righe ~353-365): invece di mostrare il parent in `text-xs` e il figlio in `Badge`, fare il contrario. Il parent va nel `Badge` e il nome della categoria corrente (sottocategoria) va in `text-xs` sotto.
-
-| Prima | Dopo |
-|-------|------|
-| Viviana (testo piccolo) | **Viviana** (Badge) |
-| **Corso Cordua** (Badge) | Corso Cordua (testo piccolo) |
-
-Un solo file da modificare.
+Un solo file da modificare, una riga.
 
