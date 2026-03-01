@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useCategories } from "@/hooks/useCategories";
+import { useCategories, useCategoryTree } from "@/hooks/useCategories";
 import {
   useCreateTransaction,
   useUpdateTransaction,
@@ -68,6 +68,7 @@ export function TransactionDialog({
   const [commissione, setCommissione] = useState("");
 
   const { data: categories = [] } = useCategories();
+  const categoryTree = useCategoryTree();
   const createMutation = useCreateTransaction();
   const updateMutation = useUpdateTransaction();
   const transferMutation = useCreateTransfer();
@@ -76,7 +77,8 @@ export function TransactionDialog({
 
   const isEditing = !!transaction;
   const isTransfer = type === "transfer";
-  const filteredCategories = categories.filter((c) => c.type === (type === "transfer" ? "expense" : type));
+  const filteredType = type === "transfer" ? "expense" : type;
+  const filteredTree = categoryTree.filter((c) => c.type === filteredType);
 
   const selectedContract = contractsWithUnpaid.find((c) => c.id === selectedContractId);
   const availableRate = selectedContract?.scadenze_rate || [];
@@ -345,13 +347,26 @@ export function TransactionDialog({
                   </div>
                   <Select value={categoryId} onValueChange={setCategoryId}>
                     <SelectTrigger>
-                      <SelectValue placeholder={filteredCategories.length === 0 ? "Nessuna categoria" : "Seleziona categoria"} />
+                      <SelectValue placeholder={filteredTree.length === 0 ? "Nessuna categoria" : "Seleziona categoria"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {filteredCategories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </SelectItem>
+                      {filteredTree.map((parent) => (
+                        parent.children.length > 0 ? (
+                          <div key={parent.id}>
+                            <SelectItem value={parent.id} className="font-semibold">
+                              {parent.name}
+                            </SelectItem>
+                            {parent.children.map((child) => (
+                              <SelectItem key={child.id} value={child.id} className="pl-8">
+                                ↳ {child.name}
+                              </SelectItem>
+                            ))}
+                          </div>
+                        ) : (
+                          <SelectItem key={parent.id} value={parent.id}>
+                            {parent.name}
+                          </SelectItem>
+                        )
                       ))}
                     </SelectContent>
                   </Select>

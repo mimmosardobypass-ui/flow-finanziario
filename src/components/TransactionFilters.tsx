@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
-import { useCategories, Category } from "@/hooks/useCategories";
+import { useCategories, Category, useCategoryTree } from "@/hooks/useCategories";
 import { useContiAttivi } from "@/hooks/useConti";
 import { TransactionFilters as FiltersType } from "@/hooks/useFilteredTransactions";
 
@@ -36,15 +36,16 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
   const [amountMaxInput, setAmountMaxInput] = useState(filters.amountMax?.toString() || "");
 
   const { data: categories = [] } = useCategories();
+  const categoryTree = useCategoryTree();
   const { data: contiAttivi = [] } = useContiAttivi();
 
-  // Filtra le categorie in base al tipo selezionato
-  const filteredCategories = useMemo(() => {
+  // Filtra l'albero categorie in base al tipo selezionato
+  const filteredTree = useMemo(() => {
     if (!filters.type || filters.type === "all") {
-      return categories; // Mostra tutte le categorie
+      return categoryTree;
     }
-    return categories.filter((cat) => cat.type === filters.type);
-  }, [categories, filters.type]);
+    return categoryTree.filter((cat) => cat.type === filters.type);
+  }, [categoryTree, filters.type]);
 
   // Debounce per la ricerca
   useEffect(() => {
@@ -195,11 +196,24 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
           </SelectTrigger>
           <SelectContent className="bg-popover border-border">
             <SelectItem value="all">Tutte le categorie</SelectItem>
-            {filteredCategories.map((cat) => (
-              <SelectItem key={cat.id} value={cat.id}>
-                {cat.name}
-              </SelectItem>
-            ))}
+            {filteredTree.map((parent) =>
+              parent.children.length > 0 ? (
+                <div key={parent.id}>
+                  <SelectItem value={parent.id} className="font-semibold">
+                    {parent.name}
+                  </SelectItem>
+                  {parent.children.map((child) => (
+                    <SelectItem key={child.id} value={child.id} className="pl-8">
+                      ↳ {child.name}
+                    </SelectItem>
+                  ))}
+                </div>
+              ) : (
+                <SelectItem key={parent.id} value={parent.id}>
+                  {parent.name}
+                </SelectItem>
+              )
+            )}
           </SelectContent>
         </Select>
 

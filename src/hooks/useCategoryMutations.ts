@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 export interface CreateCategoryInput {
   name: string;
   type: "income" | "expense";
+  parent_id?: string | null;
 }
 
 export interface UpdateCategoryInput extends CreateCategoryInput {
@@ -25,7 +26,8 @@ export function useCreateCategory() {
           user_id: user.id,
           name: input.name,
           type: input.type,
-        })
+          parent_id: input.parent_id || null,
+        } as any)
         .select()
         .single();
 
@@ -48,7 +50,8 @@ export function useUpdateCategory() {
         .update({
           name: input.name,
           type: input.type,
-        })
+          parent_id: input.parent_id ?? null,
+        } as any)
         .eq("id", input.id)
         .select()
         .single();

@@ -10,40 +10,59 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   useCreateCategory,
   useUpdateCategory,
 } from "@/hooks/useCategoryMutations";
-import { Category } from "@/hooks/useCategories";
+import { Category, useRootCategories } from "@/hooks/useCategories";
 import { toast } from "@/hooks/use-toast";
 
 interface CategoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   category?: Category | null;
+  /** Pre-select a parent when creating a subcategory */
+  defaultParentId?: string | null;
 }
 
 export function CategoryDialog({
   open,
   onOpenChange,
   category,
+  defaultParentId,
 }: CategoryDialogProps) {
   const [name, setName] = useState("");
   const [type, setType] = useState<"income" | "expense">("expense");
+  const [parentId, setParentId] = useState<string>("");
 
   const createMutation = useCreateCategory();
   const updateMutation = useUpdateCategory();
+  const rootCategories = useRootCategories();
 
   const isEditing = !!category;
+
+  // Filter parents by selected type (only root categories of same type)
+  const availableParents = rootCategories.filter(
+    (c) => c.type === type && (!isEditing || c.id !== category?.id)
+  );
 
   useEffect(() => {
     if (category) {
       setName(category.name);
       setType(category.type);
+      setParentId(category.parent_id || "");
     } else {
       setName("");
-      setType("expense");
+      setType(defaultParentId ? rootCategories.find(c => c.id === defaultParentId)?.type || "expense" : "expense");
+      setParentId(defaultParentId || "");
     }
-  }, [category, open]);
+  }, [category, open, defaultParentId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,10 +78,19 @@ export function CategoryDialog({
 
     try {
       if (isEditing) {
-        await updateMutation.mutateAsync({ id: category.id, name: name.trim(), type });
+        await updateMutation.mutateAsync({
+          id: category.id,
+          name: name.trim(),
+          type,
+          parent_id: parentId || null,
+        });
         toast({ title: "Categoria aggiornata" });
       } else {
-        await createMutation.mutateAsync({ name: name.trim(), type });
+        await createMutation.mutateAsync({
+          name: name.trim(),
+          type,
+          parent_id: parentId || null,
+        });
         toast({ title: "Categoria creata" });
       }
       onOpenChange(false);
@@ -82,7 +110,7 @@ export function CategoryDialog({
       <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>
-            {isEditing ? "Modifica Categoria" : "Nuova Categoria"}
+            {isEditing ? "Modifica Categoria" : parentId ? "Nuova Sottocategoria" : "Nuova Categoria"}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -101,8 +129,16 @@ export function CategoryDialog({
             <Label>Tipo</Label>
             <RadioGroup
               value={type}
-              onValueChange={(v) => setType(v as "income" | "expense")}
+              onValueChange={(v) => {
+                setType(v as "income" | "expense");
+                // Reset parent if type changed
+                if (parentId) {
+                  const parent = rootCategories.find((c) => c.id === parentId);
+                  if (parent && parent.type !== v) setParentId("");
+                }
+              }}
               className="flex gap-4"
+              disabled={!!defaultParentId}
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="income" id="cat-income" />
@@ -117,6 +153,23 @@ export function CategoryDialog({
                 </Label>
               </div>
             </RadioGroup>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Categoria padre (opzionale)</Label>
+            <Select value={parentId || "none"} onValueChange={(v) => setParentId(v === "none" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Nessuna (categoria principale)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Nessuna (categoria principale)</SelectItem>
+                {availableParents.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
