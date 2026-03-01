@@ -1,18 +1,49 @@
 
 
-# Fix: Allineare le card delle proposte con la card del movimento selezionato
+# Escludere i giroconti dalle statistiche
 
-## Problema
+## Obiettivo
 
-Le card delle proposte dentro la `ScrollArea` hanno un `pr-4` (padding-right di 16px) sul div interno che le contiene, creando un disallineamento rispetto alla card "Movimento selezionato" sopra. Il bordo destro delle proposte risulta piu' stretto.
+Le transazioni che rappresentano trasferimenti interni tra conti (giroconti) non devono essere conteggiate come entrate o uscite nelle statistiche della dashboard e nei report. Sono movimenti interni che non cambiano il patrimonio complessivo.
 
-## Soluzione
+## Criteri di esclusione
 
-Rimuovere il `pr-4` dal div interno della `ScrollArea` (riga 216) in modo che le proposte occupino la stessa larghezza della card superiore.
+Una transazione e' un giroconto interno se:
+- Ha un `transfer_id` (creata tramite la funzione Trasferimento), oppure
+- Ha `reconciliation_type = "transfer"` con `reconciliation_status = "reconciled"` (riconciliata manualmente come giroconto)
 
-## Modifica: `src/components/ReconciliationSheet.tsx`
+## Modifiche
 
-**Riga 216**: Cambiare `<div className="space-y-2 pr-4">` in `<div className="space-y-2">`, rimuovendo il padding destro.
+### 1. Hook statistiche dashboard (`src/hooks/useDashboardStats.ts`)
 
-Un solo file, una sola riga.
+Aggiungere una funzione helper `isInternalTransfer(t)` che verifica i due criteri sopra. Usarla per:
 
+- **Saldo totale**: continuare a conteggiare tutto (il saldo dei conti deve rimanere corretto)
+- **Entrate/Uscite di periodo**: escludere i giroconti dal calcolo di `periodIncome` e `periodExpenses`
+- **Breakdown per categoria**: escludere i giroconti
+- **Insights** (tasso risparmio, spesa media giornaliera): derivano dai totali, quindi si aggiornano automaticamente
+
+### 2. Confronto periodi (`usePeriodComparison` nello stesso file)
+
+Applicare lo stesso filtro `isInternalTransfer` nel calcolo delle entrate/uscite del periodo corrente e precedente.
+
+### 3. Export Excel (`src/utils/exportExcel.ts`)
+
+Aggiungere una colonna "Giroconto" (Si/No) nel foglio transazioni, e nel riepilogo mostrare separatamente il totale dei giroconti esclusi dalle statistiche, per trasparenza.
+
+### 4. Indicatore visivo nella lista transazioni (`src/pages/Transactions.tsx`)
+
+Le transazioni con `transfer_id` hanno gia' il badge "Trasf." - verificare che anche quelle riconciliate come giroconto mostrino un indicatore simile (gia' presente il badge del tipo di riconciliazione).
+
+## Comportamento atteso
+
+- Dashboard: entrate e uscite riflettono solo operazioni reali (stipendi, bollette, acquisti...)
+- Saldo totale: invariato (i giroconti si annullano tra loro)
+- Export: i giroconti sono presenti ma segnalati come tali
+- Transazioni gia' riconciliate come "transfer": escluse retroattivamente dalle statistiche
+
+## File coinvolti
+
+1. `src/hooks/useDashboardStats.ts` - filtro principale
+2. `src/utils/exportExcel.ts` - colonna giroconto e riepilogo
+3. `src/hooks/useTransactions.ts` - aggiungere i campi `reconciliation_type` e `reconciliation_status` al tipo `TransactionWithCategory` se non presenti
