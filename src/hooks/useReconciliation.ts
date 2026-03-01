@@ -3,6 +3,38 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { TransactionWithCategory } from "./useTransactions";
 
+// Helper: find or create "Giroconti" category for a user
+async function getOrCreateGirocontiCategory(userId: string): Promise<string> {
+  const { data: existingCat } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("name", "Giroconti")
+    .maybeSingle();
+
+  if (existingCat?.id) return existingCat.id;
+
+  const { data: newCat, error } = await supabase
+    .from("categories")
+    .insert({ user_id: userId, name: "Giroconti", type: "expense" })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return newCat.id;
+}
+
+// Helper: get IDs of "Da classificare" categories for a user
+async function getDaClassificareIds(userId: string): Promise<Set<string>> {
+  const { data } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("name", "Da classificare");
+  return new Set(data?.map((c) => c.id) || []);
+}
+
+export { getOrCreateGirocontiCategory, getDaClassificareIds };
+
 export function useCompatibleTransactions(transaction: TransactionWithCategory | null) {
   const { user } = useAuth();
 
@@ -11,7 +43,6 @@ export function useCompatibleTransactions(transaction: TransactionWithCategory |
     queryFn: async () => {
       if (!user || !transaction) return [];
 
-      // Get transactions from OTHER accounts with similar amount or date (±3 days)
       const dateObj = new Date(transaction.date);
       const dateFrom = new Date(dateObj);
       dateFrom.setDate(dateFrom.getDate() - 3);
@@ -67,7 +98,6 @@ export function useReconciliationGroup(reconciliationId: string | null) {
   });
 }
 
-// Legacy computeStatus aligned to official state machine: always returns "reconciled"
 function computeStatus(_transactions: { type: string; amount: number }[]): "reconciled" {
   return "reconciled";
 }
@@ -82,7 +112,6 @@ export function useReconcile() {
 
       const reconciliation_id = crypto.randomUUID();
 
-      // Fetch selected transactions to compute status
       const { data: txns, error: fetchError } = await supabase
         .from("transactions")
         .select("id, type, amount, reconciliation_id")
@@ -91,11 +120,9 @@ export function useReconcile() {
 
       if (fetchError) throw fetchError;
 
-      // Check if any already have a reconciliation_id — merge into existing group
       const existingGroupId = txns?.find((t) => t.reconciliation_id)?.reconciliation_id;
       const finalId = existingGroupId || reconciliation_id;
 
-      // If merging, also fetch existing group members
       let allTxns = txns || [];
       if (existingGroupId) {
         const { data: groupTxns } = await supabase
@@ -103,8 +130,7 @@ export function useReconcile() {
           .select("id, type, amount, reconciliation_id")
           .eq("reconciliation_id", existingGroupId)
           .is("deleted_at", null);
-        
-        // Merge unique
+
         const existingIds = new Set(allTxns.map((t) => t.id));
         groupTxns?.forEach((t) => {
           if (!existingIds.has(t.id)) allTxns.push(t);
@@ -112,9 +138,8 @@ export function useReconcile() {
       }
 
       const status = computeStatus(allTxns);
-
-      // Update all transactions in the group
       const allIds = allTxns.map((t) => t.id);
+
       const { error } = await supabase
         .from("transactions")
         .update({ reconciliation_id: finalId, reconciliation_status: status, reconciliation_type: reconciliationType } as any)
@@ -124,46 +149,24 @@ export function useReconcile() {
 
       // Auto-assign "Giroconti" category for transfer reconciliations
       if (reconciliationType === "transfer") {
-        // Find or create the "Giroconti" category
-        const { data: existingCat } = await supabase
-          .from("categories")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("name", "Giroconti")
-          .maybeSingle();
+        const girocontiCatId = await getOrCreateGirocontiCategory(user.id);
+        const daClassificareIds = await getDaClassificareIds(user.id);
 
-        let girocontiCatId = existingCat?.id;
+        // Fetch full records to check category_id
+        const { data: fullTxns } = await supabase
+          .from("transactions")
+          .select("id, category_id")
+          .in("id", allIds);
 
-        if (!girocontiCatId) {
-          const { data: newCat, error: catError } = await supabase
-            .from("categories")
-            .insert({ user_id: user.id, name: "Giroconti", type: "expense" })
-            .select("id")
-            .single();
-          if (catError) throw catError;
-          girocontiCatId = newCat.id;
-        }
+        const idsToUpdate = fullTxns
+          ?.filter((t) => !t.category_id || daClassificareIds.has(t.category_id))
+          .map((t) => t.id) || [];
 
-        // Assign category only to transactions without one
-        const uncategorizedIds = allTxns
-          .filter((t) => !(t as any).category_id)
-          .map((t) => t.id);
-
-        if (uncategorizedIds.length > 0) {
-          // Need to fetch full records to check category_id since our select didn't include it
-          const { data: fullTxns } = await supabase
+        if (idsToUpdate.length > 0) {
+          await supabase
             .from("transactions")
-            .select("id, category_id")
-            .in("id", allIds)
-            .is("category_id", null);
-
-          const idsToUpdate = fullTxns?.map((t) => t.id) || [];
-          if (idsToUpdate.length > 0) {
-            await supabase
-              .from("transactions")
-              .update({ category_id: girocontiCatId })
-              .in("id", idsToUpdate);
-          }
+            .update({ category_id: girocontiCatId })
+            .in("id", idsToUpdate);
         }
       }
     },
@@ -178,14 +181,12 @@ export function useReconcile() {
 
 export function useUnreconcile() {
   const queryClient = useQueryClient();
-
   const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (reconciliationId: string) => {
       if (!user) throw new Error("Not authenticated");
 
-      // Find "Giroconti" category to remove it from affected transactions
       const { data: girocontiCat } = await supabase
         .from("categories")
         .select("id")
@@ -194,7 +195,6 @@ export function useUnreconcile() {
         .maybeSingle();
 
       if (girocontiCat) {
-        // Reset category only for transactions that have "Giroconti"
         await supabase
           .from("transactions")
           .update({ category_id: null })
