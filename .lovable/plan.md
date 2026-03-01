@@ -1,49 +1,35 @@
 
 
-# Escludere i giroconti dalle statistiche
+# Assegnazione automatica categoria "Giroconti" alla riconciliazione
 
 ## Obiettivo
 
-Le transazioni che rappresentano trasferimenti interni tra conti (giroconti) non devono essere conteggiate come entrate o uscite nelle statistiche della dashboard e nei report. Sono movimenti interni che non cambiano il patrimonio complessivo.
-
-## Criteri di esclusione
-
-Una transazione e' un giroconto interno se:
-- Ha un `transfer_id` (creata tramite la funzione Trasferimento), oppure
-- Ha `reconciliation_type = "transfer"` con `reconciliation_status = "reconciled"` (riconciliata manualmente come giroconto)
+Quando una riconciliazione di tipo "transfer" viene confermata, il sistema assegna automaticamente la categoria "Giroconti" (tipo expense) a tutte le transazioni coinvolte che non hanno gia' una categoria. Se la categoria non esiste, viene creata al volo.
 
 ## Modifiche
 
-### 1. Hook statistiche dashboard (`src/hooks/useDashboardStats.ts`)
+### 1. `src/hooks/useReconciliation.ts` - funzione `useReconcile`
 
-Aggiungere una funzione helper `isInternalTransfer(t)` che verifica i due criteri sopra. Usarla per:
+Nella `mutationFn`, dopo l'update di riconciliazione (riga 118-121), aggiungere la logica di auto-categorizzazione solo quando `reconciliationType === "transfer"`:
 
-- **Saldo totale**: continuare a conteggiare tutto (il saldo dei conti deve rimanere corretto)
-- **Entrate/Uscite di periodo**: escludere i giroconti dal calcolo di `periodIncome` e `periodExpenses`
-- **Breakdown per categoria**: escludere i giroconti
-- **Insights** (tasso risparmio, spesa media giornaliera): derivano dai totali, quindi si aggiornano automaticamente
+1. Cercare la categoria "Giroconti" dell'utente (`categories` con `name = "Giroconti"`)
+2. Se non esiste, crearla con `type = "expense"` e `user_id` dell'utente
+3. Aggiornare il `category_id` di tutte le transazioni del gruppo che hanno `category_id = null`
 
-### 2. Confronto periodi (`usePeriodComparison` nello stesso file)
+Aggiungere anche `queryClient.invalidateQueries({ queryKey: ["categories"] })` nell'`onSuccess`.
 
-Applicare lo stesso filtro `isInternalTransfer` nel calcolo delle entrate/uscite del periodo corrente e precedente.
+### 2. `src/hooks/useReconciliation.ts` - funzione `useUnreconcile`
 
-### 3. Export Excel (`src/utils/exportExcel.ts`)
+Quando si annulla una riconciliazione, rimuovere anche la categoria "Giroconti" dalle transazioni coinvolte (ripristinare `category_id = null` solo se la categoria e' "Giroconti"), per coerenza.
 
-Aggiungere una colonna "Giroconto" (Si/No) nel foglio transazioni, e nel riepilogo mostrare separatamente il totale dei giroconti esclusi dalle statistiche, per trasparenza.
+## Comportamento
 
-### 4. Indicatore visivo nella lista transazioni (`src/pages/Transactions.tsx`)
+- Riconciliazione tipo "transfer": categoria "Giroconti" assegnata automaticamente alle transazioni senza categoria
+- Transazioni gia' categorizzate: non vengono sovrascritte
+- Annullamento riconciliazione: la categoria "Giroconti" viene rimossa (le altre categorie restano)
+- La categoria "Giroconti" viene creata una sola volta e riutilizzata
 
-Le transazioni con `transfer_id` hanno gia' il badge "Trasf." - verificare che anche quelle riconciliate come giroconto mostrino un indicatore simile (gia' presente il badge del tipo di riconciliazione).
+## File coinvolto
 
-## Comportamento atteso
+Solo `src/hooks/useReconciliation.ts`
 
-- Dashboard: entrate e uscite riflettono solo operazioni reali (stipendi, bollette, acquisti...)
-- Saldo totale: invariato (i giroconti si annullano tra loro)
-- Export: i giroconti sono presenti ma segnalati come tali
-- Transazioni gia' riconciliate come "transfer": escluse retroattivamente dalle statistiche
-
-## File coinvolti
-
-1. `src/hooks/useDashboardStats.ts` - filtro principale
-2. `src/utils/exportExcel.ts` - colonna giroconto e riepilogo
-3. `src/hooks/useTransactions.ts` - aggiungere i campi `reconciliation_type` e `reconciliation_status` al tipo `TransactionWithCategory` se non presenti
