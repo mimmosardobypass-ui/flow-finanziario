@@ -27,8 +27,17 @@ export function CategorySelect({
   showAllOption = false,
   className,
 }: CategorySelectProps) {
+  const allParentIds = useMemo(
+    () => new Set(categories.filter(c => c.children.length > 0).map(c => c.id)),
+    [categories]
+  );
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(allParentIds);
+
+  const handleOpenChange = (isOpen: boolean) => {
+    if (isOpen) setExpanded(new Set(allParentIds));
+    setOpen(isOpen);
+  };
 
   // Find the selected category name
   const selectedLabel = useMemo(() => {
@@ -58,7 +67,7 @@ export function CategorySelect({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
