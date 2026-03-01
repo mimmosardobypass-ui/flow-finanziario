@@ -354,14 +354,20 @@ export default function Transactions() {
                       <TableCell>
                         {transaction.categories ? (
                           <div className="flex flex-col gap-0.5">
-                            {categoryParentMap.has(transaction.categories.id) && (
-                              <span className="text-xs text-muted-foreground">
-                                {categoryParentMap.get(transaction.categories.id)}
-                              </span>
+                            {categoryParentMap.has(transaction.categories.id) ? (
+                              <>
+                                <Badge variant="secondary">
+                                  {categoryParentMap.get(transaction.categories.id)}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {transaction.categories.name}
+                                </span>
+                              </>
+                            ) : (
+                              <Badge variant="secondary">
+                                {transaction.categories.name}
+                              </Badge>
                             )}
-                            <Badge variant="secondary">
-                              {transaction.categories.name}
-                            </Badge>
                           </div>
                         ) : (
                           "-"
