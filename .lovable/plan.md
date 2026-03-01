@@ -1,35 +1,34 @@
 
+# Fix: Assegnare "Giroconti" alle riconciliazioni esistenti
 
-# Assegnazione automatica categoria "Giroconti" alla riconciliazione
+## Problema
 
-## Obiettivo
-
-Quando una riconciliazione di tipo "transfer" viene confermata, il sistema assegna automaticamente la categoria "Giroconti" (tipo expense) a tutte le transazioni coinvolte che non hanno gia' una categoria. Se la categoria non esiste, viene creata al volo.
+Le due transazioni gia' riconciliate come "transfer" hanno la categoria "Da classificare" (non NULL). La logica attuale controlla solo `category_id IS NULL`, quindi non le ha aggiornate.
 
 ## Modifiche
 
-### 1. `src/hooks/useReconciliation.ts` - funzione `useReconcile`
+### 1. Helper riutilizzabile (`src/hooks/useReconciliation.ts`)
 
-Nella `mutationFn`, dopo l'update di riconciliazione (riga 118-121), aggiungere la logica di auto-categorizzazione solo quando `reconciliationType === "transfer"`:
+Estrarre una funzione `getOrCreateGirocontiCategory(userId)` che cerca o crea la categoria "Giroconti", per evitare duplicazione.
 
-1. Cercare la categoria "Giroconti" dell'utente (`categories` con `name = "Giroconti"`)
-2. Se non esiste, crearla con `type = "expense"` e `user_id` dell'utente
-3. Aggiornare il `category_id` di tutte le transazioni del gruppo che hanno `category_id = null`
+### 2. Migliorare auto-categorizzazione in `useReconcile`
 
-Aggiungere anche `queryClient.invalidateQueries({ queryKey: ["categories"] })` nell'`onSuccess`.
+Nella sezione auto-assign, invece di controllare solo `category_id IS NULL`, anche sostituire le categorie "Da classificare":
 
-### 2. `src/hooks/useReconciliation.ts` - funzione `useUnreconcile`
+- Cercare tutte le categorie "Da classificare" dell'utente
+- Aggiornare le transazioni che hanno `category_id = null` OPPURE `category_id` corrispondente a "Da classificare"
 
-Quando si annulla una riconciliazione, rimuovere anche la categoria "Giroconti" dalle transazioni coinvolte (ripristinare `category_id = null` solo se la categoria e' "Giroconti"), per coerenza.
+### 3. Aggiungere hook `useFixExistingGiroconti`
 
-## Comportamento
+Creare un nuovo hook che viene chiamato una volta per sessione (ad esempio nella pagina Transazioni o nel Layout) per correggere retroattivamente le transazioni gia' riconciliate:
 
-- Riconciliazione tipo "transfer": categoria "Giroconti" assegnata automaticamente alle transazioni senza categoria
-- Transazioni gia' categorizzate: non vengono sovrascritte
-- Annullamento riconciliazione: la categoria "Giroconti" viene rimossa (le altre categorie restano)
-- La categoria "Giroconti" viene creata una sola volta e riutilizzata
+- Cerca transazioni con `reconciliation_type = 'transfer'` e `reconciliation_status = 'reconciled'`
+- Identifica quelle con categoria "Da classificare" o senza categoria
+- Assegna automaticamente la categoria "Giroconti"
+- Usa un flag `sessionStorage` per evitare esecuzioni ripetute
 
-## File coinvolto
+### File coinvolti
 
-Solo `src/hooks/useReconciliation.ts`
-
+1. `src/hooks/useReconciliation.ts` - helper + miglioramento logica useReconcile
+2. `src/hooks/useFixExistingGiroconti.ts` - nuovo hook per fix retroattivo
+3. `src/components/Layout.tsx` - chiamata al hook di fix
