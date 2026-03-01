@@ -1,31 +1,39 @@
 
 
-# Miglioramento icone Riconciliazione e click su riga
+# Fix: dati mancanti nella Dashboard (limite 1000 righe Supabase)
 
-## Cosa cambia
+## Problema trovato
 
-Tre modifiche puntuali per allineare il comportamento alla tua richiesta:
+Il database contiene **1678 transazioni** (1196 uscite + 482 entrate), ma Supabase restituisce al massimo **1000 righe per query**. Il hook `useTransactions()` ne riceve solo 1000, quindi:
+- Il "Saldo Totale" e' calcolato su dati incompleti
+- Le card "Entrate" e "Uscite" per qualsiasi periodo sono potenzialmente sbagliate
+- I grafici e le categorie sono basati su dati parziali
+- Le 678 transazioni piu' vecchie vengono ignorate (ordinate per data desc, le piu' vecchie cadono fuori)
 
-### 1. Pallino rosso pieno per "proposte trovate"
-Attualmente il pallino rosso ha un cerchio con un puntino dentro. Verra' sostituito con un **cerchio pieno colorato** (solido, come nello screenshot).
+Nota: lo screenshot mostra "Questo mese" (Marzo 2026) con valori a zero, il che e' corretto perche' non ci sono transazioni di Marzo. Ma il "Saldo Totale" di 4310.89 e' probabilmente errato (calcolato su sole 1000 transazioni invece di 1678).
 
-### 2. Spunta verde per "riconciliato"
-Attualmente c'e' un cerchio con spunta dentro. Verra' sostituito con una **spunta semplice verde** (senza cerchio attorno), come nello screenshot.
+## Soluzione
 
-### 3. Cerchio vuoto grigio per "nessuna proposta"
-Questo e' gia' corretto (cerchio vuoto grigio). Nessuna modifica necessaria.
+Implementare la **paginazione** nel hook `useTransactions()` per recuperare tutte le righe dal database in batch da 1000.
 
-### 4. Click sulla riga apre il pannello riconciliazione
-Attualmente bisogna cliccare sul pallino. Verra' reso **cliccabile l'intera riga** della tabella: cliccando su qualsiasi punto della riga si apre il pannello laterale con le proposte di riconciliazione.
+### Modifica 1: `src/hooks/useTransactions.ts`
 
-## Comportamento confermato (invariato)
-- Il sistema **non riconcilia automaticamente**: propone soltanto, l'utente decide
-- Cliccando si vede la coincidenza di importo proposta
-- L'utente puo' accettare o rifiutare la proposta dal pannello laterale
+Nella funzione `queryFn` di `useTransactions()`, sostituire la singola query con un loop che usa `.range()` per recuperare tutte le transazioni in batch da 1000:
 
-## File coinvolto
+```text
+Logica:
+1. Primo batch: .range(0, 999)
+2. Se restituisce 1000 righe, carica il batch successivo: .range(1000, 1999)
+3. Ripetere finche' un batch restituisce meno di 1000 righe
+4. Concatenare tutti i risultati
+```
 
-| File | Modifica |
-|---|---|
-| `src/pages/Transactions.tsx` | Cambio icone in `getRicIndicator`, riga tabella cliccabile |
+Nessun altro file necessita di modifiche: la Dashboard e tutti i componenti derivati usano gia' i dati da `useTransactions()`, quindi una volta che il hook restituisce il dataset completo, tutto si aggiorna automaticamente.
+
+## Risultato atteso
+
+- "Saldo Totale" calcolato correttamente su tutte le 1678 transazioni
+- Card Entrate/Uscite accurate per ogni periodo
+- Grafici e categorie basati sul dataset completo
+- Nessun impatto sulle prestazioni percepite (2 chiamate REST invece di 1)
 
