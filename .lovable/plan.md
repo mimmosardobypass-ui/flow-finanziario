@@ -1,34 +1,42 @@
 
 
-# Fix: Dashboard mostra €0,00 perche' il mese corrente e' vuoto
+# Fix: Pulsanti di conferma visibili nel pannello Riconciliazione
 
 ## Problema
 
-La dashboard si apre con il periodo "Questo mese" (Marzo 2026). Essendo il 1° marzo e non avendo transazioni di marzo, tutte le card mostrano €0,00. Non e' un bug di dati (la paginazione funziona, tutti i 1678 record sono caricati), ma un problema di UX: l'utente vede una dashboard vuota.
+Nella schermata di riconciliazione, ogni proposta ha i pulsanti Accetta (spunta) e Rifiuta (X) come piccole icone da 32x32px a destra della riga. Sono poco visibili e facilmente ignorabili dall'utente, che non riesce a trovare come confermare la scelta.
 
 ## Soluzione
 
-Implementare un **auto-detect del periodo iniziale**: se il mese corrente non ha transazioni, il periodo predefinito sara' "Ultimi 3 mesi" invece di "Questo mese". In questo modo la dashboard mostra sempre dati significativi all'apertura.
+Trasformare i pulsanti da piccole icone in **pulsanti con testo esplicito** posizionati sotto ogni proposta, rendendoli immediatamente riconoscibili.
 
-## Modifica
+## Modifica: `src/components/ReconciliationSheet.tsx`
 
-### File: `src/pages/Dashboard.tsx`
+Per ogni suggerimento, sostituire i due icon button (Check e X) con una riga di pulsanti visibili sotto i dettagli della proposta:
 
-1. Cambiare lo stato iniziale di `periodType` da fisso `"thisMonth"` a calcolato dinamicamente:
-   - Dopo il caricamento delle transazioni, verificare se esistono transazioni nel mese corrente
-   - Se il mese corrente ha transazioni: mantenere `"thisMonth"`
-   - Se il mese corrente e' vuoto: usare `"threeMonths"` come default
+- **Pulsante "Riconcilia"**: verde, con icona Check + testo, variante `default` con sfondo verde
+- **Pulsante "Rifiuta"**: outline/ghost, con icona X + testo, meno prominente
 
-2. Implementazione tecnica:
-   - Aggiungere un `useEffect` che al primo caricamento dei dati controlla se ci sono transazioni nel mese corrente
-   - Se non ce ne sono, aggiorna `periodType` a `"threeMonths"`
-   - Il controllo avviene solo al primo caricamento (non ad ogni cambio dati), usando un ref `hasAutoDetected`
+Layout attuale di ogni proposta:
+```text
+[Descrizione + Badge]  [Importo]  [icona-check] [icona-x]
+```
 
-Nessun altro file necessita di modifiche.
+Nuovo layout:
+```text
+[Descrizione + Badge]
+[Conto - Data - Delta giorni]         [Importo]
+[Pulsante "Riconcilia"]  [Pulsante "Rifiuta"]
+```
 
-## Risultato atteso
+I pulsanti saranno a larghezza piena sotto ogni card di proposta, con testo chiaro e dimensioni adeguate (h-9 invece di h-8), garantendo visibilita' immediata.
 
-- Se ci sono transazioni nel mese corrente: dashboard mostra "Questo mese" come prima
-- Se il mese corrente e' vuoto (come ora): dashboard mostra automaticamente "Ultimi 3 mesi" con entrate, uscite e grafici popolati
-- L'utente puo' sempre cambiare periodo manualmente
+### Dettagli tecnici
 
+- Rimuovere il `div` con `flex gap-1 shrink-0` che contiene i due icon button
+- Aggiungere sotto il blocco info un `div` con `flex gap-2 mt-2`:
+  - `Button` variant `default` con classe `bg-green-600 hover:bg-green-700` + icona Check + testo "Riconcilia"
+  - `Button` variant `outline` + icona X + testo "Rifiuta"
+- Cambiare il layout del container della proposta da `flex items-center` a `flex flex-col` per impilare info e pulsanti verticalmente
+
+File coinvolto: solo `src/components/ReconciliationSheet.tsx`
