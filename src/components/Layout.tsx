@@ -1,11 +1,14 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { useFixExistingGiroconti } from "@/hooks/useFixExistingGiroconti";
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
 export function Layout({ children }: LayoutProps) {
+  useFixExistingGiroconti();
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
