@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Search, Filter, X, Calendar, DollarSign, Tag, Landmark, Link2 } from "lucide-react";
+import { CategorySelect } from "@/components/CategorySelect";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
@@ -188,30 +189,13 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
         </Select>
 
         {/* Categoria */}
-        <Select
+        <CategorySelect
           value={filters.categoryId || "all"}
-          onValueChange={handleCategoryChange}
-        >
-          <SelectTrigger className="w-[160px] bg-secondary border-border">
-            <Tag className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Categoria" />
-          </SelectTrigger>
-          <SelectContent className="bg-popover border-border">
-            <SelectItem value="all">Tutte le categorie</SelectItem>
-            {filteredTree.map((parent) => (
-              <React.Fragment key={parent.id}>
-                <SelectItem value={parent.id} className={parent.children.length > 0 ? "font-semibold" : ""}>
-                  {parent.name}
-                </SelectItem>
-                {parent.children.map((child) => (
-                  <SelectItem key={child.id} value={child.id} className="pl-6">
-                    ↳ {child.name}
-                  </SelectItem>
-                ))}
-              </React.Fragment>
-            ))}
-          </SelectContent>
-        </Select>
+          onChange={handleCategoryChange}
+          categories={filteredTree}
+          showAllOption
+          className="w-[160px] bg-secondary border-border"
+        />
 
         {/* Data */}
         <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>

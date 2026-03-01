@@ -20,12 +20,11 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CategorySelect } from "@/components/CategorySelect";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCategories, useCategoryTree } from "@/hooks/useCategories";
@@ -347,25 +346,12 @@ export function TransactionDialog({
                       Nuova
                     </Button>
                   </div>
-                  <Select value={categoryId} onValueChange={setCategoryId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={filteredTree.length === 0 ? "Nessuna categoria" : "Seleziona categoria"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                    {filteredTree.map((parent) => (
-                        <React.Fragment key={parent.id}>
-                          <SelectItem value={parent.id} className={parent.children.length > 0 ? "font-semibold" : ""}>
-                            {parent.name}
-                          </SelectItem>
-                          {parent.children.map((child) => (
-                            <SelectItem key={child.id} value={child.id} className="pl-6">
-                              ↳ {child.name}
-                            </SelectItem>
-                          ))}
-                        </React.Fragment>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <CategorySelect
+                    value={categoryId}
+                    onChange={setCategoryId}
+                    categories={filteredTree}
+                    placeholder={filteredTree.length === 0 ? "Nessuna categoria" : "Seleziona categoria"}
+                  />
                 </div>
 
                 {/* Conto */}
