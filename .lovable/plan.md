@@ -1,41 +1,33 @@
 
 
-# Fix visibilita sottocategorie nel selettore categoria
+# Aggiungere ricerca nel selettore categoria
 
-## Problema identificato
+## Problema
 
-Le sottocategorie esistono nel database e il codice le gestisce correttamente. Il problema e' che nel componente `CategorySelect`, tutte le categorie padre partono **chiuse** (collapsed), quindi le sottocategorie non sono immediatamente visibili. L'utente deve cliccare la piccola freccia accanto alla categoria padre per espandere e vedere le figlie -- un comportamento facilmente ignorabile.
+Il componente `CategorySelect` (usato nel dialog "Nuova Transazione") non ha un campo di ricerca. Con molte categorie, l'utente deve scorrere tutta la lista per trovare quella desiderata.
 
-## Soluzione proposta
+## Soluzione
 
-Modificare `CategorySelect.tsx` per **espandere automaticamente** tutte le categorie padre che hanno figli, cosi le sottocategorie sono subito visibili quando si apre il dropdown.
+Aggiungere un campo di ricerca in cima al dropdown del `CategorySelect`. Filtra in tempo reale sia categorie padre che sottocategorie.
 
 ## Dettaglio tecnico
 
 ### `src/components/CategorySelect.tsx`
 
-Cambiare l'inizializzazione dello stato `expanded` da un Set vuoto a un Set contenente tutti gli ID delle categorie che hanno figli. Questo viene calcolato con un `useMemo` basato sulla prop `categories`:
+- Aggiungere stato `searchQuery`
+- Aggiungere un `<Input>` con icona `Search` subito dopo l'apertura del `PopoverContent`, prima della `ScrollArea`
+- Filtrare le categorie con `useMemo`: se il nome del padre o di un figlio contiene la query, mostrare quella categoria (se match su figlio, mostrare anche il padre)
+- Resettare `searchQuery` a stringa vuota quando il popover si apre
+- Importare `Search` da lucide-react e `Input` da ui/input
 
-```tsx
-// Prima (tutto chiuso):
-const [expanded, setExpanded] = useState<Set<string>>(new Set());
+### Logica di filtro
 
-// Dopo (auto-espande categorie con figli):
-const parentIds = useMemo(
-  () => new Set(categories.filter(c => c.children.length > 0).map(c => c.id)),
-  [categories]
-);
+```
+Per ogni categoria padre:
+  - Se il nome padre matcha -> mostrare padre + tutti i figli
+  - Altrimenti filtrare solo i figli che matchano
+  - Se almeno un figlio matcha -> mostrare padre (con solo figli filtrati)
+  - Se nessun match -> nascondere
 ```
 
-Usare un `useEffect` per sincronizzare lo stato `expanded` con `parentIds` quando le categorie cambiano, oppure usare direttamente `parentIds` come valore iniziale e aggiornarlo all'apertura del popover.
-
-L'approccio piu' pulito: resettare `expanded` a "tutti aperti" ogni volta che il Popover si apre, cosi l'utente vede sempre tutte le sottocategorie disponibili.
-
-### Riepilogo modifiche
-
-| File | Modifica |
-|------|----------|
-| `src/components/CategorySelect.tsx` | Auto-espandere categorie padre con figli all'apertura del dropdown |
-
-Nessun altro file necessita di modifiche -- il `TransactionDialog`, `useCategories` e il database funzionano gia' correttamente.
-
+Nessun altro file da modificare.
