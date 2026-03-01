@@ -1,39 +1,34 @@
 
 
-# Fix: dati mancanti nella Dashboard (limite 1000 righe Supabase)
+# Fix: Dashboard mostra €0,00 perche' il mese corrente e' vuoto
 
-## Problema trovato
+## Problema
 
-Il database contiene **1678 transazioni** (1196 uscite + 482 entrate), ma Supabase restituisce al massimo **1000 righe per query**. Il hook `useTransactions()` ne riceve solo 1000, quindi:
-- Il "Saldo Totale" e' calcolato su dati incompleti
-- Le card "Entrate" e "Uscite" per qualsiasi periodo sono potenzialmente sbagliate
-- I grafici e le categorie sono basati su dati parziali
-- Le 678 transazioni piu' vecchie vengono ignorate (ordinate per data desc, le piu' vecchie cadono fuori)
-
-Nota: lo screenshot mostra "Questo mese" (Marzo 2026) con valori a zero, il che e' corretto perche' non ci sono transazioni di Marzo. Ma il "Saldo Totale" di 4310.89 e' probabilmente errato (calcolato su sole 1000 transazioni invece di 1678).
+La dashboard si apre con il periodo "Questo mese" (Marzo 2026). Essendo il 1° marzo e non avendo transazioni di marzo, tutte le card mostrano €0,00. Non e' un bug di dati (la paginazione funziona, tutti i 1678 record sono caricati), ma un problema di UX: l'utente vede una dashboard vuota.
 
 ## Soluzione
 
-Implementare la **paginazione** nel hook `useTransactions()` per recuperare tutte le righe dal database in batch da 1000.
+Implementare un **auto-detect del periodo iniziale**: se il mese corrente non ha transazioni, il periodo predefinito sara' "Ultimi 3 mesi" invece di "Questo mese". In questo modo la dashboard mostra sempre dati significativi all'apertura.
 
-### Modifica 1: `src/hooks/useTransactions.ts`
+## Modifica
 
-Nella funzione `queryFn` di `useTransactions()`, sostituire la singola query con un loop che usa `.range()` per recuperare tutte le transazioni in batch da 1000:
+### File: `src/pages/Dashboard.tsx`
 
-```text
-Logica:
-1. Primo batch: .range(0, 999)
-2. Se restituisce 1000 righe, carica il batch successivo: .range(1000, 1999)
-3. Ripetere finche' un batch restituisce meno di 1000 righe
-4. Concatenare tutti i risultati
-```
+1. Cambiare lo stato iniziale di `periodType` da fisso `"thisMonth"` a calcolato dinamicamente:
+   - Dopo il caricamento delle transazioni, verificare se esistono transazioni nel mese corrente
+   - Se il mese corrente ha transazioni: mantenere `"thisMonth"`
+   - Se il mese corrente e' vuoto: usare `"threeMonths"` come default
 
-Nessun altro file necessita di modifiche: la Dashboard e tutti i componenti derivati usano gia' i dati da `useTransactions()`, quindi una volta che il hook restituisce il dataset completo, tutto si aggiorna automaticamente.
+2. Implementazione tecnica:
+   - Aggiungere un `useEffect` che al primo caricamento dei dati controlla se ci sono transazioni nel mese corrente
+   - Se non ce ne sono, aggiorna `periodType` a `"threeMonths"`
+   - Il controllo avviene solo al primo caricamento (non ad ogni cambio dati), usando un ref `hasAutoDetected`
+
+Nessun altro file necessita di modifiche.
 
 ## Risultato atteso
 
-- "Saldo Totale" calcolato correttamente su tutte le 1678 transazioni
-- Card Entrate/Uscite accurate per ogni periodo
-- Grafici e categorie basati sul dataset completo
-- Nessun impatto sulle prestazioni percepite (2 chiamate REST invece di 1)
+- Se ci sono transazioni nel mese corrente: dashboard mostra "Questo mese" come prima
+- Se il mese corrente e' vuoto (come ora): dashboard mostra automaticamente "Ultimi 3 mesi" con entrate, uscite e grafici popolati
+- L'utente puo' sempre cambiare periodo manualmente
 
