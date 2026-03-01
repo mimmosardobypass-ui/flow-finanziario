@@ -213,7 +213,7 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
                 </p>
               ) : (
                 <ScrollArea className="max-h-[50vh]">
-                  <div className="space-y-2 pr-4">
+                  <div className="space-y-2">
                     <TooltipProvider>
                       {suggestionsWithTxn.map(({ suggestion, transaction: candTxn }) => (
                         <div
