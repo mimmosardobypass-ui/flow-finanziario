@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Search, Filter, X, Calendar, DollarSign, Tag, Landmark, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -198,24 +198,18 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
           </SelectTrigger>
           <SelectContent className="bg-popover border-border">
             <SelectItem value="all">Tutte le categorie</SelectItem>
-            {filteredTree.map((parent) =>
-              parent.children.length > 0 ? (
-                <SelectGroup key={parent.id}>
-                  <SelectItem value={parent.id} className="font-semibold">
-                    {parent.name}
-                  </SelectItem>
-                  {parent.children.map((child) => (
-                    <SelectItem key={child.id} value={child.id} className="pl-6">
-                      {child.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              ) : (
-                <SelectItem key={parent.id} value={parent.id}>
+            {filteredTree.map((parent) => (
+              <React.Fragment key={parent.id}>
+                <SelectItem value={parent.id} className={parent.children.length > 0 ? "font-semibold" : ""}>
                   {parent.name}
                 </SelectItem>
-              )
-            )}
+                {parent.children.map((child) => (
+                  <SelectItem key={child.id} value={child.id} className="pl-6">
+                    ↳ {child.name}
+                  </SelectItem>
+                ))}
+              </React.Fragment>
+            ))}
           </SelectContent>
         </Select>
 
