@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Plus, Link, ArrowLeftRight } from "lucide-react";
+import { CalendarIcon, Link, ArrowLeftRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -37,7 +37,7 @@ import {
 import { useContiAttivi } from "@/hooks/useConti";
 import { useUnpaidRateByContract } from "@/hooks/useScadenziario";
 import { toast } from "@/hooks/use-toast";
-import { QuickCategoryDialog } from "@/components/QuickCategoryDialog";
+
 
 interface TransactionDialogProps {
   open: boolean;
@@ -59,7 +59,7 @@ export function TransactionDialog({
   const [contoId, setContoId] = useState<string>("");
   const [date, setDate] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [quickCategoryOpen, setQuickCategoryOpen] = useState(false);
+  
   const [linkRata, setLinkRata] = useState(false);
   const [selectedContractId, setSelectedContractId] = useState("");
   const [selectedRataId, setSelectedRataId] = useState("");
@@ -332,25 +332,15 @@ export function TransactionDialog({
             ) : (
               <>
                 {/* Category */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Categoria</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto py-1 px-2 text-xs"
-                      onClick={() => setQuickCategoryOpen(true)}
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      Nuova
-                    </Button>
-                  </div>
+            <div className="space-y-2">
+                  <Label>Categoria</Label>
                   <CategorySelect
                     value={categoryId}
                     onChange={setCategoryId}
                     categories={filteredTree}
                     placeholder={filteredTree.length === 0 ? "Nessuna categoria" : "Seleziona categoria"}
+                    allowManage
+                    onCategoryCreated={(newId) => setCategoryId(newId)}
                   />
                 </div>
 
@@ -470,12 +460,6 @@ export function TransactionDialog({
           </form>
         )}
 
-        <QuickCategoryDialog
-          open={quickCategoryOpen}
-          onOpenChange={setQuickCategoryOpen}
-          type={type === "transfer" ? "expense" : type}
-          onCategoryCreated={(newId) => setCategoryId(newId)}
-        />
       </DialogContent>
     </Dialog>
   );
