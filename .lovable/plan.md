@@ -1,34 +1,37 @@
 
+# Selettore categorie espandibile con sottomenu
 
-# Fix: dropdown categorie non permette di selezionare sottocategorie
+## Cosa cambia
 
-## Problema
+Creo un nuovo componente `CategorySelect` che usa **Popover + lista custom** al posto del Select Radix, permettendo di espandere/comprimere le sottocategorie con un chevron.
 
-Il dropdown categorie nel dialog "Modifica Transazione" usa `SelectGroup` con `SelectItem` al suo interno per le categorie padre. Questo puo' causare problemi di interazione con Radix UI Select, perche' `SelectGroup` si aspetta `SelectLabel` come intestazione e non un `SelectItem` selezionabile. Il risultato e' che cliccando sugli elementi nel dropdown, la selezione potrebbe non funzionare correttamente.
+## Comportamento
 
-## Soluzione
-
-Rimuovere completamente `SelectGroup` e rendere la lista piatta, usando solo `SelectItem` con stili diversi per distinguere visivamente padri e figli:
-- Categorie padre: `font-semibold` (grassetto)
-- Sottocategorie: indentate con prefisso `↳` e padding sinistro
-
-Questo approccio e' piu' compatibile con Radix UI Select e garantisce che tutti gli elementi siano selezionabili.
+- Le categorie padre **senza figli** sono voci normali: click seleziona e chiude
+- Le categorie padre **con figli** hanno un chevron (▶/▼):
+  - Click sul **chevron**: espande/comprime i figli senza chiudere il menu
+  - Click sul **nome**: seleziona la categoria padre e chiude il menu
+- Le **sottocategorie** appaiono indentate con prefisso `↳`: click seleziona e chiude
+- Stile coerente con i Select esistenti (bordi, colori, dimensioni)
 
 ## File coinvolti
 
-### 1. `src/components/TransactionDialog.tsx`
-- Rimuovere `SelectGroup` dal rendering delle categorie
-- Usare una lista piatta di `SelectItem`: prima il padre (bold), poi i figli (indentati con `↳`)
-- Ogni elemento e' un `SelectItem` diretto dentro `SelectContent`
+### 1. Nuovo: `src/components/CategorySelect.tsx`
 
-### 2. `src/components/TransactionFilters.tsx`
-- Stesso identico approccio per coerenza
+Componente riutilizzabile con:
+- **Props**: `value`, `onChange`, `categories` (CategoryWithChildren[]), `placeholder`, `showAllOption?`, `className?`
+- **Stato interno**: `open` (popover), `expanded` (Set di id categorie espanse)
+- **UI**: Popover con Button trigger che mostra il nome della categoria selezionata
+- Lista interna con:
+  - Riga padre: nome cliccabile + chevron se ha figli
+  - Righe figlie: indentate, visibili solo se il padre e' espanso
+- Stile hover e focus coerente con il design system
 
-## Esempio di rendering risultante
-```text
-[Viviana]          <- SelectItem, font-semibold
-[  ↳ Corso Cordua]  <- SelectItem, pl-6
-[  ↳ Affitto Parma] <- SelectItem, pl-6
-[Altro]            <- SelectItem normale (senza figli)
-```
+### 2. `src/components/TransactionDialog.tsx`
+- Importare `CategorySelect`
+- Sostituire il blocco Select categoria (righe 350-368) con `<CategorySelect>`
+- Rimuovere import inutilizzati di Select se non servono altrove (ma servono ancora per Conto e altri campi)
 
+### 3. `src/components/TransactionFilters.tsx`
+- Importare `CategorySelect`
+- Sostituire il blocco Select categoria (righe 191-214) con `<CategorySelect>` con prop `showAllOption`
