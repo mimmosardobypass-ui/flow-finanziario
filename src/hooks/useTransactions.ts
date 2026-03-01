@@ -65,26 +65,40 @@ export function useTransactions() {
     queryFn: async () => {
       if (!user) return [];
 
-      const { data, error } = await supabase
-        .from("transactions")
-        .select(`
-          *,
-          categories (
-            id,
-            name,
-            type
-          ),
-          conti (
-            id,
-            nome_conto,
-            banca
-          )
-        `)
-        .is("deleted_at", null)
-        .order("date", { ascending: false });
+      const PAGE_SIZE = 1000;
+      let allData: TransactionWithCategory[] = [];
+      let from = 0;
+      let hasMore = true;
 
-      if (error) throw error;
-      return data as TransactionWithCategory[];
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("transactions")
+          .select(`
+            *,
+            categories (
+              id,
+              name,
+              type
+            ),
+            conti (
+              id,
+              nome_conto,
+              banca
+            )
+          `)
+          .is("deleted_at", null)
+          .order("date", { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) throw error;
+
+        const batch = (data ?? []) as TransactionWithCategory[];
+        allData = allData.concat(batch);
+        hasMore = batch.length === PAGE_SIZE;
+        from += PAGE_SIZE;
+      }
+
+      return allData;
     },
     enabled: !!user,
   });
