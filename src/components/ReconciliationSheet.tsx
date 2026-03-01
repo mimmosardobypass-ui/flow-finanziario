@@ -126,7 +126,7 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg">
+      <SheetContent className="w-full sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>Riconciliazione</SheetTitle>
           <SheetDescription>
