@@ -1,37 +1,59 @@
 
-# Selettore categorie espandibile con sottomenu
+
+# Redesign pagina Categorie
 
 ## Cosa cambia
 
-Creo un nuovo componente `CategorySelect` che usa **Popover + lista custom** al posto del Select Radix, permettendo di espandere/comprimere le sottocategorie con un chevron.
+La pagina Categorie viene ridisegnata per avere un layout pulito e compatto come nello screenshot: lista unica in una Card con campo di ricerca in alto, quadratini colorati per le categorie padre, sottocategorie indentate con prefisso "/".
 
-## Comportamento
+## Layout finale
 
-- Le categorie padre **senza figli** sono voci normali: click seleziona e chiude
-- Le categorie padre **con figli** hanno un chevron (▶/▼):
-  - Click sul **chevron**: espande/comprime i figli senza chiudere il menu
-  - Click sul **nome**: seleziona la categoria padre e chiude il menu
-- Le **sottocategorie** appaiono indentate con prefisso `↳`: click seleziona e chiude
-- Stile coerente con i Select esistenti (bordi, colori, dimensioni)
+```text
+Categorie                         [+ Nuova Categoria]
 
-## File coinvolti
+┌───────────────────────────────────────────────────┐
+│  🔍 Cerca o crea una categoria                    │
+├───────────────────────────────────────────────────┤
+│  ■ Accredito da Minis...         ✏️  ➕  🗑️      │
+│  ■ Accredito Finanzia...         ✏️  ➕  🗑️      │
+│    / Cofidis                                      │
+│    / Compass                                      │
+│    / Findomestic                                  │
+│  ■ Accredito POS                 ✏️  ➕  🗑️      │
+│    / BCC Bancomat                                 │
+│  ■ Affitto                       ✏️  ➕  🗑️      │
+└───────────────────────────────────────────────────┘
+```
 
-### 1. Nuovo: `src/components/CategorySelect.tsx`
+## Dettagli
 
-Componente riutilizzabile con:
-- **Props**: `value`, `onChange`, `categories` (CategoryWithChildren[]), `placeholder`, `showAllOption?`, `className?`
-- **Stato interno**: `open` (popover), `expanded` (Set di id categorie espanse)
-- **UI**: Popover con Button trigger che mostra il nome della categoria selezionata
-- Lista interna con:
-  - Riga padre: nome cliccabile + chevron se ha figli
-  - Righe figlie: indentate, visibili solo se il padre e' espanso
-- Stile hover e focus coerente con il design system
+### Campo di ricerca
+- Input con icona Search in alto nella Card
+- Filtra categorie in tempo reale (sia padre che figlie)
+- Placeholder: "Cerca o crea una categoria"
 
-### 2. `src/components/TransactionDialog.tsx`
-- Importare `CategorySelect`
-- Sostituire il blocco Select categoria (righe 350-368) con `<CategorySelect>`
-- Rimuovere import inutilizzati di Select se non servono altrove (ma servono ancora per Conto e altri campi)
+### Categorie padre
+- Quadratino colorato (colore generato da hash del nome, pastello)
+- Nome troncato con ellipsis se troppo lungo
+- 3 pulsanti inline a destra: modifica (matita), aggiungi sottocategoria (+), elimina (cestino)
 
-### 3. `src/components/TransactionFilters.tsx`
-- Importare `CategorySelect`
-- Sostituire il blocco Select categoria (righe 191-214) con `<CategorySelect>` con prop `showAllOption`
+### Sottocategorie
+- Indentate sotto il padre, prefisso "/" prima del nome
+- Pulsanti modifica e elimina visibili al hover
+- Nessun quadratino colorato
+
+### Colori automatici
+Funzione helper che converte il nome categoria in un colore HSL pastello consistente (stesso nome = stesso colore sempre).
+
+## File modificato
+
+### `src/pages/Categories.tsx`
+- Aggiungere stato `searchQuery` per il filtro
+- Aggiungere funzione `stringToColor(name)` per generare colori pastello
+- Rimuovere la divisione in due colonne (incomeTree/expenseTree)
+- Usare `categoryTree` completo, filtrato per searchQuery
+- Nuovo layout: Card singola con input di ricerca + lista unificata
+- Categorie padre: quadratino colorato + nome + azioni inline
+- Sottocategorie: indentate con "/" + azioni al hover
+- Mantenere i dialog esistenti (CategoryDialog, DeleteConfirmDialog) senza modifiche
+
