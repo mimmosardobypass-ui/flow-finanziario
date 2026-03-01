@@ -8,7 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -198,16 +200,16 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
             <SelectItem value="all">Tutte le categorie</SelectItem>
             {filteredTree.map((parent) =>
               parent.children.length > 0 ? (
-                <div key={parent.id}>
-                  <SelectItem value={parent.id} className="font-semibold">
+                <SelectGroup key={parent.id}>
+                  <SelectLabel className="text-xs font-semibold text-muted-foreground px-2 py-1.5">
                     {parent.name}
-                  </SelectItem>
+                  </SelectLabel>
                   {parent.children.map((child) => (
-                    <SelectItem key={child.id} value={child.id} className="pl-8">
-                      ↳ {child.name}
+                    <SelectItem key={child.id} value={child.id} className="pl-6">
+                      {child.name}
                     </SelectItem>
                   ))}
-                </div>
+                </SelectGroup>
               ) : (
                 <SelectItem key={parent.id} value={parent.id}>
                   {parent.name}
