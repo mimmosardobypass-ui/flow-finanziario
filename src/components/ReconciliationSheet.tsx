@@ -126,7 +126,7 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl">
+      <SheetContent className="w-full sm:max-w-2xl overflow-hidden">
         <SheetHeader>
           <SheetTitle>Riconciliazione</SheetTitle>
           <SheetDescription>
@@ -220,54 +220,52 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
                           key={suggestion.id}
                           className="flex flex-col rounded-lg border border-border p-3"
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <p className="text-sm font-medium truncate">
-                                  {candTxn!.description || "—"}
-                                </p>
-                                {(() => {
-                                  const reason = suggestion.reason || "";
-                                  const type = reason.includes("internal_transfer")
-                                    ? "Giroconto"
-                                    : reason.includes("same_amount")
-                                      ? "Importo"
-                                      : reason.includes("keyword")
-                                        ? "Keyword"
-                                        : "Match";
-                                  return (
-                                    <Badge variant="outline" className="text-[10px] shrink-0">
-                                      {type}
-                                    </Badge>
-                                  );
-                                })()}
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    <Badge variant="secondary" className="text-[10px] shrink-0">
-                                      {suggestion.score}pt
-                                    </Badge>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p className="text-xs">{suggestion.reason}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                {candTxn!.conti?.nome_conto} ·{" "}
-                                {format(new Date(candTxn!.date), "dd MMM yyyy", { locale: it })}
-                                {(() => {
-                                  if (!transaction) return null;
-                                  const days = Math.abs(
-                                    Math.round(
-                                      (new Date(candTxn!.date).getTime() - new Date(transaction.date).getTime()) / 86400000
-                                    )
-                                  );
-                                  return days > 0 ? ` · Δ${days}gg` : null;
-                                })()}
-                              </p>
-                            </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium truncate max-w-[70%]">
+                              {candTxn!.description || "—"}
+                            </p>
+                            {(() => {
+                              const reason = suggestion.reason || "";
+                              const type = reason.includes("internal_transfer")
+                                ? "Giroconto"
+                                : reason.includes("same_amount")
+                                  ? "Importo"
+                                  : reason.includes("keyword")
+                                    ? "Keyword"
+                                    : "Match";
+                              return (
+                                <Badge variant="outline" className="text-[10px] shrink-0">
+                                  {type}
+                                </Badge>
+                              );
+                            })()}
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge variant="secondary" className="text-[10px] shrink-0">
+                                  {suggestion.score}pt
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">{suggestion.reason}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <p className="text-xs text-muted-foreground">
+                              {candTxn!.conti?.nome_conto} ·{" "}
+                              {format(new Date(candTxn!.date), "dd MMM yyyy", { locale: it })}
+                              {(() => {
+                                if (!transaction) return null;
+                                const days = Math.abs(
+                                  Math.round(
+                                    (new Date(candTxn!.date).getTime() - new Date(transaction.date).getTime()) / 86400000
+                                  )
+                                );
+                                return days > 0 ? ` · Δ${days}gg` : null;
+                              })()}
+                            </p>
                             <span
-                              className={`text-sm font-semibold whitespace-nowrap ${candTxn!.type === "income" ? "text-success" : "text-destructive"}`}
+                              className={`text-sm font-semibold ${candTxn!.type === "income" ? "text-success" : "text-destructive"}`}
                             >
                               {candTxn!.type === "income" ? "+" : "-"}€
                               {candTxn!.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
