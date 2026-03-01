@@ -1,67 +1,28 @@
 
-# Sottocategorie per filtraggio statistico
+# Verifica e miglioramento selettore sottocategorie nel dialog transazione
 
-## Concetto
+## Situazione attuale
 
-Aggiungere un livello di gerarchia alle categorie esistenti: ogni categoria puo' avere un `parent_id` opzionale che la rende una sottocategoria. La struttura rimane semplice (massimo 2 livelli: categoria padre e sottocategorie).
+Ho verificato il database: le sottocategorie esistono gia' (es. "Corso Cordua" e "Affitto Parma" sono sottocategorie di "Viviana"). Il codice del dropdown nel dialog transazione gia' prevede la visualizzazione gerarchica con il simbolo `↳` per le sottocategorie.
 
-Esempio pratico:
-- **Abbonamenti** (categoria padre, tipo: uscita)
-  - Abbonamento Lovable
-  - Netflix
-  - Spotify
-- **Stipendio** (categoria padre, tipo: entrata)
-  - Stipendio principale
-  - Bonus
+Tuttavia ci sono due problemi da correggere:
 
-## Modifiche
+### Problema 1: Wrapper `<div>` incompatibile con Radix Select
+Il codice attuale avvolge le categorie padre e le loro sottocategorie in un `<div>`, che puo' causare problemi di rendering con il componente Radix Select (che si aspetta `SelectItem` come figli diretti). Questo potrebbe impedire la corretta selezione delle sottocategorie.
 
-### 1. Database: nuova colonna `parent_id`
+### Problema 2: Categorie duplicate
+Alcune categorie esistono sia come categoria principale sia come sottocategoria (es. "Affitto Parma" e "Corso Cordua" appaiono due volte nel dropdown), creando confusione.
 
-Migrazione SQL per aggiungere `parent_id` (UUID, nullable, FK verso `categories.id`) alla tabella `categories`. Quando `parent_id` e' valorizzato, la categoria e' una sottocategoria.
+## Modifiche previste
 
-### 2. Hook `useCategories` - struttura gerarchica
+### 1. Fix rendering dropdown nel TransactionDialog
+- Rimuovere il wrapper `<div>` e usare un `React.Fragment` per evitare problemi con Radix Select
+- Aggiungere un separatore visivo o usare `SelectGroup` + `SelectLabel` di Radix per raggruppare meglio le sottocategorie sotto il nome del padre
+- La categoria padre appare come intestazione non selezionabile (o selezionabile se ha senso), le sottocategorie indentate sotto
 
-Aggiornare il hook per esporre sia la lista piatta (per i select) che una versione raggruppata per padre (per la pagina gestione e le statistiche).
-
-### 3. Pagina Categorie - gestione sottocategorie
-
-- Sotto ogni categoria padre, mostrare le sottocategorie indentate
-- Nel dialog di creazione/modifica, aggiungere un campo opzionale "Categoria padre" per rendere la nuova categoria una sottocategoria
-- Possibilita' di creare sottocategorie direttamente dalla categoria padre (pulsante "+")
-
-### 4. TransactionDialog - selettore con gruppi
-
-Raggruppare le categorie nel dropdown con `OptGroup` visivi: il nome della categoria padre come intestazione, le sottocategorie indentate sotto. Le categorie senza padre restano al primo livello.
-
-### 5. Filtri Transazioni - filtro gerarchico
-
-- Selezionando una categoria padre, vengono incluse automaticamente tutte le sue sottocategorie
-- Possibilita' di filtrare per singola sottocategoria
-
-### 6. Dashboard e statistiche
-
-- Le statistiche (breakdown per categoria) raggruppano per categoria padre
-- Il drill-down mostra il dettaglio delle sottocategorie all'interno di ogni padre
-- La card Insight mostra la categoria padre come "spesa principale"
-
-## Dettagli tecnici
-
-### Migrazione SQL
-```text
-ALTER TABLE categories
-ADD COLUMN parent_id UUID REFERENCES categories(id) ON DELETE SET NULL;
-```
+### 2. Stesso fix nei filtri transazioni
+- Applicare lo stesso miglioramento al dropdown nel componente `TransactionFilters`
 
 ### File coinvolti
-1. `supabase/migrations/` - nuova migrazione per `parent_id`
-2. `src/integrations/supabase/types.ts` - aggiornare tipo Category
-3. `src/hooks/useCategories.ts` - aggiungere `parent_id`, helper per struttura gerarchica
-4. `src/hooks/useCategoryMutations.ts` - supporto `parent_id` in create/update
-5. `src/components/CategoryDialog.tsx` - campo "Categoria padre" opzionale
-6. `src/pages/Categories.tsx` - visualizzazione gerarchica con sottocategorie indentate
-7. `src/components/TransactionDialog.tsx` - dropdown raggruppato
-8. `src/components/TransactionFilters.tsx` - filtro gerarchico (padre include figli)
-9. `src/hooks/useFilteredTransactions.ts` - logica filtro con sottocategorie
-10. `src/hooks/useDashboardStats.ts` - raggruppamento statistiche per padre
-11. `src/components/dashboard/CategoryBreakdownCard.tsx` - drill-down sottocategorie
+1. `src/components/TransactionDialog.tsx` — fix dropdown categorie con supporto `SelectGroup`/`SelectLabel`
+2. `src/components/TransactionFilters.tsx` — stesso fix per coerenza
