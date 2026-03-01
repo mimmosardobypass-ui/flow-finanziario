@@ -218,64 +218,65 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
                       {suggestionsWithTxn.map(({ suggestion, transaction: candTxn }) => (
                         <div
                           key={suggestion.id}
-                          className="flex items-center gap-3 rounded-lg border border-border p-3"
+                          className="flex flex-col rounded-lg border border-border p-3"
                         >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-medium truncate">
-                                {candTxn!.description || "—"}
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-medium truncate">
+                                  {candTxn!.description || "—"}
+                                </p>
+                                {(() => {
+                                  const reason = suggestion.reason || "";
+                                  const type = reason.includes("internal_transfer")
+                                    ? "Giroconto"
+                                    : reason.includes("same_amount")
+                                      ? "Importo"
+                                      : reason.includes("keyword")
+                                        ? "Keyword"
+                                        : "Match";
+                                  return (
+                                    <Badge variant="outline" className="text-[10px] shrink-0">
+                                      {type}
+                                    </Badge>
+                                  );
+                                })()}
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="secondary" className="text-[10px] shrink-0">
+                                      {suggestion.score}pt
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-xs">{suggestion.reason}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {candTxn!.conti?.nome_conto} ·{" "}
+                                {format(new Date(candTxn!.date), "dd MMM yyyy", { locale: it })}
+                                {(() => {
+                                  if (!transaction) return null;
+                                  const days = Math.abs(
+                                    Math.round(
+                                      (new Date(candTxn!.date).getTime() - new Date(transaction.date).getTime()) / 86400000
+                                    )
+                                  );
+                                  return days > 0 ? ` · Δ${days}gg` : null;
+                                })()}
                               </p>
-                              {(() => {
-                                const reason = suggestion.reason || "";
-                                const type = reason.includes("internal_transfer")
-                                  ? "Giroconto"
-                                  : reason.includes("same_amount")
-                                    ? "Importo"
-                                    : reason.includes("keyword")
-                                      ? "Keyword"
-                                      : "Match";
-                                return (
-                                  <Badge variant="outline" className="text-[10px] shrink-0">
-                                    {type}
-                                  </Badge>
-                                );
-                              })()}
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <Badge variant="secondary" className="text-[10px] shrink-0">
-                                    {suggestion.score}pt
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="text-xs">{suggestion.reason}</p>
-                                </TooltipContent>
-                              </Tooltip>
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                              {candTxn!.conti?.nome_conto} ·{" "}
-                              {format(new Date(candTxn!.date), "dd MMM yyyy", { locale: it })}
-                              {(() => {
-                                if (!transaction) return null;
-                                const days = Math.abs(
-                                  Math.round(
-                                    (new Date(candTxn!.date).getTime() - new Date(transaction.date).getTime()) / 86400000
-                                  )
-                                );
-                                return days > 0 ? ` · Δ${days}gg` : null;
-                              })()}
-                            </p>
+                            <span
+                              className={`text-sm font-semibold whitespace-nowrap ${candTxn!.type === "income" ? "text-success" : "text-destructive"}`}
+                            >
+                              {candTxn!.type === "income" ? "+" : "-"}€
+                              {candTxn!.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                            </span>
                           </div>
-                          <span
-                            className={`text-sm font-semibold whitespace-nowrap ${candTxn!.type === "income" ? "text-success" : "text-destructive"}`}
-                          >
-                            {candTxn!.type === "income" ? "+" : "-"}€
-                            {candTxn!.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-                          </span>
-                          <div className="flex gap-1 shrink-0">
+                          <div className="flex gap-2 mt-3">
                             <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-success hover:text-success"
+                              size="sm"
+                              className="flex-1 bg-green-600 hover:bg-green-700 text-white gap-1"
                               onClick={() => handleAccept(suggestion)}
                               disabled={acceptMutation.isPending}
                             >
@@ -284,15 +285,17 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
                               ) : (
                                 <Check className="h-4 w-4" />
                               )}
+                              Riconcilia
                             </Button>
                             <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 gap-1"
                               onClick={() => handleDismiss(suggestion)}
                               disabled={dismissMutation.isPending}
                             >
                               <X className="h-4 w-4" />
+                              Rifiuta
                             </Button>
                           </div>
                         </div>
