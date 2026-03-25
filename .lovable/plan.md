@@ -1,20 +1,49 @@
 
 
-# Rendere la barra di scorrimento sempre visibile nel selettore categorie
+# Fix build error + Pagina Bilancio rivista
 
-## Problema
+## 1. Fix errore TypeScript
 
-La `ScrollArea` di Radix nasconde la scrollbar di default. Anche con `type="auto"`, la barra appare solo durante lo scroll e puo' essere poco visibile.
+Nel file `src/pages/Transactions.tsx` riga 84, cambiare `NodeJS.Timeout` in `ReturnType<typeof setTimeout>` per risolvere l'errore `Cannot find namespace 'NodeJS'`.
 
-## Soluzione
+## 2. Pagina Bilancio - mockup corretto
 
-Nel file `src/components/CategorySelect.tsx`, cambiare il prop `type` della `ScrollArea` da `"auto"` a `"always"` per far si' che la barra di scorrimento sia sempre visibile quando il contenuto eccede l'altezza, esattamente come nello screenshot di riferimento.
+La pagina mostra solo **categorie e sottocategorie** con i relativi totali, senza codici piano dei conti.
 
-### Dettaglio tecnico
+```text
+┌──────────────────────────────┬──────────────────────────────┐
+│          USCITE              │          ENTRATE             │
+├──────────────────────────────┼──────────────────────────────┤
+│                              │                              │
+│ Affitto              1.200   │ Stipendio            3.000   │
+│   Casa                 800   │   Netto              2.500   │
+│   Ufficio              400   │   Bonus                500   │
+│                              │                              │
+│ Alimentari             650   │ Investimenti           800   │
+│   Supermercato         500   │   Dividendi            800   │
+│   Ristorante           150   │                              │
+│                              │                              │
+│ Trasporti              320   │ Freelance              600   │
+│   Benzina              200   │   Consulenze           400   │
+│   Abbonamento          120   │   Progetti             200   │
+│                              │                              │
+├──────────────────────────────┼──────────────────────────────┤
+│ Totale Uscite        2.170   │ Totale Entrate       4.400   │
+└──────────────────────────────┴──────────────────────────────┘
+                   Utile/Perdita: +2.230
+```
+
+- **Categoria madre** in grassetto con totale aggregato
+- **Sottocategorie** indentate sotto in testo normale
+- Filtri periodo (mese, trimestre, anno, personalizzato) e conto in alto
+- Esportazione PDF
+
+## File coinvolti
 
 | File | Modifica |
 |------|----------|
-| `src/components/CategorySelect.tsx` (riga ~225) | Cambiare `type="auto"` in `type="always"` sulla `ScrollArea` |
-
-Una sola parola da modificare.
+| `src/pages/Transactions.tsx` | Fix `NodeJS.Timeout` → `ReturnType<typeof setTimeout>` |
+| `src/components/AppSidebar.tsx` | Aggiungere voce "Bilancio" con icona `Scale` |
+| `src/pages/Bilancio.tsx` | Nuovo file - pagina bilancio a due colonne |
+| `src/App.tsx` | Aggiungere rotta `/bilancio` |
 
