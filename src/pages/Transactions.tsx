@@ -81,7 +81,7 @@ export default function Transactions() {
   });
 
   // Debounced URL sync to avoid cursor reset during typing
-  const urlSyncTimerRef = useRef<NodeJS.Timeout>();
+  const urlSyncTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     clearTimeout(urlSyncTimerRef.current);
