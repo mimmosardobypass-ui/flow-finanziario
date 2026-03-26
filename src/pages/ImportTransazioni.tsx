@@ -182,8 +182,11 @@ export default function ImportTransazioni() {
   /* ── derived data ── */
 
   const parsedRows = useMemo(() => {
+    const suspiciousPatterns = [/^identificativo$/i, /^saldo$/i, /^eur$/i, /^divisa$/i, /^importo$/i, /^data$/i, /^codice$/i];
     return rows.map((row, i) => {
-      const hasError = !row.date || row.amount == null || row.amount === 0;
+      const emptyDesc = !row.description || row.description.trim().length === 0;
+      const suspiciousDesc = suspiciousPatterns.some((re) => re.test(row.description.trim()));
+      const hasError = !row.date || row.amount == null || row.amount === 0 || emptyDesc || suspiciousDesc;
       return { index: i, ...row, hasError };
     });
   }, [rows]);
