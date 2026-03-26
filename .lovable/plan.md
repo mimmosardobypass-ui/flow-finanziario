@@ -1,112 +1,107 @@
 
-## Analisi profonda del problema
+## Problema reale individuato
 
-La logica attuale in `src/utils/parseSellaPdf.ts` non è ancora affidabile per un estratto conto Sella reale. I punti deboli principali sono:
+Dallo screen e dal codice, l’errore non è solo “il parser non legge bene il PDF”: ci sono 3 difetti strutturali nella logica attuale.
 
-1. **Raggruppamento per righe troppo fragile**
-   - `groupIntoRows(..., 4)` unisce i frammenti solo per vicinanza Y.
-   - Nei PDF Sella una singola operazione può occupare **più righe visive**: descrizione su una riga, importo su quella sotto, date leggermente sfalsate.
-   - Risultato: descrizioni vuote o spezzate, importi associati alla riga sbagliata.
+1. `detectColumnRanges()` calcola intervalli X, ma `classifyFragment()` usa solo la soglia iniziale delle colonne e ignora il limite destro.
+   - Esempio dai log:
+     - `dataOp: [100, 200]`
+     - `dataVal: [144, 265]`
+   - Questi range si sovrappongono e la classificazione attuale può spostare frammenti nella colonna sbagliata.
 
-2. **Classificazione colonne troppo approssimativa**
-   - `classifyColumn()` sceglie la colonna “più vicina a sinistra”.
-   - Se le coordinate cambiano leggermente, una `data valuta`, `EUR` o parte descrizione finisce nella colonna sbagliata.
-   - Questo spiega valori come descrizioni che diventano date o testo di intestazione.
+2. La descrizione nei PDF Sella spesso va su più righe e non resta sempre tutta dentro un unico range X.
+   - Alcuni pezzi finiscono più a sinistra del previsto e vengono letti come `codice` o `dataOp/dataVal`.
+   - Risultato: anteprima con data/importo ma descrizione vuota.
 
-3. **Costruzione importo non robusta**
-   - I frammenti dell’importo vengono concatenati “alla cieca”.
-   - Se segno, valuta e numero sono separati in item PDF distinti, il parser può perdere `+`/`-` o produrre stringhe sporche.
+3. Il parser costruisce i blocchi transazione in modo troppo “piatto”.
+   - Raccoglie tutti i frammenti in sequenza globale.
+   - Non ricostruisce bene le righe visive interne del blocco.
+   - Se una descrizione continua sulla riga sotto, oggi può perdersi o essere misclassificata.
 
-4. **Fallback troppo permissivo**
-   - Se il riconoscimento colonne non è perfetto, il fallback lineare può importare righe sbagliate anziché bloccarle.
-   - Per un file bancario è meglio **scartare** una riga dubbia che importarla male.
+## Soluzione definitiva
 
-5. **Validazione UI insufficiente**
-   - In `ImportTransazioni.tsx` una riga è errore solo se manca `date` o `amount`.
-   - Una riga con **descrizione vuota o palesemente corrotta** oggi può sembrare valida.
+### 1. Riscrivere il parser in 2 fasi
+Nel file `src/utils/parseSellaPdf.ts`:
 
-## Soluzione definitiva proposta
+**Fase A – rilevazione struttura**
+- leggere i frammenti pagina per pagina
+- individuare la riga header
+- calcolare veri range colonna non sovrapposti
+- usare sia `startX` sia `endX` per classificare i frammenti
 
-### 1. Riscrivere il parser come parser a “blocchi transazione”
-Invece di partire dalle righe visive, il parser deve:
+**Fase B – parsing transazioni**
+- usare il codice numerico lungo solo come delimitatore tecnico
+- creare un blocco per ogni movimento
+- dentro ogni blocco raggruppare i frammenti per righe visive con tolleranza Y
+- ricostruire:
+  - data operazione
+  - descrizione multilinea
+  - importo con segno
 
-- leggere tutti i frammenti con coordinate `x/y`
-- lavorare **pagina per pagina**
-- trovare ogni inizio movimento tramite il **codice numerico lungo**
-- raccogliere tutti i frammenti fino al codice successivo
-- solo dopo classificare date, descrizione e importo dentro quel blocco
+### 2. Correggere la classificazione colonne
+Sostituire la logica attuale:
+- da “se `x >= start` allora appartiene a quella colonna”
+- a “appartiene alla colonna se `x` cade nel range `[start, end)`”
 
-Questo è più stabile perché il codice identificativo resta utile come **delimitatore tecnico**, anche se non va importato.
+Questo evita che:
+- `data operazione` finisca in `data valuta`
+- pezzi descrizione finiscano nella colonna sbagliata
+- importi/date rubino testo alla descrizione
 
-### 2. Passare da “start X” a veri intervalli di colonna
-Non basta sapere dove inizia una colonna: servono **range X**.
+### 3. Gestire descrizioni multilinea in modo robusto
+Per ogni blocco transazione:
+- ordinare i frammenti per riga visiva e poi per X
+- considerare descrizione valida anche se parte del testo cade leggermente fuori dal range “descrizione”
+- permettere una tolleranza controllata per le continuation lines
+- rimuovere solo rumore reale:
+  - header tabella
+  - `EUR`
+  - `Pagina`
+  - `Saldo`
+  - intestazioni/footer
 
-Esempio:
-```text
-codice      0 ── 120
-data op   120 ── 210
-data val  210 ── 300
-descr     300 ── 640
-divisa    640 ── 700
-importo   700 ── end
-```
+### 4. Ricostruire correttamente il segno dell’importo
+Migliorare l’estrazione dell’importo per supportare:
+- `-617,92`
+- `+31,70`
+- `- 32.500,00`
 
-Così:
-- `data valuta` non finisce più nella descrizione
-- `EUR` non finisce più nell’importo
-- le descrizioni multilinea vengono ricostruite solo dai frammenti nel range descrizione
-
-### 3. Ricostruzione robusta dell’importo con segno
 Il parser dovrà:
-- leggere tutti i frammenti nel range importo
-- ricomporre segno e numero anche se separati
+- unire i frammenti della colonna importo
+- leggere il segno anche se separato dal numero
 - ignorare `EUR`
-- accettare formati come:
-  - `-617,92`
-  - `+31,70`
-  - `- 32.500,00`
+- validare il numero prima di accettarlo
 
-### 4. Descrizione pulita e filtraggio rumore
-Aggiungere regole per:
-- escludere header/footer (`Pagina`, `Saldo`, intestazioni tabella, note finali)
-- rimuovere date duplicate dalla descrizione
-- unire correttamente le continuation lines
-- normalizzare spazi multipli
+### 5. Rendere il fallback più sicuro
+Se il parser non riesce a identificare in modo affidabile colonne/blocchi:
+- non deve importare “alla cieca”
+- deve scartare le righe ambigue invece di produrre righe con descrizione vuota
 
-### 5. Modalità “strict” per l’import PDF
-Per i PDF bancari conviene importare solo righe realmente affidabili.
+Per un estratto conto è meglio perdere una riga dubbia che importarla male.
 
-Una riga PDF verrà considerata valida solo se ha:
-- data operazione valida
-- importo valido con segno
-- descrizione non vuota e non composta solo da date/intestazioni
-
-Le righe dubbie vanno:
-- escluse automaticamente
-- oppure mostrate come errore/non selezionabili
-
-### 6. Rafforzare la preview in `ImportTransazioni.tsx`
-Aggiornare la logica `hasError` per PDF includendo anche:
-- descrizione vuota
-- descrizione sospetta (`Identificativo`, `Saldo`, solo data, solo EUR, ecc.)
-- importo nullo o non coerente
-
-Così l’utente non rischia di importare movimenti corrotti.
+### 6. Rafforzare la preview di importazione
+Nel file `src/pages/ImportTransazioni.tsx`:
+- mantenere l’errore su righe senza descrizione
+- aggiungere controlli più severi per PDF:
+  - descrizione vuota
+  - descrizione composta solo da date/sigle/header
+  - importo nullo o incoerente
+- impedire la selezione delle righe sospette
 
 ## File da modificare
 
 | File | Intervento |
 |------|------------|
-| `src/utils/parseSellaPdf.ts` | Riscrittura completa con parser a blocchi, colonne a range, importi con segno, filtro rumore |
-| `src/pages/ImportTransazioni.tsx` | Validazione più severa per PDF e blocco righe senza descrizione affidabile |
+| `src/utils/parseSellaPdf.ts` | Riscrittura parser: range reali, blocchi transazione, righe visive interne, importi con segno, fallback sicuro |
+| `src/pages/ImportTransazioni.tsx` | Validazione preview più severa per PDF e blocco righe dubbie |
 
 ## Esito atteso
 
 Dopo questa correzione:
 - le descrizioni non dovrebbero più sparire
-- i segni `+` e `-` dovrebbero essere letti correttamente
-- date e importi non dovrebbero più slittare di colonna
-- eventuali righe ancora ambigue non verranno importate per errore
+- i segni `+` e `-` verranno letti correttamente
+- la preview mostrerà solo righe affidabili
+- non sarà necessario cancellare nulla adesso se l’importazione non è stata confermata
 
-## Nota pratica sui movimenti
-Dato che in questo momento hai **annullato** l’importazione, non serve cancellare nulla adesso. La cancellazione avrebbe senso solo se i movimenti fossero già stati salvati. La strada giusta è prima correggere il parser, poi riprovare l’import.
+## Nota pratica
+Dallo screen risulta che eri ancora nella preview di importazione, quindi i movimenti non sembrano ancora salvati. La correzione va fatta prima di riprovare l’import definitivo.
