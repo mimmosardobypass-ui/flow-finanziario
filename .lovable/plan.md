@@ -1,50 +1,44 @@
 
 
-# Importazione PDF estratto conto Banca Sella
+# Fix parser PDF Banca Sella - descrizioni e importi
 
-## Obiettivo
+## Problema
 
-Aggiungere il supporto per importare transazioni da PDF di estratto conto Banca Sella nella pagina `/import-transazioni`. Il PDF verra' parsato lato client con `pdfjs-dist`, estraendo: **Data operazione**, **Descrizione** e **Importo** (ignorando Codice Identificativo, Data Valuta, Divisa e Note).
+Il parser attuale raggruppa i frammenti di testo per coordinata Y esatta (Math.round). Nei PDF tabulari di Banca Sella, una singola riga di transazione puo' avere il testo distribuito su piu' Y:
+- Y=100: `25000905207983  16/05/2025  16/05/2025  DONAZIONE X ACQUISTO MAGAZZINO A SARDO`
+- Y=92: `CARDALANO GIUSEPPE  EUR  -32.500,00`
 
-## Struttura rilevata dal PDF Sella
+Risultato: la descrizione viene spezzata e l'importo finisce nella riga di continuazione, causando parsing errato.
 
-```text
-Codice ID | Data Op. | Data Valuta | Descrizione | Divisa | Importo | Note
-(ignora)  | dd/MM/yy | (ignora)    | testo       | (EUR)  | -1.234,56 | (ignora)
-```
+## Soluzione
 
-Il parser cercara' le righe con pattern: codice numerico lungo, seguito da due date dd/MM/yyyy, descrizione, "EUR", importo con virgola decimale e segno.
+Riscrivere `src/utils/parseSellaPdf.ts` con un approccio basato sulle **colonne X** invece che sulle righe Y:
 
-## Modifiche previste
+1. **Identificare le posizioni X delle colonne** dalla riga di intestazione del PDF (cercando "Codice", "Data", "Descrizione", "Divisa", "Importo")
+2. **Raggruppare le righe della tabella** con tolleranza Y (raggruppare Y entro 3-4px per gestire testo multilinea nella stessa cella)
+3. **Assegnare ogni frammento alla colonna corretta** in base alla sua posizione X
+4. **Ricostruire transazioni complete** usando il codice identificativo come delimitatore di riga
 
-### 1. `package.json`
-- Aggiungere `pdfjs-dist` come dipendenza
+### Logica migliorata
 
-### 2. `src/utils/parseSellaPdf.ts` (nuovo file)
-- Funzione `parseSellaPdf(arrayBuffer): ParsedRow[]`
-- Usa `pdfjs-dist` per estrarre il testo pagina per pagina
-- Per ogni riga di testo, identifica il pattern Banca Sella:
-  - Codice numerico lungo (14+ cifre) → segna inizio nuova transazione
-  - Prima data dd/MM/yyyy → data operazione
-  - Seconda data → ignorata (data valuta)
-  - Testo tra la seconda data e "EUR" → descrizione
-  - Numero dopo "EUR" → importo (formato italiano con virgola)
-- Gestisce descrizioni multilinea concatenando righe successive senza codice
-- Restituisce lo stesso formato `ParsedRow[]` gia' usato per Excel/CSV
+- Scansionare tutti i text items del PDF con le loro coordinate (x, y)
+- Trovare la riga header per determinare i range X di ogni colonna
+- Per ogni transazione (delimitata dal codice 14+ cifre):
+  - Raccogliere TUTTI i frammenti di testo tra un codice e il successivo
+  - Assegnare ogni frammento alla colonna corretta per posizione X
+  - Concatenare i frammenti della colonna "Descrizione"
+  - Estrarre l'importo dalla colonna "Importo" (con segno corretto)
+  - Estrarre la data dalla colonna "Data operazione"
 
-### 3. `src/pages/ImportTransazioni.tsx`
-- Accettare `.pdf` nel file input (`accept=".xlsx,.csv,.pdf"`)
-- Aggiornare validazione formato per includere `application/pdf` e estensione `.pdf`
-- Se il file e' PDF, usare `parseSellaPdf()` invece di `parseWorkbook()`
-- Aggiornare il testo della drop zone: "Formati supportati: .xlsx, .csv, .pdf"
+### Gestione segni
 
-Tutto il resto (anteprima tabella, selezione righe, importazione) funziona identico perche' il formato dati e' lo stesso `ParsedRow[]`.
+L'importo nel PDF Sella ha il segno esplicito (`-32.500,00` o `+31,70`). Il regex AMOUNT_RE viene aggiornato per catturare correttamente il segno `[+-]` che puo' precedere l'importo o essere separato da uno spazio.
 
-## File coinvolti
+## File modificato
 
 | File | Modifica |
 |------|----------|
-| `package.json` | Aggiungere `pdfjs-dist` |
-| `src/utils/parseSellaPdf.ts` | Nuovo - parser PDF Banca Sella |
-| `src/pages/ImportTransazioni.tsx` | Accettare PDF e chiamare il parser |
+| `src/utils/parseSellaPdf.ts` | Riscrittura completa con approccio column-based |
+
+Dopo la correzione, si consiglia di cancellare i movimenti importati in modo errato e reimportare il PDF.
 
