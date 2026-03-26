@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { parse, isValid, format } from "date-fns";
+import { parseSellaPdf } from "@/utils/parseSellaPdf";
 import {
   Upload,
   FileSpreadsheet,
@@ -249,26 +250,36 @@ export default function ImportTransazioni() {
 
   const processFile = useCallback((file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase();
+    const isPdf = file.type === "application/pdf" || ext === "pdf";
     const validTypes = [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "text/csv",
       "application/vnd.ms-excel",
+      "application/pdf",
     ];
-    if (!validTypes.includes(file.type) && ext !== "xlsx" && ext !== "csv") {
-      toast({ title: "Formato non supportato", description: "Carica un file .xlsx o .csv", variant: "destructive" });
+    if (!validTypes.includes(file.type) && ext !== "xlsx" && ext !== "csv" && ext !== "pdf") {
+      toast({ title: "Formato non supportato", description: "Carica un file .xlsx, .csv o .pdf", variant: "destructive" });
       return;
     }
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        if (workbook.SheetNames.length === 0) {
-          toast({ title: "File vuoto", description: "Il file non contiene fogli", variant: "destructive" });
-          return;
-        }
+        const buffer = e.target?.result as ArrayBuffer;
 
-        const result = parseWorkbook(workbook);
+        let result: ParsedRow[] | string;
+
+        if (isPdf) {
+          const pdfRows = await parseSellaPdf(buffer);
+          result = pdfRows.length > 0 ? pdfRows : "Nessuna transazione trovata nel PDF.";
+        } else {
+          const data = new Uint8Array(buffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          if (workbook.SheetNames.length === 0) {
+            toast({ title: "File vuoto", description: "Il file non contiene fogli", variant: "destructive" });
+            return;
+          }
+          result = parseWorkbook(workbook);
+        }
 
         if (typeof result === "string") {
           toast({ title: "Colonne non trovate", description: result, variant: "destructive" });
@@ -276,7 +287,7 @@ export default function ImportTransazioni() {
         }
 
         if (result.length === 0) {
-          toast({ title: "Nessun dato", description: "Nessuna riga dati trovata dopo l'intestazione.", variant: "destructive" });
+          toast({ title: "Nessun dato", description: "Nessuna riga dati trovata.", variant: "destructive" });
           return;
         }
 
@@ -382,7 +393,7 @@ export default function ImportTransazioni() {
               <Upload className="h-4 w-4" />
               {hasFile ? "Cambia file" : "Carica file"}
             </Button>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={handleFileInput} />
+            <input ref={fileInputRef} type="file" accept=".xlsx,.csv,.pdf" className="hidden" onChange={handleFileInput} />
           </div>
         </div>
 
@@ -437,7 +448,7 @@ export default function ImportTransazioni() {
               >
                 <Upload className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
                 <p className="text-foreground font-medium mb-1 text-lg">Trascina un file qui o clicca per selezionarlo</p>
-                <p className="text-sm text-muted-foreground">Formati supportati: .xlsx, .csv</p>
+                <p className="text-sm text-muted-foreground">Formati supportati: .xlsx, .csv, .pdf (Banca Sella)</p>
               </div>
             </div>
           </div>
