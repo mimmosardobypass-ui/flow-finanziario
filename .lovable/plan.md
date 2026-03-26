@@ -1,49 +1,50 @@
 
 
-# Fix build error + Pagina Bilancio rivista
+# Importazione PDF estratto conto Banca Sella
 
-## 1. Fix errore TypeScript
+## Obiettivo
 
-Nel file `src/pages/Transactions.tsx` riga 84, cambiare `NodeJS.Timeout` in `ReturnType<typeof setTimeout>` per risolvere l'errore `Cannot find namespace 'NodeJS'`.
+Aggiungere il supporto per importare transazioni da PDF di estratto conto Banca Sella nella pagina `/import-transazioni`. Il PDF verra' parsato lato client con `pdfjs-dist`, estraendo: **Data operazione**, **Descrizione** e **Importo** (ignorando Codice Identificativo, Data Valuta, Divisa e Note).
 
-## 2. Pagina Bilancio - mockup corretto
-
-La pagina mostra solo **categorie e sottocategorie** con i relativi totali, senza codici piano dei conti.
+## Struttura rilevata dal PDF Sella
 
 ```text
-┌──────────────────────────────┬──────────────────────────────┐
-│          USCITE              │          ENTRATE             │
-├──────────────────────────────┼──────────────────────────────┤
-│                              │                              │
-│ Affitto              1.200   │ Stipendio            3.000   │
-│   Casa                 800   │   Netto              2.500   │
-│   Ufficio              400   │   Bonus                500   │
-│                              │                              │
-│ Alimentari             650   │ Investimenti           800   │
-│   Supermercato         500   │   Dividendi            800   │
-│   Ristorante           150   │                              │
-│                              │                              │
-│ Trasporti              320   │ Freelance              600   │
-│   Benzina              200   │   Consulenze           400   │
-│   Abbonamento          120   │   Progetti             200   │
-│                              │                              │
-├──────────────────────────────┼──────────────────────────────┤
-│ Totale Uscite        2.170   │ Totale Entrate       4.400   │
-└──────────────────────────────┴──────────────────────────────┘
-                   Utile/Perdita: +2.230
+Codice ID | Data Op. | Data Valuta | Descrizione | Divisa | Importo | Note
+(ignora)  | dd/MM/yy | (ignora)    | testo       | (EUR)  | -1.234,56 | (ignora)
 ```
 
-- **Categoria madre** in grassetto con totale aggregato
-- **Sottocategorie** indentate sotto in testo normale
-- Filtri periodo (mese, trimestre, anno, personalizzato) e conto in alto
-- Esportazione PDF
+Il parser cercara' le righe con pattern: codice numerico lungo, seguito da due date dd/MM/yyyy, descrizione, "EUR", importo con virgola decimale e segno.
+
+## Modifiche previste
+
+### 1. `package.json`
+- Aggiungere `pdfjs-dist` come dipendenza
+
+### 2. `src/utils/parseSellaPdf.ts` (nuovo file)
+- Funzione `parseSellaPdf(arrayBuffer): ParsedRow[]`
+- Usa `pdfjs-dist` per estrarre il testo pagina per pagina
+- Per ogni riga di testo, identifica il pattern Banca Sella:
+  - Codice numerico lungo (14+ cifre) → segna inizio nuova transazione
+  - Prima data dd/MM/yyyy → data operazione
+  - Seconda data → ignorata (data valuta)
+  - Testo tra la seconda data e "EUR" → descrizione
+  - Numero dopo "EUR" → importo (formato italiano con virgola)
+- Gestisce descrizioni multilinea concatenando righe successive senza codice
+- Restituisce lo stesso formato `ParsedRow[]` gia' usato per Excel/CSV
+
+### 3. `src/pages/ImportTransazioni.tsx`
+- Accettare `.pdf` nel file input (`accept=".xlsx,.csv,.pdf"`)
+- Aggiornare validazione formato per includere `application/pdf` e estensione `.pdf`
+- Se il file e' PDF, usare `parseSellaPdf()` invece di `parseWorkbook()`
+- Aggiornare il testo della drop zone: "Formati supportati: .xlsx, .csv, .pdf"
+
+Tutto il resto (anteprima tabella, selezione righe, importazione) funziona identico perche' il formato dati e' lo stesso `ParsedRow[]`.
 
 ## File coinvolti
 
 | File | Modifica |
 |------|----------|
-| `src/pages/Transactions.tsx` | Fix `NodeJS.Timeout` → `ReturnType<typeof setTimeout>` |
-| `src/components/AppSidebar.tsx` | Aggiungere voce "Bilancio" con icona `Scale` |
-| `src/pages/Bilancio.tsx` | Nuovo file - pagina bilancio a due colonne |
-| `src/App.tsx` | Aggiungere rotta `/bilancio` |
+| `package.json` | Aggiungere `pdfjs-dist` |
+| `src/utils/parseSellaPdf.ts` | Nuovo - parser PDF Banca Sella |
+| `src/pages/ImportTransazioni.tsx` | Accettare PDF e chiamare il parser |
 
