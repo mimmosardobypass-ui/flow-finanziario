@@ -1,6 +1,5 @@
 import * as pdfjsLib from "pdfjs-dist";
 
-// Use the bundled worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 interface ParsedRow {
@@ -13,50 +12,152 @@ interface TextFragment {
   x: number;
   y: number;
   str: string;
+  page: number;
 }
 
-interface ColumnBounds {
-  codice: number;
-  dataOp: number;
-  dataVal: number;
-  descrizione: number;
-  divisa: number;
-  importo: number;
-}
+/* ── regex ──────────────────────────────────────── */
 
-const HEADER_KEYWORDS: Record<keyof ColumnBounds, string[]> = {
-  codice: ["codice"],
-  dataOp: ["data"],
-  dataVal: ["data"],
-  descrizione: ["descrizione"],
-  divisa: ["divisa"],
-  importo: ["importo"],
-};
+const CODE_RE = /^\d{14,}$/;
+const DATE_RE = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+const AMOUNT_RE = /([+-])?\s*(\d{1,3}(?:\.\d{3})*,\d{2})/;
 
-const CODE_RE = /^\d{14,}/;
-const DATE_RE = /\d{2}\/\d{2}\/\d{4}/;
-const AMOUNT_RE = /[+-]?\s?\d{1,3}(?:\.\d{3})*,\d{2}/;
+/* ── helpers ────────────────────────────────────── */
 
 function parseItalianAmount(raw: string): number | null {
-  const str = raw.trim().replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
-  const n = parseFloat(str);
-  return isNaN(n) ? null : n;
+  const m = raw.match(AMOUNT_RE);
+  if (!m) return null;
+  const sign = m[1] === "-" ? -1 : 1;
+  const num = parseFloat(m[2].replace(/\./g, "").replace(",", "."));
+  return isNaN(num) ? null : sign * num;
 }
 
-function formatDate(ddmmyyyy: string): string {
-  const [dd, mm, yyyy] = ddmmyyyy.split("/");
-  return `${yyyy}-${mm}-${dd}`;
+function formatDate(ddmmyyyy: string): string | null {
+  const m = ddmmyyyy.match(DATE_RE);
+  if (!m) return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+const NOISE_PATTERNS = [
+  /pagina/i,
+  /saldo/i,
+  /^codice\s+identificativo/i,
+  /^data\s+operazione/i,
+  /^data\s+valuta/i,
+  /^descrizione$/i,
+  /^divisa$/i,
+  /^importo$/i,
+  /totale\s+movimenti/i,
+  /estratto\s+conto/i,
+  /^iban/i,
+  /^intestat/i,
+  /^filiale/i,
+  /^conto\s+corrente/i,
+];
+
+function isNoiseLine(text: string): boolean {
+  return NOISE_PATTERNS.some((re) => re.test(text.trim()));
+}
+
+/* ── Column ranges ─────────────────────────────── */
+
+interface ColumnRanges {
+  codice: [number, number];
+  dataOp: [number, number];
+  dataVal: [number, number];
+  descrizione: [number, number];
+  divisa: [number, number];
+  importo: [number, number];
 }
 
 /**
- * Parse a Banca Sella PDF bank statement using a column-based approach.
- *
- * Instead of reconstructing lines by Y position, we:
- * 1. Find column X positions from the header row
- * 2. Group text fragments into transaction blocks (delimited by the 14+ digit code)
- * 3. Assign each fragment to its column based on X position
- * 4. Extract date, description, and amount from the correct columns
+ * Detect column X ranges from header row.
+ * We look for header keywords on the same Y level, then compute
+ * boundaries as [thisColumnX, nextColumnX).
  */
+function detectColumnRanges(fragments: TextFragment[]): ColumnRanges | null {
+  // Collect header candidates
+  const candidates: { key: string; x: number; y: number }[] = [];
+
+  for (const f of fragments) {
+    const lower = f.str.toLowerCase();
+    if (lower.includes("codice") && (lower.includes("identificativo") || lower.includes("ident"))) {
+      candidates.push({ key: "codice", x: f.x, y: f.y });
+    } else if (lower.includes("data") && lower.includes("operazione")) {
+      candidates.push({ key: "dataOp", x: f.x, y: f.y });
+    } else if (lower.includes("data") && lower.includes("valuta")) {
+      candidates.push({ key: "dataVal", x: f.x, y: f.y });
+    } else if (lower === "descrizione" || (lower.includes("descrizione") && !lower.includes("data"))) {
+      candidates.push({ key: "descrizione", x: f.x, y: f.y });
+    } else if (lower === "divisa") {
+      candidates.push({ key: "divisa", x: f.x, y: f.y });
+    } else if (lower === "importo" || (lower.includes("importo") && !lower.includes("data"))) {
+      candidates.push({ key: "importo", x: f.x, y: f.y });
+    }
+  }
+
+  if (candidates.length < 3) return null;
+
+  // Group by Y (tolerance 10px) and pick the largest group
+  const yBuckets = new Map<number, typeof candidates>();
+  for (const c of candidates) {
+    const bucketKey = Math.round(c.y / 10) * 10;
+    if (!yBuckets.has(bucketKey)) yBuckets.set(bucketKey, []);
+    yBuckets.get(bucketKey)!.push(c);
+  }
+
+  let bestGroup = candidates;
+  let bestSize = 0;
+  for (const [, group] of yBuckets) {
+    if (group.length > bestSize) {
+      bestSize = group.length;
+      bestGroup = group;
+    }
+  }
+
+  // Build a map of key → x
+  const xMap: Record<string, number> = {};
+  for (const c of bestGroup) {
+    // If duplicate key, take the one with smallest x (first occurrence)
+    if (!(c.key in xMap) || c.x < xMap[c.key]) {
+      xMap[c.key] = c.x;
+    }
+  }
+
+  // We need at minimum descrizione and importo
+  if (!("descrizione" in xMap) || !("importo" in xMap)) return null;
+
+  // Sort keys by X to build ranges
+  const sortedKeys = Object.entries(xMap).sort((a, b) => a[1] - b[1]);
+  const ranges: Record<string, [number, number]> = {};
+
+  for (let i = 0; i < sortedKeys.length; i++) {
+    const [key, startX] = sortedKeys[i];
+    const endX = i + 1 < sortedKeys.length ? sortedKeys[i + 1][1] : 9999;
+    ranges[key] = [startX - 10, endX - 10]; // 10px tolerance on left edge
+  }
+
+  return {
+    codice: ranges.codice || [0, ranges.dataOp?.[0] ?? 100],
+    dataOp: ranges.dataOp || [100, 200],
+    dataVal: ranges.dataVal || [200, 300],
+    descrizione: ranges.descrizione || [300, 640],
+    divisa: ranges.divisa || [640, 700],
+    importo: ranges.importo || [700, 9999],
+  };
+}
+
+function classifyFragment(x: number, ranges: ColumnRanges): keyof ColumnRanges {
+  // Check from right to left (importo is usually rightmost)
+  if (x >= ranges.importo[0]) return "importo";
+  if (x >= ranges.divisa[0]) return "divisa";
+  if (x >= ranges.descrizione[0]) return "descrizione";
+  if (x >= ranges.dataVal[0]) return "dataVal";
+  if (x >= ranges.dataOp[0]) return "dataOp";
+  return "codice";
+}
+
+/* ── Main parser ───────────────────────────────── */
+
 export async function parseSellaPdf(arrayBuffer: ArrayBuffer): Promise<ParsedRow[]> {
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const allFragments: TextFragment[] = [];
@@ -66,307 +167,207 @@ export async function parseSellaPdf(arrayBuffer: ArrayBuffer): Promise<ParsedRow
     const content = await page.getTextContent();
 
     for (const item of content.items) {
-      if (!("str" in item) || !(item as any).str.trim()) continue;
+      if (!("str" in item)) continue;
+      const str = (item as any).str.trim();
+      if (!str) continue;
       allFragments.push({
         x: Math.round((item as any).transform[4]),
         y: Math.round((item as any).transform[5]),
-        str: (item as any).str.trim(),
+        str,
+        page: p,
       });
     }
   }
 
-  // Sort all fragments top-to-bottom (Y desc), then left-to-right (X asc)
-  allFragments.sort((a, b) => b.y - a.y || a.x - b.x);
+  // Sort top-to-bottom (Y descending), left-to-right (X ascending)
+  allFragments.sort((a, b) => {
+    if (a.page !== b.page) return a.page - b.page;
+    if (Math.abs(a.y - b.y) > 2) return b.y - a.y;
+    return a.x - b.x;
+  });
 
-  // Step 1: Find column boundaries from header
-  const columns = detectColumns(allFragments);
-
-  // Step 2: Group fragments into logical rows with Y-tolerance
-  const rows = groupIntoRows(allFragments, 4);
-
-  // Step 3: Parse transactions
-  return parseTransactions(rows, columns);
-}
-
-/**
- * Detect column X boundaries by finding header keywords.
- * We look for fragments containing "Codice", "Descrizione", "Importo", etc.
- * and record their X positions.
- */
-function detectColumns(fragments: TextFragment[]): ColumnBounds | null {
-  // Find fragments that look like headers
-  // They should be on the same Y level (or very close)
-  const headerCandidates: { keyword: string; x: number; y: number }[] = [];
-
-  for (const f of fragments) {
-    const lower = f.str.toLowerCase();
-    if (lower.includes("codice") && lower.includes("identificativo")) {
-      headerCandidates.push({ keyword: "codice", x: f.x, y: f.y });
-    } else if (lower === "descrizione" || lower.includes("descrizione")) {
-      headerCandidates.push({ keyword: "descrizione", x: f.x, y: f.y });
-    } else if (lower === "importo" || lower.includes("importo")) {
-      headerCandidates.push({ keyword: "importo", x: f.x, y: f.y });
-    } else if (lower === "divisa") {
-      headerCandidates.push({ keyword: "divisa", x: f.x, y: f.y });
-    } else if (lower.includes("data") && lower.includes("operazione")) {
-      headerCandidates.push({ keyword: "dataOp", x: f.x, y: f.y });
-    } else if (lower.includes("data") && lower.includes("valuta")) {
-      headerCandidates.push({ keyword: "dataVal", x: f.x, y: f.y });
-    }
+  const ranges = detectColumnRanges(allFragments);
+  if (!ranges) {
+    console.warn("[parseSellaPdf] Column detection failed, using fallback");
+    return fallbackParsing(allFragments);
   }
 
-  if (headerCandidates.length < 3) return null;
+  console.log("[parseSellaPdf] Detected column ranges:", ranges);
 
-  // Find the most common Y among headers (they should be on the same line)
-  const yGroups = new Map<number, typeof headerCandidates>();
-  for (const h of headerCandidates) {
-    const roundedY = Math.round(h.y / 5) * 5;
-    if (!yGroups.has(roundedY)) yGroups.set(roundedY, []);
-    yGroups.get(roundedY)!.push(h);
+  // ── Build transaction blocks ──
+  // Each block starts when we encounter a 14+ digit code
+  interface TxBlock {
+    dates: string[];      // dd/MM/yyyy strings from dataOp column
+    descParts: string[];  // text fragments from descrizione column
+    amountParts: string[]; // text fragments from importo column
   }
 
-  let bestGroup = headerCandidates;
-  let bestCount = 0;
-  for (const [, group] of yGroups) {
-    if (group.length > bestCount) {
-      bestCount = group.length;
-      bestGroup = group;
-    }
-  }
+  const blocks: TxBlock[] = [];
+  let current: TxBlock | null = null;
 
-  const bounds: Partial<ColumnBounds> = {};
-  for (const h of bestGroup) {
-    if (h.keyword === "codice") bounds.codice = h.x;
-    else if (h.keyword === "dataOp") bounds.dataOp = h.x;
-    else if (h.keyword === "dataVal") bounds.dataVal = h.x;
-    else if (h.keyword === "descrizione") bounds.descrizione = h.x;
-    else if (h.keyword === "divisa") bounds.divisa = h.x;
-    else if (h.keyword === "importo") bounds.importo = h.x;
-  }
+  for (const f of allFragments) {
+    // Skip noise
+    if (isNoiseLine(f.str)) continue;
 
-  return (bounds.descrizione != null && bounds.importo != null)
-    ? (bounds as ColumnBounds)
-    : null;
-}
+    const col = classifyFragment(f.x, ranges);
 
-/**
- * Group fragments into logical rows using Y-tolerance.
- * Fragments within `tolerance` pixels of each other are on the same visual row.
- */
-function groupIntoRows(
-  fragments: TextFragment[],
-  tolerance: number
-): { y: number; items: TextFragment[] }[] {
-  const rows: { y: number; items: TextFragment[] }[] = [];
-
-  for (const f of fragments) {
-    const existing = rows.find((r) => Math.abs(r.y - f.y) <= tolerance);
-    if (existing) {
-      existing.items.push(f);
-    } else {
-      rows.push({ y: f.y, items: [f] });
-    }
-  }
-
-  // Sort rows top-to-bottom, items left-to-right
-  rows.sort((a, b) => b.y - a.y);
-  for (const r of rows) {
-    r.items.sort((a, b) => a.x - b.x);
-  }
-
-  return rows;
-}
-
-/**
- * Assign a fragment to a column based on its X position relative to column boundaries.
- */
-function classifyColumn(
-  x: number,
-  cols: ColumnBounds
-): "codice" | "dataOp" | "dataVal" | "descrizione" | "divisa" | "importo" | "unknown" {
-  // Build sorted column entries
-  const entries: { name: string; x: number }[] = [];
-  if (cols.codice != null) entries.push({ name: "codice", x: cols.codice });
-  if (cols.dataOp != null) entries.push({ name: "dataOp", x: cols.dataOp });
-  if (cols.dataVal != null) entries.push({ name: "dataVal", x: cols.dataVal });
-  if (cols.descrizione != null) entries.push({ name: "descrizione", x: cols.descrizione });
-  if (cols.divisa != null) entries.push({ name: "divisa", x: cols.divisa });
-  if (cols.importo != null) entries.push({ name: "importo", x: cols.importo });
-  entries.sort((a, b) => a.x - b.x);
-
-  // Find closest column (fragment X should be >= column start)
-  let best = "unknown";
-  for (const e of entries) {
-    if (x >= e.x - 15) {
-      best = e.name;
-    }
-  }
-
-  return best as any;
-}
-
-interface TransactionBlock {
-  dateFragments: string[];
-  descFragments: string[];
-  amountFragments: string[];
-}
-
-function parseTransactions(
-  rows: { y: number; items: TextFragment[] }[],
-  columns: ColumnBounds | null
-): ParsedRow[] {
-  // If we couldn't detect columns, fall back to line-based parsing
-  if (!columns) {
-    return fallbackLineParsing(rows);
-  }
-
-  const transactions: TransactionBlock[] = [];
-  let current: TransactionBlock | null = null;
-
-  for (const row of rows) {
-    const lineText = row.items.map((i) => i.str).join(" ");
-
-    // Skip header/footer lines
-    if (
-      lineText.includes("Pagina") ||
-      lineText.includes("Saldo") ||
-      lineText.toLowerCase().includes("codice identificativo") ||
-      lineText.toLowerCase().includes("data operazione")
-    ) {
-      continue;
-    }
-
-    // Check if any fragment in this row starts a new transaction (14+ digit code)
-    const hasCode = row.items.some((f) => CODE_RE.test(f.str));
-
-    if (hasCode) {
-      if (current) transactions.push(current);
-      current = { dateFragments: [], descFragments: [], amountFragments: [] };
+    // New transaction block on codice column with 14+ digit code
+    if (col === "codice" && CODE_RE.test(f.str)) {
+      if (current) blocks.push(current);
+      current = { dates: [], descParts: [], amountParts: [] };
+      continue; // don't store the code itself
     }
 
     if (!current) continue;
 
-    // Classify each fragment by column
-    for (const f of row.items) {
-      const col = classifyColumn(f.x, columns);
-
-      if (col === "codice" || col === "dataVal" || col === "divisa") {
-        // For dataOp: the code column might contain date-like text on the same row
-        // Check if this fragment is actually a date
-        if (col === "codice" && DATE_RE.test(f.str) && current.dateFragments.length === 0) {
-          // This might be a date that landed in the code column area
-        }
-        continue; // ignore
-      }
-
-      if (col === "dataOp") {
-        if (DATE_RE.test(f.str)) {
-          current.dateFragments.push(f.str);
-        }
-      } else if (col === "descrizione") {
+    switch (col) {
+      case "codice":
+        // Continuation text that landed in code column area
+        // Could be part of description on a wrapped line
         if (!CODE_RE.test(f.str) && !DATE_RE.test(f.str)) {
-          current.descFragments.push(f.str);
+          current.descParts.push(f.str);
         }
-      } else if (col === "importo") {
-        current.amountFragments.push(f.str);
-      } else {
-        // Unknown column - check if it looks like a date or amount
-        if (DATE_RE.test(f.str) && current.dateFragments.length === 0) {
-          current.dateFragments.push(f.str);
-        } else if (AMOUNT_RE.test(f.str)) {
-          current.amountFragments.push(f.str);
+        break;
+
+      case "dataOp":
+        if (DATE_RE.test(f.str)) {
+          current.dates.push(f.str);
         } else if (!CODE_RE.test(f.str)) {
-          current.descFragments.push(f.str);
+          // Could be wrapped description text
+          current.descParts.push(f.str);
         }
-      }
+        break;
+
+      case "dataVal":
+        // Ignore data valuta entirely
+        break;
+
+      case "descrizione":
+        // Accept anything that isn't a bare code or duplicate date
+        if (!CODE_RE.test(f.str)) {
+          current.descParts.push(f.str);
+        }
+        break;
+
+      case "divisa":
+        // Ignore "EUR" and similar
+        break;
+
+      case "importo":
+        // Collect everything - we'll parse the joined string
+        if (f.str !== "EUR") {
+          current.amountParts.push(f.str);
+        }
+        break;
     }
   }
 
-  if (current) transactions.push(current);
+  if (current) blocks.push(current);
 
-  return transactions.map((t) => {
-    const dateStr = t.dateFragments[0] || null;
-    const amountStr = t.amountFragments.join("").trim();
+  // ── Convert blocks to ParsedRow[] ──
+  const results: ParsedRow[] = [];
+
+  for (const block of blocks) {
+    // Date: take first valid date from dataOp
+    let date: string | null = null;
+    for (const d of block.dates) {
+      date = formatDate(d);
+      if (date) break;
+    }
+
+    // Amount: join all amount parts and extract
+    const amountStr = block.amountParts.join(" ").trim();
     const amount = amountStr ? parseItalianAmount(amountStr) : null;
 
-    return {
-      date: dateStr ? formatDate(dateStr) : null,
-      description: t.descFragments.join(" ").trim(),
-      amount,
-    };
-  });
+    // Description: join, clean dates that leaked in, normalize
+    let description = block.descParts
+      .filter((s) => !DATE_RE.test(s) && s !== "EUR")
+      .join(" ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
+    results.push({ date, description, amount });
+  }
+
+  return results;
 }
 
-/**
- * Fallback: line-based parsing when column detection fails.
- */
-function fallbackLineParsing(
-  rows: { y: number; items: TextFragment[] }[]
-): ParsedRow[] {
+/* ── Fallback ──────────────────────────────────── */
+
+function fallbackParsing(fragments: TextFragment[]): ParsedRow[] {
   const results: ParsedRow[] = [];
-  let current: { date: string; descParts: string[]; amount: number | null } | null = null;
+  let current: { date: string | null; descParts: string[]; amount: number | null } | null = null;
+
+  // Group into visual rows with Y tolerance
+  const rows: { y: number; page: number; items: TextFragment[] }[] = [];
+  for (const f of fragments) {
+    const existing = rows.find((r) => r.page === f.page && Math.abs(r.y - f.y) <= 4);
+    if (existing) {
+      existing.items.push(f);
+    } else {
+      rows.push({ y: f.y, page: f.page, items: [f] });
+    }
+  }
+  rows.sort((a, b) => {
+    if (a.page !== b.page) return a.page - b.page;
+    return b.y - a.y;
+  });
+  for (const r of rows) r.items.sort((a, b) => a.x - b.x);
 
   for (const row of rows) {
     const line = row.items.map((i) => i.str).join(" ").trim();
-    if (!line) continue;
+    if (!line || isNoiseLine(line)) continue;
 
-    if (CODE_RE.test(line)) {
+    // Check if line starts with a 14+ digit code
+    const firstToken = line.split(/\s+/)[0];
+    if (CODE_RE.test(firstToken)) {
       if (current) {
         results.push({
-          date: current.date || null,
-          description: current.descParts.join(" "),
+          date: current.date,
+          description: current.descParts.join(" ").trim(),
           amount: current.amount,
         });
       }
 
-      const dateMatch = line.match(DATE_RE);
-      const opDate = dateMatch ? formatDate(dateMatch[0]) : "";
+      // Extract date
+      const dateMatches = line.match(/\d{2}\/\d{2}\/\d{4}/g);
+      const date = dateMatches ? formatDate(dateMatches[0]) : null;
 
+      // Extract amount (after EUR)
       let amount: number | null = null;
       const eurIdx = line.indexOf("EUR");
       if (eurIdx >= 0) {
-        const afterEur = line.substring(eurIdx + 3);
-        const amtMatch = afterEur.match(AMOUNT_RE);
-        if (amtMatch) amount = parseItalianAmount(amtMatch[0]);
+        amount = parseItalianAmount(line.substring(eurIdx + 3));
       }
 
-      // Description between dates and EUR
+      // Description: between second date and EUR (or end)
       let desc = "";
-      const allDates = line.match(new RegExp(DATE_RE.source, "g"));
-      if (allDates && allDates.length >= 2) {
-        const secondDateEnd = line.indexOf(allDates[1]) + allDates[1].length;
-        const eurPos = eurIdx >= 0 ? eurIdx : line.length;
-        desc = line.substring(secondDateEnd, eurPos).trim();
+      if (dateMatches && dateMatches.length >= 2) {
+        const lastDateIdx = line.lastIndexOf(dateMatches[1]);
+        const endIdx = eurIdx >= 0 ? eurIdx : line.length;
+        desc = line.substring(lastDateIdx + dateMatches[1].length, endIdx).trim();
       }
 
-      current = { date: opDate, descParts: desc ? [desc] : [], amount };
+      current = { date, descParts: desc ? [desc] : [], amount };
     } else if (current) {
-      if (
-        !line.startsWith("Codice") &&
-        !line.startsWith("Data") &&
-        !line.startsWith("Descrizione") &&
-        !line.includes("Pagina") &&
-        !line.includes("Saldo")
-      ) {
-        // Check if this continuation line has the amount
-        if (current.amount == null) {
-          const amtMatch = line.match(AMOUNT_RE);
-          if (amtMatch) {
-            current.amount = parseItalianAmount(amtMatch[0]);
-            const remaining = line.replace(AMOUNT_RE, "").replace(/EUR/g, "").trim();
-            if (remaining) current.descParts.push(remaining);
-            continue;
-          }
+      // Continuation line
+      if (current.amount == null) {
+        const amt = parseItalianAmount(line);
+        if (amt != null) {
+          current.amount = amt;
+          const remaining = line.replace(AMOUNT_RE, "").replace(/EUR/g, "").trim();
+          if (remaining) current.descParts.push(remaining);
+          continue;
         }
-        current.descParts.push(line);
       }
+      current.descParts.push(line.replace(/EUR/g, "").trim());
     }
   }
 
   if (current) {
     results.push({
-      date: current.date || null,
-      description: current.descParts.join(" "),
+      date: current.date,
+      description: current.descParts.join(" ").trim(),
       amount: current.amount,
     });
   }
