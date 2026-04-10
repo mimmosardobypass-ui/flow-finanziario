@@ -93,7 +93,7 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
         setApplyToCategorized(false);
         setActive(true);
       }
-      setShowPreview(false);
+      setDebouncedInput("");
     }
   }, [open, rule]);
 
@@ -248,20 +248,9 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
 
             <Separator />
 
-            {/* Preview */}
+            {/* Live Preview */}
             <div className="space-y-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2"
-                onClick={() => { flushKeyword(); setShowPreview(!showPreview); }}
-                disabled={!hasKeywords}
-              >
-                <Eye className="h-4 w-4" />
-                {showPreview ? "Nascondi anteprima" : "Anteprima movimenti corrispondenti"}
-              </Button>
-
-              {showPreview && (
+              {hasPreviewKeywords && (
                 <Card className="border-dashed">
                   <CardContent className="p-3">
                     {previewLoading ? (
