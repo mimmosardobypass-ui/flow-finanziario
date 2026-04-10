@@ -99,11 +99,25 @@ export function useFilteredTransactions(filters: TransactionFilters) {
         }
       }
 
-      const { data, error } = await query.order("date", { ascending: false });
+      const PAGE_SIZE = 1000;
+      let allData: TransactionWithCategory[] = [];
+      let from = 0;
+      let hasMore = true;
 
-      if (error) throw error;
+      while (hasMore) {
+        const { data, error } = await query
+          .order("date", { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
 
-      return data as TransactionWithCategory[];
+        if (error) throw error;
+
+        const batch = (data ?? []) as TransactionWithCategory[];
+        allData = allData.concat(batch);
+        hasMore = batch.length === PAGE_SIZE;
+        from += PAGE_SIZE;
+      }
+
+      return allData;
     },
     // Filtro testuale applicato lato client tramite select, senza cambiare la queryKey
     select: (data) => {
