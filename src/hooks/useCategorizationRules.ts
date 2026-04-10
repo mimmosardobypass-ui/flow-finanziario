@@ -159,9 +159,9 @@ export function useToggleRule() {
 }
 
 /** Preview: find transactions matching a rule's criteria */
-export function useRulePreview(keywords: string[], matchType: string, contoId: string | null) {
+export function useRulePreview(keywords: string[], matchType: string, contoId: string | null, excludeKeywords: string[] = []) {
   return useQuery({
-    queryKey: ["rule_preview", keywords, matchType, contoId],
+    queryKey: ["rule_preview", keywords, matchType, contoId, excludeKeywords],
     enabled: keywords.length > 0 && keywords.some((k) => k.trim().length > 0),
     queryFn: async () => {
       let query = supabase
@@ -181,7 +181,10 @@ export function useRulePreview(keywords: string[], matchType: string, contoId: s
       const { data, error } = await query;
       if (error) throw error;
 
-      return (data || []).filter((t: any) => matchesKeywords(t.description, keywords));
+      return (data || []).filter((t: any) =>
+        matchesKeywords(t.description, keywords) &&
+        !matchesExcludeKeywords(t.description, excludeKeywords)
+      );
     },
   });
 }
