@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { useCategories } from "@/hooks/useCategories";
 import { useConti } from "@/hooks/useConti";
-import { useRulePreview, CategorizationRule } from "@/hooks/useCategorizationRules";
+import { useRulePreview, CategorizationRule, normalize } from "@/hooks/useCategorizationRules";
 
 interface RuleDialogProps {
   open: boolean;
@@ -264,25 +264,34 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
                       </p>
                     ) : (
                       <>
-                        <p className="text-sm font-medium mb-2">
+                        <p className="text-sm font-medium mb-3">
                           {preview.length} moviment{preview.length === 1 ? "o" : "i"} corrispondent{preview.length === 1 ? "e" : "i"}
                         </p>
-                        <ScrollArea className="max-h-48">
-                          <div className="space-y-1">
-                            {preview.map((t: any) => (
-                              <div key={t.id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded hover:bg-muted/50">
-                                <div className="flex-1 min-w-0 mr-3">
-                                  <span className="text-muted-foreground mr-2">
+                        <ScrollArea className="max-h-64">
+                          <table className="w-full text-xs border-collapse">
+                            <thead>
+                              <tr className="border-b text-muted-foreground">
+                                <th className="text-left py-1.5 px-2 font-medium w-[72px]">Data</th>
+                                <th className="text-left py-1.5 px-2 font-medium">Descrizione</th>
+                                <th className="text-right py-1.5 px-2 font-medium w-[90px]">Importo</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {preview.map((t: any) => (
+                                <tr key={t.id} className="border-b border-border/40 hover:bg-muted/50">
+                                  <td className="py-2 px-2 text-muted-foreground whitespace-nowrap align-top">
                                     {format(new Date(t.date), "dd/MM/yy", { locale: it })}
-                                  </span>
-                                  <span className="truncate">{t.description || "-"}</span>
-                                </div>
-                                <span className={`font-medium whitespace-nowrap ${t.type === "income" ? "text-success" : "text-destructive"}`}>
-                                  {t.type === "income" ? "+" : "-"}€{Number(t.amount).toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+                                  </td>
+                                  <td className="py-2 px-2 break-words whitespace-pre-wrap align-top">
+                                    {highlightKeywords(t.description || "-", previewKeywords)}
+                                  </td>
+                                  <td className={`py-2 px-2 text-right font-medium whitespace-nowrap align-top ${t.type === "income" ? "text-green-600" : "text-destructive"}`}>
+                                    {t.type === "income" ? "+" : "−"}€{Number(t.amount).toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </ScrollArea>
                       </>
                     )}
