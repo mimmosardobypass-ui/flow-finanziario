@@ -551,6 +551,8 @@ export default function Transactions() {
         onOpenChange={setReconciliationOpen}
         transaction={reconciliationTransaction}
       />
+
+      <DuplicatesDialog open={duplicatesOpen} onOpenChange={setDuplicatesOpen} />
     </div>
   );
 }
