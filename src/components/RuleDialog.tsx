@@ -109,6 +109,7 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
       if (rule) {
         setName(rule.name);
         setKeywords(rule.keywords || []);
+        setExcludeKeywords(rule.exclude_keywords || []);
         setMatchType(rule.match_type as any);
         setContoId(rule.conto_id);
         setCategoryId(rule.category_id);
@@ -119,6 +120,8 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
         setName("");
         setKeywords([]);
         setKeywordInput("");
+        setExcludeKeywords([]);
+        setExcludeInput("");
         setMatchType("both");
         setContoId(null);
         setCategoryId("");
@@ -127,6 +130,7 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
         setActive(true);
       }
       setDebouncedInput("");
+      setDebouncedExclude("");
     }
   }, [open, rule]);
 
@@ -215,7 +219,53 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Exclude Keywords */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Ban className="h-3.5 w-3.5 text-destructive" />
+                Parole da escludere (la descrizione NON deve contenere)
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  value={excludeInput}
+                  onChange={(e) => setExcludeInput(e.target.value)}
+                  placeholder="es. COMMISSIONI..."
+                  onBlur={() => {
+                    const kw = excludeInput.trim();
+                    if (kw && !excludeKeywords.includes(kw)) setExcludeKeywords(prev => [...prev, kw]);
+                    setExcludeInput("");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const kw = excludeInput.trim();
+                      if (kw && !excludeKeywords.includes(kw)) setExcludeKeywords(prev => [...prev, kw]);
+                      setExcludeInput("");
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" size="icon" onClick={() => {
+                  const kw = excludeInput.trim();
+                  if (kw && !excludeKeywords.includes(kw)) setExcludeKeywords(prev => [...prev, kw]);
+                  setExcludeInput("");
+                }}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {excludeKeywords.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {excludeKeywords.map((kw) => (
+                    <Badge key={kw} variant="destructive" className="gap-1 pr-1">
+                      {kw}
+                      <button onClick={() => setExcludeKeywords(excludeKeywords.filter(k => k !== kw))} className="ml-1 hover:bg-destructive/80 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
               {/* Match type */}
               <div className="space-y-2">
                 <Label>Tipo movimento</Label>
@@ -343,9 +393,12 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
           )}
           <Button onClick={() => {
             const finalKeywords = flushKeyword();
+            const kw = excludeInput.trim();
+            const finalExclude = kw && !excludeKeywords.includes(kw) ? [...excludeKeywords, kw] : excludeKeywords;
             onSave({
               name: name.trim(),
               keywords: finalKeywords,
+              exclude_keywords: finalExclude,
               match_type: matchType,
               conto_id: contoId,
               category_id: categoryId,
