@@ -43,12 +43,10 @@ export function DuplicatesDialog({ open, onOpenChange }: Props) {
   useEffect(() => {
     const toDelete = new Set<string>();
     for (const g of groups) {
-      console.log("[DEDUP] Group keepId:", g.keepId, "txIds:", g.transactions.map(t => t.id));
       for (const t of g.transactions) {
         if (t.id !== g.keepId) toDelete.add(t.id);
       }
     }
-    console.log("[DEDUP] Auto-selected for deletion:", toDelete.size, "from", groups.length, "groups");
     setSelectedForDeletion(toDelete);
   }, [groups]);
 

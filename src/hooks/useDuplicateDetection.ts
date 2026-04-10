@@ -34,6 +34,7 @@ export function useDuplicateDetection() {
       let allData: TransactionWithCategory[] = [];
       let from = 0;
       let hasMore = true;
+      const seenIds = new Set<string>();
 
       while (hasMore) {
         const { data, error } = await supabase
@@ -41,11 +42,19 @@ export function useDuplicateDetection() {
           .select(`*, categories(id, name, type), conti(id, nome_conto, banca)`)
           .is("deleted_at", null)
           .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
           .range(from, from + PAGE_SIZE - 1);
         if (error) throw error;
-        const batch = (data ?? []) as TransactionWithCategory[];
+
+        const rawBatch = (data ?? []) as TransactionWithCategory[];
+        const batch = rawBatch.filter((transaction) => {
+          if (seenIds.has(transaction.id)) return false;
+          seenIds.add(transaction.id);
+          return true;
+        });
+
         allData = allData.concat(batch);
-        hasMore = batch.length === PAGE_SIZE;
+        hasMore = rawBatch.length === PAGE_SIZE;
         from += PAGE_SIZE;
       }
 
@@ -59,13 +68,14 @@ export function useDuplicateDetection() {
 
       const duplicateGroups: DuplicateGroup[] = [];
       for (const [fingerprint, txs] of map) {
-        if (txs.length < 2) continue;
+        const uniqueTxs = Array.from(new Map(txs.map((transaction) => [transaction.id, transaction])).values());
+        if (uniqueTxs.length < 2) continue;
         // Sort by created_at asc, then id asc — first is the one to keep
-        txs.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+        uniqueTxs.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
         duplicateGroups.push({
           fingerprint,
-          transactions: txs,
-          keepId: txs[0].id,
+          transactions: uniqueTxs,
+          keepId: uniqueTxs[0].id,
         });
       }
 
