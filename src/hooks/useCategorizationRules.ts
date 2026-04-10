@@ -22,6 +22,21 @@ export type RuleUpdate = Partial<Omit<CategorizationRule, "id" | "user_id" | "cr
 
 const QUERY_KEY = ["categorization_rules"];
 
+/* ─── Normalize text for keyword matching ─── */
+function normalize(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function matchesKeywords(description: string, keywords: string[]): boolean {
+  const desc = normalize(description || "");
+  return keywords.some((kw) => {
+    const nkw = normalize(kw);
+    return nkw.length > 0 && desc.includes(nkw);
+  });
+}
+
+export { normalize, matchesKeywords };
+
 export function useCategorizationRules() {
   return useQuery({
     queryKey: QUERY_KEY,
@@ -29,7 +44,8 @@ export function useCategorizationRules() {
       const { data, error } = await supabase
         .from("categorization_rules" as any)
         .select("*")
-        .order("priority", { ascending: false });
+        .order("priority", { ascending: false })
+        .order("created_at", { ascending: true }); // stable tiebreak: oldest first
       if (error) throw error;
       return (data || []) as unknown as CategorizationRule[];
     },
@@ -49,7 +65,10 @@ export function useCreateRule() {
       if (error) throw error;
       return data as unknown as CategorizationRule;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ["rule_match_counts"] });
+    },
   });
 }
 
@@ -66,7 +85,10 @@ export function useUpdateRule() {
       if (error) throw error;
       return data as unknown as CategorizationRule;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ["rule_match_counts"] });
+    },
   });
 }
 
@@ -80,7 +102,10 @@ export function useDeleteRule() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ["rule_match_counts"] });
+    },
   });
 }
 
@@ -106,10 +131,10 @@ export function useRulePreview(keywords: string[], matchType: string, contoId: s
     queryFn: async () => {
       let query = supabase
         .from("transactions")
-        .select("id, description, date, amount, type, conto_id")
+        .select("id, description, date, amount, type, conto_id, category_id")
         .is("deleted_at", null)
         .order("date", { ascending: false })
-        .limit(50);
+        .limit(200);
 
       if (matchType !== "both") {
         query = query.eq("type", matchType);
@@ -121,16 +146,85 @@ export function useRulePreview(keywords: string[], matchType: string, contoId: s
       const { data, error } = await query;
       if (error) throw error;
 
-      // Client-side keyword filter (case-insensitive, any keyword matches)
-      const lowerKeywords = keywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
-      if (lowerKeywords.length === 0) return [];
-
-      return (data || []).filter((t: any) => {
-        const desc = (t.description || "").toLowerCase();
-        return lowerKeywords.some((kw) => desc.includes(kw));
-      });
+      return (data || []).filter((t: any) => matchesKeywords(t.description, keywords));
     },
   });
+}
+
+/** Count how many transactions each rule currently matches */
+export function useRuleMatchCounts(rules: CategorizationRule[]) {
+  return useQuery({
+    queryKey: ["rule_match_counts", rules.map((r) => r.id).join(",")],
+    enabled: rules.length > 0,
+    staleTime: 30_000,
+    queryFn: async () => {
+      // Fetch all active transactions in pages
+      const PAGE = 1000;
+      let from = 0;
+      const allTxs: any[] = [];
+
+      while (true) {
+        const { data, error } = await supabase
+          .from("transactions")
+          .select("id, description, type, conto_id, category_id")
+          .is("deleted_at", null)
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allTxs.push(...data);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+
+      // Count matches per rule
+      const counts: Record<string, number> = {};
+      for (const rule of rules) {
+        if (!rule.active) {
+          counts[rule.id] = 0;
+          continue;
+        }
+        let count = 0;
+        for (const t of allTxs) {
+          if (rule.match_type !== "both" && t.type !== rule.match_type) continue;
+          if (rule.conto_id && t.conto_id !== rule.conto_id) continue;
+          if (!rule.apply_to_categorized && t.category_id != null) continue;
+          if (matchesKeywords(t.description, rule.keywords)) count++;
+        }
+        counts[rule.id] = count;
+      }
+      return counts;
+    },
+  });
+}
+
+/** Count matching transactions for a rule (for confirmation dialog) */
+export async function countRuleMatches(rule: CategorizationRule): Promise<number> {
+  const PAGE = 1000;
+  let from = 0;
+  let total = 0;
+
+  while (true) {
+    let query = supabase
+      .from("transactions")
+      .select("id, description, type, conto_id, category_id")
+      .is("deleted_at", null)
+      .range(from, from + PAGE - 1);
+
+    if (rule.match_type !== "both") query = query.eq("type", rule.match_type);
+    if (rule.conto_id) query = query.eq("conto_id", rule.conto_id);
+    if (!rule.apply_to_categorized) query = query.is("category_id", null);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    total += data.filter((t: any) => matchesKeywords(t.description, rule.keywords)).length;
+
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+
+  return total;
 }
 
 /** Apply a single rule to existing transactions */
@@ -138,7 +232,8 @@ export function useApplyRuleToExisting() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (rule: CategorizationRule) => {
-      // Fetch all matching transactions
+      if (!rule.active) throw new Error("Cannot apply inactive rule");
+
       const PAGE = 1000;
       let from = 0;
       let allIds: string[] = [];
@@ -158,11 +253,7 @@ export function useApplyRuleToExisting() {
         if (error) throw error;
         if (!data || data.length === 0) break;
 
-        const lowerKw = rule.keywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
-        const matched = data.filter((t: any) => {
-          const desc = (t.description || "").toLowerCase();
-          return lowerKw.some((kw) => desc.includes(kw));
-        });
+        const matched = data.filter((t: any) => matchesKeywords(t.description, rule.keywords));
         allIds.push(...matched.map((t: any) => t.id));
 
         if (data.length < PAGE) break;
@@ -171,7 +262,6 @@ export function useApplyRuleToExisting() {
 
       if (allIds.length === 0) return 0;
 
-      // Update in batches
       const BATCH = 100;
       for (let i = 0; i < allIds.length; i += BATCH) {
         const batch = allIds.slice(i, i + BATCH);
@@ -187,6 +277,7 @@ export function useApplyRuleToExisting() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["filtered-transactions"] });
+      qc.invalidateQueries({ queryKey: ["rule_match_counts"] });
     },
   });
 }

@@ -1,12 +1,22 @@
 import { useState, useMemo } from "react";
-import { Plus, Pencil, Trash2, Play, ToggleLeft, ToggleRight, Zap } from "lucide-react";
+import { Plus, Pencil, Trash2, Play, Zap, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { RuleDialog } from "@/components/RuleDialog";
 import {
@@ -16,6 +26,8 @@ import {
   useDeleteRule,
   useToggleRule,
   useApplyRuleToExisting,
+  useRuleMatchCounts,
+  countRuleMatches,
   CategorizationRule,
 } from "@/hooks/useCategorizationRules";
 import { useCategories } from "@/hooks/useCategories";
@@ -26,6 +38,7 @@ export default function Regole() {
   const { data: rules = [], isLoading } = useCategorizationRules();
   const { data: categories = [] } = useCategories();
   const { data: conti = [] } = useConti();
+  const { data: matchCounts = {} } = useRuleMatchCounts(rules);
   const createMutation = useCreateRule();
   const updateMutation = useUpdateRule();
   const deleteMutation = useDeleteRule();
@@ -35,6 +48,12 @@ export default function Regole() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedRule, setSelectedRule] = useState<CategorizationRule | null>(null);
+
+  // Confirmation dialog state
+  const [confirmApplyOpen, setConfirmApplyOpen] = useState(false);
+  const [applyTarget, setApplyTarget] = useState<CategorizationRule | null>(null);
+  const [applyCount, setApplyCount] = useState<number | null>(null);
+  const [countingMatches, setCountingMatches] = useState(false);
 
   const categoryMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -68,14 +87,41 @@ export default function Regole() {
     }
   };
 
-  const handleApplyToExisting = async () => {
-    if (!selectedRule) return;
+  const handleRequestApply = async (rule: CategorizationRule) => {
+    if (!rule.active) {
+      toast({ title: "La regola è disattivata. Attivala prima di applicarla.", variant: "destructive" });
+      return;
+    }
+    setApplyTarget(rule);
+    setApplyCount(null);
+    setCountingMatches(true);
+    setConfirmApplyOpen(true);
     try {
-      const count = await applyMutation.mutateAsync(selectedRule);
+      const count = await countRuleMatches(rule);
+      setApplyCount(count);
+    } catch {
+      setApplyCount(0);
+    } finally {
+      setCountingMatches(false);
+    }
+  };
+
+  const handleConfirmApply = async () => {
+    if (!applyTarget) return;
+    try {
+      const count = await applyMutation.mutateAsync(applyTarget);
       toast({ title: `Regola applicata a ${count} moviment${count === 1 ? "o" : "i"}` });
     } catch {
       toast({ title: "Errore nell'applicazione", variant: "destructive" });
     }
+    setConfirmApplyOpen(false);
+    setApplyTarget(null);
+  };
+
+  const handleApplyFromDialog = async () => {
+    if (!selectedRule) return;
+    setDialogOpen(false);
+    handleRequestApply(selectedRule);
   };
 
   const handleDelete = async () => {
@@ -99,6 +145,21 @@ export default function Regole() {
     }
   };
 
+  const getPriorityBadge = (priority: number) => {
+    if (priority >= 100) return <Badge className="bg-destructive text-destructive-foreground font-bold">{priority}</Badge>;
+    if (priority >= 50) return <Badge className="bg-primary text-primary-foreground font-semibold">{priority}</Badge>;
+    if (priority >= 10) return <Badge variant="secondary" className="font-medium">{priority}</Badge>;
+    return <Badge variant="outline" className="text-muted-foreground">{priority}</Badge>;
+  };
+
+  const getMatchTypeLabel = (type: string) => {
+    switch (type) {
+      case "income": return <Badge variant="outline" className="text-success border-success/30">Entrata</Badge>;
+      case "expense": return <Badge variant="outline" className="text-destructive border-destructive/30">Uscita</Badge>;
+      default: return <Badge variant="outline">Entrambi</Badge>;
+    }
+  };
+
   const renderRuleTable = (rulesList: CategorizationRule[]) => {
     if (rulesList.length === 0) {
       return (
@@ -114,32 +175,54 @@ export default function Regole() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Priorità</TableHead>
+              <TableHead className="w-[70px]">Priorità</TableHead>
               <TableHead>Nome</TableHead>
+              <TableHead>Tipo</TableHead>
               <TableHead>Parole chiave</TableHead>
               <TableHead>Conto</TableHead>
               <TableHead>Categoria</TableHead>
-              <TableHead>Stato</TableHead>
-              <TableHead className="w-[140px]">Azioni</TableHead>
+              <TableHead className="w-[80px] text-center">Match</TableHead>
+              <TableHead className="w-[60px]">Stato</TableHead>
+              <TableHead className="w-[120px]">Azioni</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rulesList.map((rule) => (
               <TableRow key={rule.id} className={!rule.active ? "opacity-50" : ""}>
-                <TableCell>
-                  <Badge variant="outline">{rule.priority}</Badge>
+                <TableCell className="text-center">
+                  {getPriorityBadge(rule.priority)}
                 </TableCell>
-                <TableCell className="font-medium">{rule.name}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex flex-col">
+                    <span>{rule.name}</span>
+                    {rule.apply_to_categorized && (
+                      <span className="text-[10px] text-muted-foreground">Sovrascrive categoria</span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>{getMatchTypeLabel(rule.match_type)}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1 max-w-xs">
                     {rule.keywords.map((kw) => (
-                      <Badge key={kw} variant="secondary" className="text-xs">{kw}</Badge>
+                      <Badge key={kw} variant="secondary" className="text-xs font-mono">{kw}</Badge>
                     ))}
                   </div>
                 </TableCell>
-                <TableCell>{rule.conto_id ? contoMap.get(rule.conto_id) || "-" : "Tutti"}</TableCell>
+                <TableCell className="text-sm">
+                  {rule.conto_id ? contoMap.get(rule.conto_id) || "-" : <span className="text-muted-foreground">Tutti</span>}
+                </TableCell>
                 <TableCell>
                   <Badge variant="secondary">{categoryMap.get(rule.category_id) || "-"}</Badge>
+                </TableCell>
+                <TableCell className="text-center">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={`text-sm font-medium ${(matchCounts[rule.id] || 0) > 0 ? "text-primary" : "text-muted-foreground"}`}>
+                        {matchCounts[rule.id] ?? "…"}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Movimenti attualmente corrispondenti</TooltipContent>
+                  </Tooltip>
                 </TableCell>
                 <TableCell>
                   <Switch
@@ -150,32 +233,23 @@ export default function Regole() {
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Applica ai movimenti esistenti"
-                      onClick={() => {
-                        applyMutation.mutate(rule, {
-                          onSuccess: (count) => toast({ title: `Applicata a ${count} movimenti` }),
-                          onError: () => toast({ title: "Errore", variant: "destructive" }),
-                        });
-                      }}
-                      disabled={applyMutation.isPending}
-                    >
-                      <Play className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => { setSelectedRule(rule); setDialogOpen(true); }}
-                    >
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRequestApply(rule)}
+                          disabled={applyMutation.isPending || !rule.active}
+                        >
+                          <Play className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Applica ai movimenti esistenti</TooltipContent>
+                    </Tooltip>
+                    <Button variant="ghost" size="icon" onClick={() => { setSelectedRule(rule); setDialogOpen(true); }}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => { setSelectedRule(rule); setDeleteOpen(true); }}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => { setSelectedRule(rule); setDeleteOpen(true); }}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
@@ -212,7 +286,6 @@ export default function Regole() {
         </Button>
       </div>
 
-      {/* Summary */}
       <div className="flex flex-wrap gap-4 text-sm">
         <span className="text-muted-foreground">{rules.length} regol{rules.length === 1 ? "a" : "e"} totali</span>
         <span className="text-success font-medium">{rules.filter((r) => r.active).length} attive</span>
@@ -226,26 +299,17 @@ export default function Regole() {
           <TabsTrigger value="expense">Uscite ({expenseRules.length})</TabsTrigger>
           <TabsTrigger value="both">Entrambi ({bothRules.length})</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="all" className="mt-4">
-          {renderRuleTable(rules)}
-        </TabsContent>
-        <TabsContent value="income" className="mt-4">
-          {renderRuleTable(incomeRules)}
-        </TabsContent>
-        <TabsContent value="expense" className="mt-4">
-          {renderRuleTable(expenseRules)}
-        </TabsContent>
-        <TabsContent value="both" className="mt-4">
-          {renderRuleTable(bothRules)}
-        </TabsContent>
+        <TabsContent value="all" className="mt-4">{renderRuleTable(rules)}</TabsContent>
+        <TabsContent value="income" className="mt-4">{renderRuleTable(incomeRules)}</TabsContent>
+        <TabsContent value="expense" className="mt-4">{renderRuleTable(expenseRules)}</TabsContent>
+        <TabsContent value="both" className="mt-4">{renderRuleTable(bothRules)}</TabsContent>
       </Tabs>
 
       <RuleDialog
         open={dialogOpen}
         onOpenChange={(open) => { setDialogOpen(open); if (!open) setSelectedRule(null); }}
         onSave={handleSave}
-        onApplyToExisting={selectedRule ? handleApplyToExisting : undefined}
+        onApplyToExisting={selectedRule ? handleApplyFromDialog : undefined}
         isSaving={createMutation.isPending || updateMutation.isPending}
         rule={selectedRule}
       />
@@ -256,6 +320,59 @@ export default function Regole() {
         onConfirm={handleDelete}
         isLoading={deleteMutation.isPending}
       />
+
+      {/* Confirmation dialog for applying rule */}
+      <AlertDialog open={confirmApplyOpen} onOpenChange={setConfirmApplyOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-primary" />
+              Conferma applicazione regola
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 mt-2">
+                {applyTarget && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <span className="text-muted-foreground">Regola:</span>
+                      <span className="font-medium">{applyTarget.name}</span>
+                      <span className="text-muted-foreground">Categoria:</span>
+                      <span className="font-medium">{categoryMap.get(applyTarget.category_id) || "-"}</span>
+                      <span className="text-muted-foreground">Sovrascrive già categorizzati:</span>
+                      <span className="font-medium">{applyTarget.apply_to_categorized ? "Sì" : "No"}</span>
+                    </div>
+                    <div className="rounded-md bg-muted px-3 py-2 text-sm">
+                      {countingMatches ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Conteggio movimenti in corso...
+                        </span>
+                      ) : (
+                        <span className="font-semibold">
+                          {applyCount === 0
+                            ? "Nessun movimento corrisponde a questa regola."
+                            : `${applyCount} moviment${applyCount === 1 ? "o verrà aggiornato" : "i verranno aggiornati"}.`
+                          }
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmApply}
+              disabled={countingMatches || applyCount === 0 || applyMutation.isPending}
+            >
+              {applyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Applica
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
