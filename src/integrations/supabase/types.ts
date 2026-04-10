@@ -49,6 +49,66 @@ export type Database = {
           },
         ]
       }
+      categorization_rules: {
+        Row: {
+          active: boolean
+          apply_to_categorized: boolean
+          category_id: string
+          conto_id: string | null
+          created_at: string
+          id: string
+          keywords: string[]
+          match_type: string
+          name: string
+          priority: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          apply_to_categorized?: boolean
+          category_id: string
+          conto_id?: string | null
+          created_at?: string
+          id?: string
+          keywords?: string[]
+          match_type?: string
+          name: string
+          priority?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          apply_to_categorized?: boolean
+          category_id?: string
+          conto_id?: string | null
+          created_at?: string
+          id?: string
+          keywords?: string[]
+          match_type?: string
+          name?: string
+          priority?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categorization_rules_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "categorization_rules_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conti: {
         Row: {
           attivo: boolean
