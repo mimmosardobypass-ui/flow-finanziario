@@ -145,6 +145,7 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
                   value={keywordInput}
                   onChange={(e) => setKeywordInput(e.target.value)}
                   placeholder="Aggiungi parola chiave..."
+                  onBlur={addKeyword}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKeyword(); } }}
                 />
                 <Button type="button" variant="outline" size="icon" onClick={addKeyword}>
