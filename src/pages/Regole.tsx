@@ -206,6 +206,9 @@ export default function Regole() {
                     {rule.keywords.map((kw) => (
                       <Badge key={kw} variant="secondary" className="text-xs font-mono">{kw}</Badge>
                     ))}
+                    {(rule.exclude_keywords || []).map((kw) => (
+                      <Badge key={`ex-${kw}`} variant="destructive" className="text-xs font-mono">−{kw}</Badge>
+                    ))}
                   </div>
                 </TableCell>
                 <TableCell className="text-sm">
