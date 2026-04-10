@@ -84,9 +84,21 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
   const addKeyword = () => {
     const kw = keywordInput.trim();
     if (kw && !keywords.includes(kw)) {
-      setKeywords([...keywords, kw]);
+      setKeywords((prev) => [...prev, kw]);
     }
     setKeywordInput("");
+  };
+
+  // Auto-add pending keyword before save or preview
+  const flushKeyword = () => {
+    const kw = keywordInput.trim();
+    if (kw && !keywords.includes(kw)) {
+      const next = [...keywords, kw];
+      setKeywords(next);
+      setKeywordInput("");
+      return next;
+    }
+    return keywords;
   };
 
   const removeKeyword = (kw: string) => {
@@ -107,7 +119,8 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
     return options;
   };
 
-  const canSave = name.trim() && keywords.length > 0 && categoryId;
+  const hasKeywords = keywords.length > 0 || keywordInput.trim().length > 0;
+  const canSave = name.trim() && hasKeywords && categoryId;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -224,8 +237,8 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
                 type="button"
                 variant="outline"
                 className="gap-2"
-                onClick={() => setShowPreview(!showPreview)}
-                disabled={keywords.length === 0}
+                onClick={() => { flushKeyword(); setShowPreview(!showPreview); }}
+                disabled={!hasKeywords}
               >
                 <Eye className="h-4 w-4" />
                 {showPreview ? "Nascondi anteprima" : "Anteprima movimenti corrispondenti"}
@@ -281,9 +294,10 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
             </Button>
           )}
           <Button onClick={() => {
+            const finalKeywords = flushKeyword();
             onSave({
               name: name.trim(),
-              keywords,
+              keywords: finalKeywords,
               match_type: matchType,
               conto_id: contoId,
               category_id: categoryId,
