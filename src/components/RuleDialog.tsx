@@ -9,12 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { X, Plus, Eye, Loader2 } from "lucide-react";
+import { X, Plus, Loader2, Ban } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { useCategories } from "@/hooks/useCategories";
 import { useConti } from "@/hooks/useConti";
-import { useRulePreview, CategorizationRule, normalize } from "@/hooks/useCategorizationRules";
+import { useRulePreview, CategorizationRule, normalize, matchesExcludeKeywords } from "@/hooks/useCategorizationRules";
 
 interface RuleDialogProps {
   open: boolean;
@@ -22,6 +22,7 @@ interface RuleDialogProps {
   onSave: (rule: {
     name: string;
     keywords: string[];
+    exclude_keywords: string[];
     match_type: "income" | "expense" | "both";
     conto_id: string | null;
     category_id: string;
@@ -57,6 +58,8 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
   const [name, setName] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState("");
+  const [excludeKeywords, setExcludeKeywords] = useState<string[]>([]);
+  const [excludeInput, setExcludeInput] = useState("");
   const [matchType, setMatchType] = useState<"income" | "expense" | "both">("both");
   const [contoId, setContoId] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState("");
@@ -64,12 +67,18 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
   const [applyToCategorized, setApplyToCategorized] = useState(false);
   const [active, setActive] = useState(true);
   const [debouncedInput, setDebouncedInput] = useState("");
+  const [debouncedExclude, setDebouncedExclude] = useState("");
 
   // Debounce the keyword input for live preview (400ms)
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedInput(keywordInput), 400);
     return () => clearTimeout(timer);
   }, [keywordInput]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedExclude(excludeInput), 400);
+    return () => clearTimeout(timer);
+  }, [excludeInput]);
 
   // Combine saved keywords + pending typed input for live preview
   const previewKeywords = useMemo(() => {
@@ -79,12 +88,20 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
     return all;
   }, [keywords, debouncedInput]);
 
+  const previewExcludeKeywords = useMemo(() => {
+    const all = [...excludeKeywords];
+    const pending = debouncedExclude.trim();
+    if (pending && !all.includes(pending)) all.push(pending);
+    return all;
+  }, [excludeKeywords, debouncedExclude]);
+
   const hasPreviewKeywords = previewKeywords.some(k => k.trim().length > 0);
 
   const { data: preview = [], isLoading: previewLoading } = useRulePreview(
     hasPreviewKeywords ? previewKeywords : [],
     matchType,
-    contoId
+    contoId,
+    previewExcludeKeywords
   );
 
   useEffect(() => {
@@ -92,6 +109,7 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
       if (rule) {
         setName(rule.name);
         setKeywords(rule.keywords || []);
+        setExcludeKeywords(rule.exclude_keywords || []);
         setMatchType(rule.match_type as any);
         setContoId(rule.conto_id);
         setCategoryId(rule.category_id);
@@ -102,6 +120,8 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
         setName("");
         setKeywords([]);
         setKeywordInput("");
+        setExcludeKeywords([]);
+        setExcludeInput("");
         setMatchType("both");
         setContoId(null);
         setCategoryId("");
@@ -110,6 +130,7 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
         setActive(true);
       }
       setDebouncedInput("");
+      setDebouncedExclude("");
     }
   }, [open, rule]);
 
@@ -190,6 +211,53 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
                     <Badge key={kw} variant="secondary" className="gap-1 pr-1">
                       {kw}
                       <button onClick={() => removeKeyword(kw)} className="ml-1 hover:bg-muted rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Exclude Keywords */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Ban className="h-3.5 w-3.5 text-destructive" />
+                Parole da escludere (la descrizione NON deve contenere)
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  value={excludeInput}
+                  onChange={(e) => setExcludeInput(e.target.value)}
+                  placeholder="es. COMMISSIONI..."
+                  onBlur={() => {
+                    const kw = excludeInput.trim();
+                    if (kw && !excludeKeywords.includes(kw)) setExcludeKeywords(prev => [...prev, kw]);
+                    setExcludeInput("");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const kw = excludeInput.trim();
+                      if (kw && !excludeKeywords.includes(kw)) setExcludeKeywords(prev => [...prev, kw]);
+                      setExcludeInput("");
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" size="icon" onClick={() => {
+                  const kw = excludeInput.trim();
+                  if (kw && !excludeKeywords.includes(kw)) setExcludeKeywords(prev => [...prev, kw]);
+                  setExcludeInput("");
+                }}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {excludeKeywords.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {excludeKeywords.map((kw) => (
+                    <Badge key={kw} variant="destructive" className="gap-1 pr-1">
+                      {kw}
+                      <button onClick={() => setExcludeKeywords(excludeKeywords.filter(k => k !== kw))} className="ml-1 hover:bg-destructive/80 rounded-full p-0.5">
                         <X className="h-3 w-3" />
                       </button>
                     </Badge>
@@ -326,9 +394,12 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
           )}
           <Button onClick={() => {
             const finalKeywords = flushKeyword();
+            const kw = excludeInput.trim();
+            const finalExclude = kw && !excludeKeywords.includes(kw) ? [...excludeKeywords, kw] : excludeKeywords;
             onSave({
               name: name.trim(),
               keywords: finalKeywords,
+              exclude_keywords: finalExclude,
               match_type: matchType,
               conto_id: contoId,
               category_id: categoryId,

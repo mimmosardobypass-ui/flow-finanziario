@@ -7,6 +7,7 @@ export interface CategorizationRule {
   user_id: string;
   name: string;
   keywords: string[];
+  exclude_keywords: string[];
   match_type: "income" | "expense" | "both";
   conto_id: string | null;
   category_id: string;
@@ -63,7 +64,13 @@ function matchesKeywords(description: string, keywords: string[]): boolean {
   return keywords.some((kw) => keywordMatchesDesc(desc, kw));
 }
 
-export { normalize, matchesKeywords };
+function matchesExcludeKeywords(description: string, excludeKeywords: string[]): boolean {
+  if (!excludeKeywords || excludeKeywords.length === 0) return false;
+  const desc = normalize(description || "");
+  return excludeKeywords.some((kw) => keywordMatchesDesc(desc, kw));
+}
+
+export { normalize, matchesKeywords, matchesExcludeKeywords };
 
 export function useCategorizationRules() {
   return useQuery({
@@ -152,9 +159,9 @@ export function useToggleRule() {
 }
 
 /** Preview: find transactions matching a rule's criteria */
-export function useRulePreview(keywords: string[], matchType: string, contoId: string | null) {
+export function useRulePreview(keywords: string[], matchType: string, contoId: string | null, excludeKeywords: string[] = []) {
   return useQuery({
-    queryKey: ["rule_preview", keywords, matchType, contoId],
+    queryKey: ["rule_preview", keywords, matchType, contoId, excludeKeywords],
     enabled: keywords.length > 0 && keywords.some((k) => k.trim().length > 0),
     queryFn: async () => {
       let query = supabase
@@ -174,7 +181,10 @@ export function useRulePreview(keywords: string[], matchType: string, contoId: s
       const { data, error } = await query;
       if (error) throw error;
 
-      return (data || []).filter((t: any) => matchesKeywords(t.description, keywords));
+      return (data || []).filter((t: any) =>
+        matchesKeywords(t.description, keywords) &&
+        !matchesExcludeKeywords(t.description, excludeKeywords)
+      );
     },
   });
 }
@@ -216,7 +226,7 @@ export function useRuleMatchCounts(rules: CategorizationRule[]) {
           if (rule.match_type !== "both" && t.type !== rule.match_type) continue;
           if (rule.conto_id && t.conto_id !== rule.conto_id) continue;
           if (!rule.apply_to_categorized && t.category_id != null) continue;
-          if (matchesKeywords(t.description, rule.keywords)) count++;
+          if (matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords)) count++;
         }
         counts[rule.id] = count;
       }
@@ -246,7 +256,7 @@ export async function countRuleMatches(rule: CategorizationRule): Promise<number
     if (error) throw error;
     if (!data || data.length === 0) break;
 
-    total += data.filter((t: any) => matchesKeywords(t.description, rule.keywords)).length;
+    total += data.filter((t: any) => matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords)).length;
 
     if (data.length < PAGE) break;
     from += PAGE;
@@ -281,7 +291,7 @@ export function useApplyRuleToExisting() {
         if (error) throw error;
         if (!data || data.length === 0) break;
 
-        const matched = data.filter((t: any) => matchesKeywords(t.description, rule.keywords));
+        const matched = data.filter((t: any) => matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords));
         allIds.push(...matched.map((t: any) => t.id));
 
         if (data.length < PAGE) break;
