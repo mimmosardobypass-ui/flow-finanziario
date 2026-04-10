@@ -78,6 +78,7 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedExclude(excludeInput), 400);
     return () => clearTimeout(timer);
+  }, [excludeInput]);
 
   // Combine saved keywords + pending typed input for live preview
   const previewKeywords = useMemo(() => {
@@ -87,12 +88,20 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
     return all;
   }, [keywords, debouncedInput]);
 
+  const previewExcludeKeywords = useMemo(() => {
+    const all = [...excludeKeywords];
+    const pending = debouncedExclude.trim();
+    if (pending && !all.includes(pending)) all.push(pending);
+    return all;
+  }, [excludeKeywords, debouncedExclude]);
+
   const hasPreviewKeywords = previewKeywords.some(k => k.trim().length > 0);
 
   const { data: preview = [], isLoading: previewLoading } = useRulePreview(
     hasPreviewKeywords ? previewKeywords : [],
     matchType,
-    contoId
+    contoId,
+    previewExcludeKeywords
   );
 
   useEffect(() => {
