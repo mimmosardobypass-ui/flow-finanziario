@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,10 +47,26 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
   const [priority, setPriority] = useState(0);
   const [applyToCategorized, setApplyToCategorized] = useState(false);
   const [active, setActive] = useState(true);
-  const [showPreview, setShowPreview] = useState(false);
+  const [debouncedInput, setDebouncedInput] = useState("");
+
+  // Debounce the keyword input for live preview (400ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedInput(keywordInput), 400);
+    return () => clearTimeout(timer);
+  }, [keywordInput]);
+
+  // Combine saved keywords + pending typed input for live preview
+  const previewKeywords = useMemo(() => {
+    const all = [...keywords];
+    const pending = debouncedInput.trim();
+    if (pending && !all.includes(pending)) all.push(pending);
+    return all;
+  }, [keywords, debouncedInput]);
+
+  const hasPreviewKeywords = previewKeywords.some(k => k.trim().length > 0);
 
   const { data: preview = [], isLoading: previewLoading } = useRulePreview(
-    showPreview ? keywords : [],
+    hasPreviewKeywords ? previewKeywords : [],
     matchType,
     contoId
   );
@@ -77,7 +93,7 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
         setApplyToCategorized(false);
         setActive(true);
       }
-      setShowPreview(false);
+      setDebouncedInput("");
     }
   }, [open, rule]);
 
@@ -232,20 +248,9 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
 
             <Separator />
 
-            {/* Preview */}
+            {/* Live Preview */}
             <div className="space-y-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2"
-                onClick={() => { flushKeyword(); setShowPreview(!showPreview); }}
-                disabled={!hasKeywords}
-              >
-                <Eye className="h-4 w-4" />
-                {showPreview ? "Nascondi anteprima" : "Anteprima movimenti corrispondenti"}
-              </Button>
-
-              {showPreview && (
+              {hasPreviewKeywords && (
                 <Card className="border-dashed">
                   <CardContent className="p-3">
                     {previewLoading ? (
