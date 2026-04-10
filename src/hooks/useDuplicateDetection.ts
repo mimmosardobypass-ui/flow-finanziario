@@ -92,11 +92,13 @@ export function useDuplicateDetection() {
       // Remove deleted from groups
       setGroups((prev) =>
         prev
-          .map((g) => ({
-            ...g,
-            transactions: g.transactions.filter((t) => !idsToDelete.includes(t.id)),
-          }))
-          .filter((g) => g.transactions.length > 1)
+          .map((g) => {
+            const remaining = g.transactions.filter((t) => !idsToDelete.includes(t.id));
+            if (remaining.length < 2) return null;
+            remaining.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+            return { ...g, transactions: remaining, keepId: remaining[0].id };
+          })
+          .filter((g): g is DuplicateGroup => g !== null)
       );
     } finally {
       setDeleting(false);
