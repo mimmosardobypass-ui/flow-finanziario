@@ -9,12 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { X, Plus, Eye, Loader2 } from "lucide-react";
+import { X, Plus, Loader2, Ban } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { useCategories } from "@/hooks/useCategories";
 import { useConti } from "@/hooks/useConti";
-import { useRulePreview, CategorizationRule, normalize } from "@/hooks/useCategorizationRules";
+import { useRulePreview, CategorizationRule, normalize, matchesExcludeKeywords } from "@/hooks/useCategorizationRules";
 
 interface RuleDialogProps {
   open: boolean;
@@ -22,6 +22,7 @@ interface RuleDialogProps {
   onSave: (rule: {
     name: string;
     keywords: string[];
+    exclude_keywords: string[];
     match_type: "income" | "expense" | "both";
     conto_id: string | null;
     category_id: string;
@@ -57,6 +58,8 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
   const [name, setName] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState("");
+  const [excludeKeywords, setExcludeKeywords] = useState<string[]>([]);
+  const [excludeInput, setExcludeInput] = useState("");
   const [matchType, setMatchType] = useState<"income" | "expense" | "both">("both");
   const [contoId, setContoId] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState("");
@@ -64,12 +67,17 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
   const [applyToCategorized, setApplyToCategorized] = useState(false);
   const [active, setActive] = useState(true);
   const [debouncedInput, setDebouncedInput] = useState("");
+  const [debouncedExclude, setDebouncedExclude] = useState("");
 
   // Debounce the keyword input for live preview (400ms)
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedInput(keywordInput), 400);
     return () => clearTimeout(timer);
   }, [keywordInput]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedExclude(excludeInput), 400);
+    return () => clearTimeout(timer);
 
   // Combine saved keywords + pending typed input for live preview
   const previewKeywords = useMemo(() => {
