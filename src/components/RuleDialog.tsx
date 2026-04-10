@@ -34,6 +34,22 @@ interface RuleDialogProps {
   rule?: CategorizationRule | null;
 }
 
+/** Highlight matched keyword stems in a description */
+function highlightKeywords(text: string, keywords: string[]): React.ReactNode {
+  if (!text || keywords.length === 0) return text;
+  // Build stems from all keyword words
+  const stems = keywords
+    .flatMap(kw => normalize(kw).split(" ").filter(w => w.length > 0))
+    .map(w => (w.length >= 4 ? w.slice(0, -1) : w))
+    .filter(s => s.length > 0);
+  if (stems.length === 0) return text;
+  const pattern = new RegExp(`(${stems.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  const parts = text.split(pattern);
+  return parts.map((part, i) =>
+    pattern.test(part) ? <mark key={i} className="bg-yellow-200 dark:bg-yellow-800 rounded-sm px-0.5">{part}</mark> : part
+  );
+}
+
 export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSaving, rule }: RuleDialogProps) {
   const { data: categories = [] } = useCategories();
   const { data: conti = [] } = useConti();
