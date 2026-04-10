@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Copy, Loader2, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Loader2, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,10 +13,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { useDuplicateDetection, DuplicateGroup } from "@/hooks/useDuplicateDetection";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface Props {
   open: boolean;
@@ -27,7 +31,6 @@ export function DuplicatesDialog({ open, onOpenChange }: Props) {
   const { groups, scanning, deleting, scan, deleteSelected, reset } = useDuplicateDetection();
   const [selectedForDeletion, setSelectedForDeletion] = useState<Set<string>>(new Set());
 
-  // Auto-scan when opened
   useEffect(() => {
     if (open) {
       scan();
@@ -37,7 +40,6 @@ export function DuplicatesDialog({ open, onOpenChange }: Props) {
     }
   }, [open]);
 
-  // Auto-select duplicates (all except the keepId) when groups change
   useEffect(() => {
     const toDelete = new Set<string>();
     for (const g of groups) {
@@ -85,8 +87,9 @@ export function DuplicatesDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0">
+        {/* Fixed header */}
+        <DialogHeader className="px-6 pt-6 pb-4 shrink-0 border-b">
           <DialogTitle className="flex items-center gap-2">
             <Copy className="h-5 w-5" />
             Possibili duplicati
@@ -108,15 +111,16 @@ export function DuplicatesDialog({ open, onOpenChange }: Props) {
           </div>
         ) : (
           <>
-            {/* Summary */}
-            <div className="flex flex-wrap gap-2">
+            {/* Summary badges */}
+            <div className="flex flex-wrap gap-2 px-6 py-3 shrink-0">
               <Badge variant="secondary">{groups.length} gruppi trovati</Badge>
               <Badge variant="secondary">{totalDuplicateRows} copie extra</Badge>
               <Badge variant="destructive">{selectedForDeletion.size} selezionati per eliminazione</Badge>
             </div>
 
-            <ScrollArea className="flex-1 min-h-0">
-              <div className="space-y-4 pr-4">
+            {/* Scrollable body */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-4">
+              <div className="space-y-3">
                 {groups.map((group, gi) => (
                   <GroupCard
                     key={group.fingerprint}
@@ -127,9 +131,10 @@ export function DuplicatesDialog({ open, onOpenChange }: Props) {
                   />
                 ))}
               </div>
-            </ScrollArea>
+            </div>
 
-            <DialogFooter className="gap-2 pt-2">
+            {/* Fixed footer */}
+            <DialogFooter className="px-6 py-4 shrink-0 border-t gap-2">
               <Button variant="outline" onClick={excludeAll} disabled={deleting}>
                 Seleziona tutti i duplicati
               </Button>
@@ -164,58 +169,78 @@ function GroupCard({
   selectedForDeletion: Set<string>;
   onToggle: (id: string) => void;
 }) {
-  return (
-    <Card className="border-border">
-      <CardContent className="p-3 space-y-2">
-        <p className="text-xs font-semibold text-muted-foreground">
-          Gruppo {index + 1} — {group.transactions.length} movimenti
-        </p>
-        <div className="space-y-1">
-          {group.transactions.map((t) => {
-            const isKeep = t.id === group.keepId;
-            const isSelected = selectedForDeletion.has(t.id);
+  const [expanded, setExpanded] = useState(true);
 
-            return (
-              <div
-                key={t.id}
-                className={`flex items-center gap-3 rounded-md px-2 py-1.5 text-xs ${
-                  isKeep
-                    ? "bg-success/10 border border-success/30"
-                    : isSelected
-                    ? "bg-destructive/5 border border-destructive/20"
-                    : "bg-secondary/50 border border-border"
-                }`}
-              >
-                <Checkbox
-                  checked={isSelected}
-                  onCheckedChange={() => onToggle(t.id)}
-                  disabled={isKeep}
-                  aria-label={isKeep ? "Da conservare" : "Seleziona per eliminazione"}
-                />
-                <span className="whitespace-nowrap">
-                  {format(new Date(t.date), "dd/MM/yyyy", { locale: it })}
-                </span>
-                <span className="truncate flex-1">{t.description || "—"}</span>
-                <span className="whitespace-nowrap text-muted-foreground">
-                  {t.conti?.nome_conto || "—"}
-                </span>
-                <span
-                  className={`whitespace-nowrap font-medium ${
-                    t.type === "income" ? "text-success" : "text-destructive"
-                  }`}
-                >
-                  {t.type === "income" ? "+" : "-"}€{t.amount.toFixed(2)}
-                </span>
-                {isKeep && (
-                  <Badge variant="outline" className="text-[10px] shrink-0">
-                    Conserva
-                  </Badge>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
+  return (
+    <Collapsible open={expanded} onOpenChange={setExpanded}>
+      <Card className="border-border">
+        <CardContent className="p-0">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-2 w-full px-3 py-2.5 text-left hover:bg-muted/50 transition-colors rounded-t-lg">
+              {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+              <span className="text-xs font-semibold text-muted-foreground">
+                Gruppo {index + 1} — {group.transactions.length} movimenti
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="px-3 pb-3 space-y-1.5">
+              {group.transactions.map((t) => {
+                const isKeep = t.id === group.keepId;
+                const isSelected = selectedForDeletion.has(t.id);
+
+                return (
+                  <div
+                    key={t.id}
+                    className={`flex items-start gap-3 rounded-md px-3 py-2.5 text-xs ${
+                      isKeep
+                        ? "bg-success/10 border border-success/30"
+                        : isSelected
+                        ? "bg-destructive/5 border border-destructive/20"
+                        : "bg-secondary/50 border border-border"
+                    }`}
+                  >
+                    <div className="pt-0.5 shrink-0">
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => onToggle(t.id)}
+                        disabled={isKeep}
+                        aria-label={isKeep ? "Da conservare" : "Seleziona per eliminazione"}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="whitespace-nowrap font-medium">
+                          {format(new Date(t.date), "dd/MM/yyyy", { locale: it })}
+                        </span>
+                        <span className="whitespace-nowrap text-muted-foreground">
+                          {t.conti?.nome_conto || "—"}
+                        </span>
+                        <span
+                          className={`whitespace-nowrap font-semibold ${
+                            t.type === "income" ? "text-success" : "text-destructive"
+                          }`}
+                        >
+                          {t.type === "income" ? "+" : "-"}€{t.amount.toFixed(2)}
+                        </span>
+                        {isKeep && (
+                          <Badge variant="outline" className="text-[10px] shrink-0">
+                            Conserva
+                          </Badge>
+                        )}
+                      </div>
+                      {/* Full description, wrapping */}
+                      <p className="text-muted-foreground break-words whitespace-pre-wrap leading-relaxed">
+                        {t.description || "—"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CollapsibleContent>
+        </CardContent>
+      </Card>
+    </Collapsible>
   );
 }
