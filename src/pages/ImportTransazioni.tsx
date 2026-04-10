@@ -9,6 +9,10 @@ import {
   ArrowLeft,
   Search,
   AlertTriangle,
+  ShieldCheck,
+  ShieldAlert,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +41,8 @@ import {
   ParsedTransaction,
 } from "@/hooks/useImportTransactions";
 import { useContiAttivi } from "@/hooks/useConti";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 /* ── helpers ────────────────────────────────────────── */
 
@@ -95,10 +101,6 @@ interface ParsedRow {
   amount: number | null;
 }
 
-/**
- * Scan worksheets using array-of-arrays, find header row by "data contabile",
- * then extract rows using column indices.
- */
 function parseWorkbook(workbook: XLSX.WorkBook): ParsedRow[] | string {
   for (const name of workbook.SheetNames) {
     const ws = workbook.Sheets[name];
@@ -116,19 +118,16 @@ function parseWorkbook(workbook: XLSX.WorkBook): ParsedRow[] | string {
       const dateIndex = headerCells.findIndex((c) => c.includes("data contabile"));
       if (dateIndex < 0) continue;
 
-      // Found header row — resolve other indices
       const descrIndex = headerCells.findIndex((c) => c.includes("descrizione"));
       const debitIndex = headerCells.findIndex((c) => c.includes("addebiti"));
       const creditIndex = headerCells.findIndex((c) => c.includes("accrediti"));
       const importoIndex = headerCells.findIndex((c) => c.includes("importo"));
 
-      // Extract data rows
       const dataRows = raw.slice(i + 1);
       const parsed: ParsedRow[] = [];
 
       for (const dr of dataRows) {
         if (!Array.isArray(dr) || dr.length === 0) continue;
-        // Skip completely empty rows
         const hasAnyValue = dr.some((c) => c != null && String(c).trim() !== "");
         if (!hasAnyValue) continue;
 
@@ -162,11 +161,40 @@ function parseWorkbook(workbook: XLSX.WorkBook): ParsedRow[] | string {
   return "Intestazione 'Data Contabile' non trovata nelle prime 200 righe.";
 }
 
+/* ── fingerprint ────────────────────────────────────── */
+
+function normalizeDescription(desc: string): string {
+  return desc.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+function makeFingerprint(contoId: string, date: string, amount: number, description: string): string {
+  return `${contoId}|${date}|${Math.abs(amount).toFixed(2)}|${normalizeDescription(description)}`;
+}
+
+/* ── types for duplicate review ─────────────────────── */
+
+interface ExistingTransaction {
+  id: string;
+  date: string;
+  description: string | null;
+  amount: number;
+  type: string;
+}
+
+interface DuplicateMatch {
+  fileIndex: number;
+  fileRow: ParsedRow;
+  existing: ExistingTransaction;
+}
+
+type Step = "preview" | "review" | "importing";
+
 /* ── component ──────────────────────────────────────── */
 
 export default function ImportTransazioni() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
 
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<ParsedRow[]>([]);
@@ -174,6 +202,12 @@ export default function ImportTransazioni() {
   const [importing, setImporting] = useState(false);
   const [selectedContoId, setSelectedContoId] = useState("");
   const [searchText, setSearchText] = useState("");
+  const [step, setStep] = useState<Step>("preview");
+  const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
+  const [newRowIndices, setNewRowIndices] = useState<number[]>([]);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [showDuplicatesExpanded, setShowDuplicatesExpanded] = useState(true);
+  const [showNewExpanded, setShowNewExpanded] = useState(false);
 
   const ensureCategoriesMutation = useEnsureClassificationCategories();
   const importMutation = useImportTransactions();
@@ -181,15 +215,19 @@ export default function ImportTransazioni() {
 
   /* ── derived data ── */
 
+  const suspiciousPatterns = useMemo(
+    () => [/^identificativo$/i, /^saldo$/i, /^eur$/i, /^divisa$/i, /^importo$/i, /^data$/i, /^codice$/i],
+    []
+  );
+
   const parsedRows = useMemo(() => {
-    const suspiciousPatterns = [/^identificativo$/i, /^saldo$/i, /^eur$/i, /^divisa$/i, /^importo$/i, /^data$/i, /^codice$/i];
     return rows.map((row, i) => {
       const emptyDesc = !row.description || row.description.trim().length === 0;
       const suspiciousDesc = suspiciousPatterns.some((re) => re.test(row.description.trim()));
       const hasError = !row.date || row.amount == null || row.amount === 0 || emptyDesc || suspiciousDesc;
       return { index: i, ...row, hasError };
     });
-  }, [rows]);
+  }, [rows, suspiciousPatterns]);
 
   const filteredRows = useMemo(() => {
     if (!searchText.trim()) return parsedRows;
@@ -268,7 +306,6 @@ export default function ImportTransazioni() {
     reader.onload = async (e) => {
       try {
         const buffer = e.target?.result as ArrayBuffer;
-
         let result: ParsedRow[] | string;
 
         if (isPdf) {
@@ -298,6 +335,9 @@ export default function ImportTransazioni() {
         setFileName(file.name);
         setExcludedRows(new Set());
         setSearchText("");
+        setStep("preview");
+        setDuplicates([]);
+        setNewRowIndices([]);
       } catch {
         toast({ title: "Errore di lettura", description: "File corrotto o formato non supportato", variant: "destructive" });
       }
@@ -323,16 +363,111 @@ export default function ImportTransazioni() {
     [processFile]
   );
 
-  const handleImport = async () => {
-    if (!selectedContoId || includedCount === 0) return;
+  /* ── duplicate check ── */
+
+  const checkDuplicates = async () => {
+    if (!selectedContoId || !user) return;
+    setCheckingDuplicates(true);
+
+    try {
+      // Fetch all existing transactions for this conto
+      const PAGE_SIZE = 1000;
+      let allExisting: ExistingTransaction[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("transactions")
+          .select("id, date, description, amount, type")
+          .eq("user_id", user.id)
+          .eq("conto_id", selectedContoId)
+          .is("deleted_at", null)
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) throw error;
+        allExisting.push(...(data || []));
+        hasMore = (data?.length ?? 0) === PAGE_SIZE;
+        from += PAGE_SIZE;
+      }
+
+      // Build fingerprint set from existing transactions
+      const existingByFingerprint = new Map<string, ExistingTransaction>();
+      for (const tx of allExisting) {
+        const fp = makeFingerprint(
+          selectedContoId,
+          tx.date,
+          tx.type === "expense" ? -tx.amount : tx.amount,
+          tx.description || ""
+        );
+        existingByFingerprint.set(fp, tx);
+      }
+
+      // Check each valid file row against existing
+      const foundDuplicates: DuplicateMatch[] = [];
+      const foundNew: number[] = [];
+      const newExcluded = new Set(excludedRows);
+
+      for (const r of parsedRows) {
+        if (r.hasError) continue;
+        
+        const fp = makeFingerprint(
+          selectedContoId,
+          r.date!,
+          r.amount!,
+          r.description
+        );
+
+        const existing = existingByFingerprint.get(fp);
+        if (existing) {
+          foundDuplicates.push({
+            fileIndex: r.index,
+            fileRow: { date: r.date, description: r.description, amount: r.amount },
+            existing,
+          });
+          // Auto-deselect duplicates
+          newExcluded.add(r.index);
+        } else {
+          foundNew.push(r.index);
+        }
+      }
+
+      setDuplicates(foundDuplicates);
+      setNewRowIndices(foundNew);
+      setExcludedRows(newExcluded);
+
+      if (foundDuplicates.length === 0) {
+        // No duplicates — proceed directly to import
+        toast({ title: "Nessun duplicato trovato", description: "Tutte le righe sono nuove." });
+        await doImport(newExcluded);
+      } else {
+        setStep("review");
+        setShowDuplicatesExpanded(true);
+        setShowNewExpanded(false);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Errore durante il controllo duplicati";
+      toast({ title: "Errore", description: msg, variant: "destructive" });
+    } finally {
+      setCheckingDuplicates(false);
+    }
+  };
+
+  /* ── import ── */
+
+  const doImport = async (excluded?: Set<number>) => {
+    const finalExcluded = excluded ?? excludedRows;
+    if (!selectedContoId) return;
     setImporting(true);
+    setStep("importing");
+
     try {
       const categories = await ensureCategoriesMutation.mutateAsync();
       const parsed: ParsedTransaction[] = [];
       let skipped = 0;
 
       for (const r of parsedRows) {
-        if (excludedRows.has(r.index) || r.hasError) {
+        if (finalExcluded.has(r.index) || r.hasError) {
           skipped++;
           continue;
         }
@@ -346,6 +481,7 @@ export default function ImportTransazioni() {
       if (parsed.length === 0) {
         toast({ title: "Nessuna riga valida", description: `${skipped} righe saltate.`, variant: "destructive" });
         setImporting(false);
+        setStep("review");
         return;
       }
 
@@ -363,14 +499,255 @@ export default function ImportTransazioni() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Errore durante l'importazione";
       toast({ title: "Errore di importazione", description: msg, variant: "destructive" });
+      setStep("review");
     } finally {
       setImporting(false);
     }
   };
 
-  /* ── render ── */
+  const handleImport = () => {
+    checkDuplicates();
+  };
+
+  const excludeAllDuplicates = () => {
+    const newExcluded = new Set(excludedRows);
+    for (const d of duplicates) newExcluded.add(d.fileIndex);
+    setExcludedRows(newExcluded);
+  };
+
+  /* ── render helpers ── */
+
+  const formatAmount = (amount: number) => {
+    const sign = amount >= 0 ? "+" : "-";
+    const color = amount >= 0 ? "text-success" : "text-destructive";
+    return (
+      <span className={color}>
+        {sign}€{Math.abs(amount).toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+      </span>
+    );
+  };
+
+  const formatDate = (d: string | null) => {
+    if (!d) return "—";
+    try {
+      return format(new Date(d), "dd/MM/yyyy");
+    } catch {
+      return d;
+    }
+  };
 
   const hasFile = rows.length > 0;
+
+  /* ── REVIEW STEP ── */
+  if (step === "review") {
+    const dupCount = duplicates.length;
+    const newCount = newRowIndices.length;
+    const dupExcludedCount = duplicates.filter((d) => excludedRows.has(d.fileIndex)).length;
+    const dupIncludedCount = dupCount - dupExcludedCount;
+    const totalIncluded = includedCount;
+
+    return (
+      <div className="h-screen flex flex-col bg-background">
+        {/* HEADER */}
+        <div className="shrink-0 border-b border-border bg-card px-4 py-3 space-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button variant="ghost" size="sm" onClick={() => setStep("preview")} className="gap-1.5">
+              <ArrowLeft className="h-4 w-4" />
+              Torna all'anteprima
+            </Button>
+            <h1 className="text-lg font-bold text-foreground">Verifica movimenti già presenti</h1>
+          </div>
+
+          {/* Stats bar */}
+          <div className="flex items-center gap-4 flex-wrap text-sm">
+            <Badge variant="outline" className="gap-1.5 py-1">
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              {rows.length} righe nel file
+            </Badge>
+            <Badge variant="secondary" className="gap-1.5 py-1 bg-success/10 text-success border-success/20">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {newCount} nuove
+            </Badge>
+            <Badge variant="secondary" className="gap-1.5 py-1 bg-warning/10 text-warning border-warning/20">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              {dupCount} già presenti
+            </Badge>
+            {dupIncludedCount > 0 && (
+              <Badge variant="secondary" className="gap-1.5 py-1">
+                {dupIncludedCount} duplicati riattivati
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* BODY */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Duplicates section */}
+          {dupCount > 0 && (
+            <div className="border border-warning/30 rounded-lg overflow-hidden">
+              <button
+                className="w-full flex items-center justify-between px-4 py-3 bg-warning/5 hover:bg-warning/10 transition-colors"
+                onClick={() => setShowDuplicatesExpanded(!showDuplicatesExpanded)}
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5 text-warning" />
+                  <span className="font-semibold text-foreground">
+                    Movimenti già presenti ({dupCount})
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    — deselezionati per default, riattivabili manualmente
+                  </span>
+                </div>
+                {showDuplicatesExpanded ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+
+              {showDuplicatesExpanded && (
+                <div className="divide-y divide-border">
+                  {duplicates.map((d) => {
+                    const isExcluded = excludedRows.has(d.fileIndex);
+                    const existingAmount =
+                      d.existing.type === "expense" ? -d.existing.amount : d.existing.amount;
+
+                    return (
+                      <div
+                        key={d.fileIndex}
+                        className={`px-4 py-3 space-y-2 ${isExcluded ? "opacity-60" : "bg-warning/5"}`}
+                      >
+                        {/* File row */}
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={!isExcluded}
+                            onCheckedChange={() => toggleRow(d.fileIndex)}
+                            className="mt-1"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <Badge variant="outline" className="text-xs px-1.5 py-0">File</Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {isExcluded ? "Esclusa dall'importazione" : "Sarà importata"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm">
+                              <span className="text-muted-foreground w-[90px]">{formatDate(d.fileRow.date)}</span>
+                              <span className="flex-1 truncate">{d.fileRow.description}</span>
+                              <span className="font-medium">{formatAmount(d.fileRow.amount!)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Existing row (read-only) */}
+                        <div className="flex items-start gap-3 ml-7 pl-3 border-l-2 border-muted">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <Badge variant="secondary" className="text-xs px-1.5 py-0">DB</Badge>
+                              <span className="text-xs text-muted-foreground">Movimento già esistente nel database</span>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span className="w-[90px]">{formatDate(d.existing.date)}</span>
+                              <span className="flex-1 truncate">{d.existing.description || "—"}</span>
+                              <span className="font-medium">{formatAmount(existingAmount)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* New rows section */}
+          {newCount > 0 && (
+            <div className="border border-success/30 rounded-lg overflow-hidden">
+              <button
+                className="w-full flex items-center justify-between px-4 py-3 bg-success/5 hover:bg-success/10 transition-colors"
+                onClick={() => setShowNewExpanded(!showNewExpanded)}
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-success" />
+                  <span className="font-semibold text-foreground">
+                    Movimenti da importare ({newCount})
+                  </span>
+                </div>
+                {showNewExpanded ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+
+              {showNewExpanded && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox checked disabled />
+                      </TableHead>
+                      <TableHead className="w-[110px]">Data</TableHead>
+                      <TableHead>Descrizione</TableHead>
+                      <TableHead className="w-[130px] text-right">Importo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {newRowIndices.map((idx) => {
+                      const r = parsedRows[idx];
+                      if (!r) return null;
+                      const isExcluded = excludedRows.has(idx);
+                      return (
+                        <TableRow key={idx} className={isExcluded ? "opacity-40" : ""}>
+                          <TableCell>
+                            <Checkbox
+                              checked={!isExcluded}
+                              onCheckedChange={() => toggleRow(idx)}
+                            />
+                          </TableCell>
+                          <TableCell className="text-sm">{formatDate(r.date)}</TableCell>
+                          <TableCell className="text-sm">{r.description}</TableCell>
+                          <TableCell className="text-sm text-right font-medium">
+                            {r.amount != null ? formatAmount(r.amount) : "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* FOOTER */}
+        <div className="shrink-0 border-t border-border bg-card px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setStep("preview")} className="gap-1.5">
+              <ArrowLeft className="h-4 w-4" />
+              Indietro
+            </Button>
+            {dupCount > 0 && (
+              <Button variant="outline" size="sm" onClick={excludeAllDuplicates}>
+                Escludi tutti i duplicati
+              </Button>
+            )}
+          </div>
+          <Button
+            onClick={() => doImport()}
+            disabled={importing || totalIncluded === 0}
+          >
+            {importing
+              ? "Importazione in corso..."
+              : `Conferma importazione (${totalIncluded} righe)`}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── PREVIEW STEP (original) ── */
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -402,7 +779,6 @@ export default function ImportTransazioni() {
 
         {hasFile && (
           <div className="flex items-end gap-4 flex-wrap">
-            {/* Conto */}
             <div className="space-y-1 min-w-[180px]">
               <Label className="text-xs">Conto destinazione *</Label>
               <Select value={selectedContoId} onValueChange={setSelectedContoId}>
@@ -419,7 +795,6 @@ export default function ImportTransazioni() {
               </Select>
             </div>
 
-            {/* Search */}
             <div className="space-y-1 flex-1 min-w-[180px]">
               <Label className="text-xs">Cerca descrizione</Label>
               <div className="relative">
@@ -428,7 +803,6 @@ export default function ImportTransazioni() {
               </div>
             </div>
 
-            {/* Stats */}
             <div className="flex items-center gap-3 text-xs whitespace-nowrap pb-1">
               <span className="text-muted-foreground">{includedCount}/{rows.length} righe</span>
               <span className="text-success font-medium">+€{totals.income.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</span>
@@ -518,8 +892,15 @@ export default function ImportTransazioni() {
             <ArrowLeft className="h-4 w-4" />
             Annulla
           </Button>
-          <Button onClick={handleImport} disabled={!selectedContoId || importing || includedCount === 0}>
-            {importing ? "Importazione in corso..." : `Conferma Importazione (${includedCount} righe)`}
+          <Button
+            onClick={handleImport}
+            disabled={!selectedContoId || checkingDuplicates || importing || includedCount === 0}
+          >
+            {checkingDuplicates
+              ? "Controllo duplicati..."
+              : importing
+                ? "Importazione in corso..."
+                : `Conferma Importazione (${includedCount} righe)`}
           </Button>
         </div>
       )}
