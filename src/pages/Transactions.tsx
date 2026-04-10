@@ -297,6 +297,10 @@ export default function Transactions() {
           >
             <RefreshCw className={`h-4 w-4 ${recalcMutation.isPending ? "animate-spin" : ""}`} />
           </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setDuplicatesOpen(true)}>
+            <Copy className="h-4 w-4" />
+            <span className="hidden sm:inline">Duplicati</span>
+          </Button>
           <Button variant="outline" className="gap-2" onClick={() => navigate("/import-transazioni")}>
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Importa</span>
