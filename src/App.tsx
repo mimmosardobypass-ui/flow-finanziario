@@ -12,6 +12,7 @@ import Categories from "./pages/Categories";
 import Scadenziario from "./pages/Scadenziario";
 import Conti from "./pages/Conti";
 import Bilancio from "./pages/Bilancio";
+import Regole from "./pages/Regole";
 import ImportTransazioni from "./pages/ImportTransazioni";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -85,6 +86,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <Bilancio />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/regole"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Regole />
                   </Layout>
                 </ProtectedRoute>
               }
