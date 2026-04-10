@@ -19,6 +19,8 @@ export interface TransactionFilters {
 export function useFilteredTransactions(filters: TransactionFilters) {
   const { user } = useAuth();
   const getCategoryWithChildrenIds = useGetCategoryWithChildrenIds();
+  const trimmedSearchText = filters.searchText?.trim() || undefined;
+  const normalizedSearchText = trimmedSearchText?.toLowerCase();
 
   // Resolve category filter to include subcategories
   const resolvedCategoryIds = filters.categoryId
@@ -34,13 +36,14 @@ export function useFilteredTransactions(filters: TransactionFilters) {
     amountMin: filters.amountMin,
     amountMax: filters.amountMax,
     reconciliation: filters.reconciliation,
-    searchText: filters.searchText?.trim() || undefined,
+    searchText: trimmedSearchText,
   };
 
   return useQuery({
     queryKey: ["transactions", "filtered", user?.id, serverFilters],
     queryFn: async () => {
       if (!user) return [];
+      const shouldDebugSearch = !!trimmedSearchText;
 
       let query = supabase
         .from("transactions")
@@ -60,9 +63,24 @@ export function useFilteredTransactions(filters: TransactionFilters) {
         .is("deleted_at", null);
 
       // Filtro ricerca testuale server-side con ilike
-      if (filters.searchText?.trim()) {
-        const search = `%${filters.searchText.trim()}%`;
+      if (trimmedSearchText) {
+        const search = `%${trimmedSearchText}%`;
         query = query.ilike("description", search);
+      }
+
+      if (shouldDebugSearch) {
+        console.log("[TX_SEARCH_SERVER_DEBUG] fields", ["description"]);
+        console.log("[TX_SEARCH_SERVER_DEBUG] filters", {
+          searchText: trimmedSearchText,
+          contoId: filters.contoId ?? null,
+          categoryIds: resolvedCategoryIds ?? null,
+          type: filters.type ?? "all",
+          dateFrom: filters.dateFrom ?? null,
+          dateTo: filters.dateTo ?? null,
+          amountMin: filters.amountMin ?? null,
+          amountMax: filters.amountMax ?? null,
+          reconciliation: filters.reconciliation ?? "all",
+        });
       }
 
       if (filters.contoId) {
@@ -111,9 +129,20 @@ export function useFilteredTransactions(filters: TransactionFilters) {
       let hasMore = true;
 
       while (hasMore) {
-        const { data, error } = await query
+        const pagedQuery = query
           .order("date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
           .range(from, from + PAGE_SIZE - 1);
+
+        if (shouldDebugSearch && from === 0) {
+          console.log(
+            "[TX_SEARCH_SERVER_DEBUG] finalQuery",
+            (pagedQuery as any)?.url?.toString?.() ?? "URL non disponibile"
+          );
+        }
+
+        const { data, error } = await pagedQuery;
 
         if (error) throw error;
 
@@ -123,7 +152,32 @@ export function useFilteredTransactions(filters: TransactionFilters) {
         from += PAGE_SIZE;
       }
 
-      return allData;
+      const seenIds = new Set<string>();
+      const dedupedData = allData.filter((transaction) => {
+        if (seenIds.has(transaction.id)) {
+          return false;
+        }
+
+        seenIds.add(transaction.id);
+        return true;
+      });
+
+      const strictlyFilteredData = normalizedSearchText
+        ? dedupedData.filter((transaction) =>
+            (transaction.description ?? "").toLowerCase().includes(normalizedSearchText)
+          )
+        : dedupedData;
+
+      if (shouldDebugSearch) {
+        console.log("[TX_SEARCH_SERVER_DEBUG] records", {
+          fetchedRows: allData.length,
+          duplicatesRemoved: allData.length - dedupedData.length,
+          serverRowsAfterFilter: dedupedData.length,
+          finalRowsAfterStrictDescriptionCheck: strictlyFilteredData.length,
+        });
+      }
+
+      return strictlyFilteredData;
     },
     placeholderData: (prev) => prev,
     enabled: !!user,

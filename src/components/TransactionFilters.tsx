@@ -50,13 +50,20 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
     return categoryTree.filter((cat) => cat.type === filters.type);
   }, [categoryTree, filters.type]);
 
+  useEffect(() => {
+    setSearchInput(filters.searchText || "");
+  }, [filters.searchText]);
+
   // Debounce per la ricerca
   useEffect(() => {
+    if (searchInput === (filters.searchText || "")) return;
+
     const timer = setTimeout(() => {
       onFiltersChange({ ...filters, searchText: searchInput });
     }, 300);
+
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, filters, onFiltersChange]);
 
   const handleTypeChange = (value: string) => {
     const newType = value as "all" | "income" | "expense";
@@ -145,7 +152,7 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Cerca per descrizione o categoria..."
+            placeholder="Cerca nella descrizione..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="pl-10 bg-secondary border-border"
