@@ -27,12 +27,40 @@ function normalize(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Build a prefix stem for an Italian word to handle singular/plural variations.
+ * Words ≥ 5 chars: drop last char (incassi→incass, pagamento→pagament)
+ * Words 4 chars: drop last char (conto→cont)
+ * Words ≤ 3 chars: use as-is (pos→pos)
+ */
+function stemWord(word: string): string {
+  if (word.length >= 4) return word.slice(0, -1);
+  return word;
+}
+
+/**
+ * Check if a description matches a keyword phrase using flexible stem-based matching.
+ * Each word in the keyword is stemmed and checked as a substring of the description.
+ * All words in the keyword must match (AND logic within a single keyword phrase).
+ */
+function keywordMatchesDesc(desc: string, keyword: string): boolean {
+  const nkw = normalize(keyword);
+  if (nkw.length === 0) return false;
+  
+  // First try exact substring match (fastest path)
+  if (desc.includes(nkw)) return true;
+  
+  // Then try stem-based matching: all words in the keyword must appear as stems
+  const kwWords = nkw.split(" ").filter(w => w.length > 0);
+  return kwWords.every(word => {
+    const stem = stemWord(word);
+    return desc.includes(stem);
+  });
+}
+
 function matchesKeywords(description: string, keywords: string[]): boolean {
   const desc = normalize(description || "");
-  return keywords.some((kw) => {
-    const nkw = normalize(kw);
-    return nkw.length > 0 && desc.includes(nkw);
-  });
+  return keywords.some((kw) => keywordMatchesDesc(desc, kw));
 }
 
 export { normalize, matchesKeywords };
