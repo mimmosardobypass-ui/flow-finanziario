@@ -226,7 +226,7 @@ export function useRuleMatchCounts(rules: CategorizationRule[]) {
           if (rule.match_type !== "both" && t.type !== rule.match_type) continue;
           if (rule.conto_id && t.conto_id !== rule.conto_id) continue;
           if (!rule.apply_to_categorized && t.category_id != null) continue;
-          if (matchesKeywords(t.description, rule.keywords)) count++;
+          if (matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords)) count++;
         }
         counts[rule.id] = count;
       }
@@ -256,7 +256,7 @@ export async function countRuleMatches(rule: CategorizationRule): Promise<number
     if (error) throw error;
     if (!data || data.length === 0) break;
 
-    total += data.filter((t: any) => matchesKeywords(t.description, rule.keywords)).length;
+    total += data.filter((t: any) => matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords)).length;
 
     if (data.length < PAGE) break;
     from += PAGE;
@@ -291,7 +291,7 @@ export function useApplyRuleToExisting() {
         if (error) throw error;
         if (!data || data.length === 0) break;
 
-        const matched = data.filter((t: any) => matchesKeywords(t.description, rule.keywords));
+        const matched = data.filter((t: any) => matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords));
         allIds.push(...matched.map((t: any) => t.id));
 
         if (data.length < PAGE) break;
