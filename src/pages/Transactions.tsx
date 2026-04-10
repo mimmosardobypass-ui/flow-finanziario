@@ -19,6 +19,7 @@ import { TransactionDialog } from "@/components/TransactionDialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { TransactionFilters } from "@/components/TransactionFilters";
 import { ExportDropdown } from "@/components/ExportDropdown";
+import { DuplicatesDialog } from "@/components/DuplicatesDialog";
 
 import { ReconciliationSheet } from "@/components/ReconciliationSheet";
 import {
@@ -55,6 +56,7 @@ export default function Transactions() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [reconciliationOpen, setReconciliationOpen] = useState(false);
   const [reconciliationTransaction, setReconciliationTransaction] =
     useState<TransactionWithCategory | null>(null);
