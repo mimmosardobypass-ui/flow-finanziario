@@ -266,6 +266,7 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
               )}
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
               {/* Match type */}
               <div className="space-y-2">
                 <Label>Tipo movimento</Label>
