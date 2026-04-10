@@ -25,7 +25,6 @@ export function useFilteredTransactions(filters: TransactionFilters) {
     ? getCategoryWithChildrenIds(filters.categoryId)
     : undefined;
 
-  // queryKey SENZA searchText - il filtro testuale è lato client e non deve causare refetch
   const serverFilters = {
     type: filters.type,
     categoryIds: resolvedCategoryIds,
@@ -35,6 +34,7 @@ export function useFilteredTransactions(filters: TransactionFilters) {
     amountMin: filters.amountMin,
     amountMax: filters.amountMax,
     reconciliation: filters.reconciliation,
+    searchText: filters.searchText?.trim() || undefined,
   };
 
   return useQuery({
@@ -58,6 +58,12 @@ export function useFilteredTransactions(filters: TransactionFilters) {
           )
         `)
         .is("deleted_at", null);
+
+      // Filtro ricerca testuale server-side con ilike
+      if (filters.searchText?.trim()) {
+        const search = `%${filters.searchText.trim()}%`;
+        query = query.ilike("description", search);
+      }
 
       if (filters.contoId) {
         query = query.eq("conto_id", filters.contoId);
@@ -119,16 +125,7 @@ export function useFilteredTransactions(filters: TransactionFilters) {
 
       return allData;
     },
-    // Filtro testuale applicato lato client tramite select, senza cambiare la queryKey
-    select: (data) => {
-      if (!filters.searchText?.trim()) return data;
-      const searchLower = filters.searchText.trim().toLowerCase();
-      return data.filter(
-        (t) =>
-          t.description?.toLowerCase().includes(searchLower) ||
-          t.categories?.name.toLowerCase().includes(searchLower)
-      );
-    },
+    placeholderData: (prev) => prev,
     enabled: !!user,
   });
 }
