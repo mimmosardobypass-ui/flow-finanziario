@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, Check, RefreshCw, type LucideIcon } from "lucide-react";
+import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, Check, RefreshCw, Copy, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -19,6 +19,7 @@ import { TransactionDialog } from "@/components/TransactionDialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { TransactionFilters } from "@/components/TransactionFilters";
 import { ExportDropdown } from "@/components/ExportDropdown";
+import { DuplicatesDialog } from "@/components/DuplicatesDialog";
 
 import { ReconciliationSheet } from "@/components/ReconciliationSheet";
 import {
@@ -55,6 +56,7 @@ export default function Transactions() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [reconciliationOpen, setReconciliationOpen] = useState(false);
   const [reconciliationTransaction, setReconciliationTransaction] =
     useState<TransactionWithCategory | null>(null);
@@ -294,6 +296,10 @@ export default function Transactions() {
             title="Ricalcola proposte di riconciliazione"
           >
             <RefreshCw className={`h-4 w-4 ${recalcMutation.isPending ? "animate-spin" : ""}`} />
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setDuplicatesOpen(true)}>
+            <Copy className="h-4 w-4" />
+            <span className="hidden sm:inline">Duplicati</span>
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => navigate("/import-transazioni")}>
             <Upload className="h-4 w-4" />
@@ -545,6 +551,8 @@ export default function Transactions() {
         onOpenChange={setReconciliationOpen}
         transaction={reconciliationTransaction}
       />
+
+      <DuplicatesDialog open={duplicatesOpen} onOpenChange={setDuplicatesOpen} />
     </div>
   );
 }
