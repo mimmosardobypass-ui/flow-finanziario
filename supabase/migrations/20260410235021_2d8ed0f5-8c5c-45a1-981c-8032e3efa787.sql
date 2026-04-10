@@ -1,0 +1,1 @@
+ALTER TABLE public.categorization_rules ADD COLUMN exclude_keywords text[] NOT NULL DEFAULT '{}'::text[];

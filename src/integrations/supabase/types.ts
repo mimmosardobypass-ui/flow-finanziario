@@ -56,6 +56,7 @@ export type Database = {
           category_id: string
           conto_id: string | null
           created_at: string
+          exclude_keywords: string[]
           id: string
           keywords: string[]
           match_type: string
@@ -70,6 +71,7 @@ export type Database = {
           category_id: string
           conto_id?: string | null
           created_at?: string
+          exclude_keywords?: string[]
           id?: string
           keywords?: string[]
           match_type?: string
@@ -84,6 +86,7 @@ export type Database = {
           category_id?: string
           conto_id?: string | null
           created_at?: string
+          exclude_keywords?: string[]
           id?: string
           keywords?: string[]
           match_type?: string
