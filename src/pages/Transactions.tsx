@@ -101,7 +101,7 @@ export default function Transactions() {
     return () => clearTimeout(urlSyncTimerRef.current);
   }, [filters, setSearchParams]);
 
-  const { data: transactions = [], isLoading, isPlaceholderData } = useFilteredTransactions(filters);
+  const { data: transactions = [], isLoading, isFetching, isPlaceholderData } = useFilteredTransactions(filters);
   const { data: allCategories = [] } = useCategories();
   const deleteMutation = useDeleteTransaction();
 
@@ -116,8 +116,61 @@ export default function Transactions() {
     });
     return map;
   }, [allCategories]);
+  const normalizedSearchText = filters.searchText?.trim().toLowerCase() || "";
+  const displayedTransactions = useMemo(() => {
+    const seenIds = new Set<string>();
+    const uniqueTransactions = transactions.filter((transaction) => {
+      if (seenIds.has(transaction.id)) {
+        return false;
+      }
+
+      seenIds.add(transaction.id);
+      return true;
+    });
+
+    if (!normalizedSearchText) {
+      return uniqueTransactions;
+    }
+
+    return uniqueTransactions.filter((transaction) =>
+      (transaction.description || "").toLowerCase().includes(normalizedSearchText)
+    );
+  }, [transactions, normalizedSearchText]);
+  const searchDebug = useMemo(() => {
+    if (!normalizedSearchText) return null;
+
+    const queryParts = ["deleted_at IS NULL", `description ILIKE '%${filters.searchText?.trim() || ""}%'`];
+
+    if (filters.contoId) queryParts.push(`conto_id = '${filters.contoId}'`);
+    if (filters.categoryId) queryParts.push(`category_id IN figli('${filters.categoryId}')`);
+    if (filters.type && filters.type !== "all") queryParts.push(`type = '${filters.type}'`);
+    if (filters.dateFrom) queryParts.push(`date >= '${filters.dateFrom}'`);
+    if (filters.dateTo) queryParts.push(`date <= '${filters.dateTo}'`);
+    if (filters.amountMin !== undefined && filters.amountMin > 0) queryParts.push(`amount >= ${filters.amountMin}`);
+    if (filters.amountMax !== undefined && filters.amountMax > 0) queryParts.push(`amount <= ${filters.amountMax}`);
+    if (filters.reconciliation && filters.reconciliation !== "all") {
+      queryParts.push(
+        filters.reconciliation === "not_reconciled"
+          ? "reconciliation_status IN ('none', 'suggested')"
+          : `reconciliation_status = '${filters.reconciliation}'`
+      );
+    }
+
+    return {
+      fields: ["description"],
+      finalQuery: queryParts.join(" AND "),
+      serverCount: isFetching && isPlaceholderData ? null : transactions.length,
+      renderedCount: displayedTransactions.length,
+      usingPlaceholderData: isPlaceholderData,
+    };
+  }, [displayedTransactions.length, filters.amountMax, filters.amountMin, filters.categoryId, filters.contoId, filters.dateFrom, filters.dateTo, filters.reconciliation, filters.searchText, filters.type, isFetching, isPlaceholderData, normalizedSearchText, transactions.length]);
   const recalcMutation = useRecalculateAllSuggestions();
   const backfillDoneRef = useRef(false);
+
+  useEffect(() => {
+    if (!searchDebug) return;
+    console.log("[TX_SEARCH_RENDER_DEBUG]", searchDebug);
+  }, [searchDebug]);
 
   // Auto-backfill: on first load, if there are transactions but no suggestions yet
   useEffect(() => {
@@ -141,10 +194,10 @@ export default function Transactions() {
 
   // Calcola totali
   const totals = useMemo(() => {
-    const entrate = transactions
+    const entrate = displayedTransactions
       .filter((t) => t.type === "income")
       .reduce((sum, t) => sum + t.amount, 0);
-    const uscite = transactions
+    const uscite = displayedTransactions
       .filter((t) => t.type === "expense")
       .reduce((sum, t) => sum + t.amount, 0);
     return {
@@ -152,7 +205,7 @@ export default function Transactions() {
       uscite,
       saldo: entrate - uscite,
     };
-  }, [transactions]);
+  }, [displayedTransactions]);
 
   const handleEdit = (transaction: TransactionWithCategory) => {
     setSelectedTransaction(transaction);
@@ -247,7 +300,7 @@ export default function Transactions() {
             <span className="hidden sm:inline">Importa</span>
           </Button>
           <ExportDropdown
-            transactions={transactions}
+            transactions={displayedTransactions}
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
           />
@@ -272,11 +325,36 @@ export default function Transactions() {
       {/* Filtri */}
       <TransactionFilters filters={filters} onFiltersChange={setFilters} />
 
+      {searchDebug && (
+        <Card className="print:hidden bg-card border-border">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Badge variant="secondary">Campi ricerca: {searchDebug.fields.join(", ")}</Badge>
+              <Badge variant="secondary">
+                Record dal server: {searchDebug.serverCount ?? "aggiornamento in corso..."}
+              </Badge>
+              <Badge variant="secondary">Record renderizzati: {searchDebug.renderedCount}</Badge>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Query finale</p>
+              <code className="block rounded-md bg-secondary px-3 py-2 text-xs text-foreground break-all">
+                {searchDebug.finalQuery}
+              </code>
+              {searchDebug.usingPlaceholderData && (
+                <p className="text-xs text-muted-foreground">
+                  Risultati in aggiornamento: la tabella mostra comunque solo le righe la cui descrizione contiene il testo cercato.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Conteggio e totali */}
-      {transactions.length > 0 && (
+      {displayedTransactions.length > 0 && (
         <div className="flex flex-wrap gap-4 items-center text-sm print:hidden">
           <span className="text-muted-foreground">
-            {transactions.length} transazion{transactions.length === 1 ? "e" : "i"}
+            {displayedTransactions.length} transazion{displayedTransactions.length === 1 ? "e" : "i"}
           </span>
           <span className="text-success font-medium">
             Entrate: +€{totals.entrate.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
@@ -291,7 +369,7 @@ export default function Transactions() {
       )}
 
       {/* Contenuto principale */}
-      {transactions.length === 0 ? (
+      {displayedTransactions.length === 0 ? (
         <Card className="bg-card border-border print:hidden">
           <CardContent className="flex flex-col items-center justify-center py-16">
             <div className="h-16 w-16 rounded-full bg-secondary flex items-center justify-center mb-4">
@@ -331,7 +409,7 @@ export default function Transactions() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((transaction) => (
+                  {displayedTransactions.map((transaction) => (
                     <TableRow
                       key={transaction.id}
                       className="cursor-pointer"
@@ -433,7 +511,7 @@ export default function Transactions() {
       )}
 
       {/* Riepilogo per stampa */}
-      {transactions.length > 0 && (
+      {displayedTransactions.length > 0 && (
         <div className="hidden print:block mt-8 p-4 border border-border rounded">
           <h3 className="font-bold mb-4">RIEPILOGO</h3>
           <p className="text-success">
