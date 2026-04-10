@@ -1,4 +1,4 @@
-import { LayoutDashboard, Receipt, LogOut, Wallet, Tag, CalendarClock, Landmark, Scale } from "lucide-react";
+import { LayoutDashboard, Receipt, LogOut, Wallet, Tag, CalendarClock, Landmark, Scale, Zap } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -20,6 +20,7 @@ const navItems = [
   { title: "Categorie", url: "/categories", icon: Tag },
   { title: "Conti", url: "/conti", icon: Landmark },
   { title: "Scadenziario", url: "/scadenziario", icon: CalendarClock },
+  { title: "Regole", url: "/regole", icon: Zap },
   { title: "Bilancio", url: "/bilancio", icon: Scale },
 ];
 
