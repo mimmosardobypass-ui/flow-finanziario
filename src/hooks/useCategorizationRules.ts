@@ -7,6 +7,7 @@ export interface CategorizationRule {
   user_id: string;
   name: string;
   keywords: string[];
+  exclude_keywords: string[];
   match_type: "income" | "expense" | "both";
   conto_id: string | null;
   category_id: string;
@@ -63,7 +64,13 @@ function matchesKeywords(description: string, keywords: string[]): boolean {
   return keywords.some((kw) => keywordMatchesDesc(desc, kw));
 }
 
-export { normalize, matchesKeywords };
+function matchesExcludeKeywords(description: string, excludeKeywords: string[]): boolean {
+  if (!excludeKeywords || excludeKeywords.length === 0) return false;
+  const desc = normalize(description || "");
+  return excludeKeywords.some((kw) => keywordMatchesDesc(desc, kw));
+}
+
+export { normalize, matchesKeywords, matchesExcludeKeywords };
 
 export function useCategorizationRules() {
   return useQuery({
