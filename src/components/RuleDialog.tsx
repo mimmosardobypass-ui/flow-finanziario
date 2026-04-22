@@ -351,7 +351,7 @@ export function RuleDialog({ open, onOpenChange, onSave, onApplyToExisting, isSa
                         <p className="text-sm font-medium mb-3">
                           {preview.length} moviment{preview.length === 1 ? "o" : "i"} corrispondent{preview.length === 1 ? "e" : "i"}
                         </p>
-                        <ScrollArea className="max-h-64">
+                        <ScrollArea className="h-[280px]">
                           <table className="w-full text-xs border-collapse">
                             <thead>
                               <tr className="border-b text-muted-foreground">
