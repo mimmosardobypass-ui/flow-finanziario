@@ -77,8 +77,17 @@ export default function Regole() {
         await updateMutation.mutateAsync({ id: selectedRule.id, ...data });
         toast({ title: "Regola aggiornata" });
       } else {
-        await createMutation.mutateAsync(data);
-        toast({ title: "Regola creata" });
+        const created = await createMutation.mutateAsync(data);
+        toast({ title: "Regola creata, applicazione in corso..." });
+        // Auto-apply the new rule to existing transactions
+        if (created && data.active) {
+          try {
+            const count = await applyMutation.mutateAsync(created as CategorizationRule);
+            toast({ title: `Categoria assegnata a ${count} moviment${count === 1 ? "o" : "i"}` });
+          } catch {
+            toast({ title: "Regola creata ma errore nell'applicazione automatica", variant: "destructive" });
+          }
+        }
       }
       setDialogOpen(false);
       setSelectedRule(null);
