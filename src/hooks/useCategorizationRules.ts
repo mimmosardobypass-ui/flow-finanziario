@@ -164,27 +164,40 @@ export function useRulePreview(keywords: string[], matchType: string, contoId: s
     queryKey: ["rule_preview", keywords, matchType, contoId, excludeKeywords],
     enabled: keywords.length > 0 && keywords.some((k) => k.trim().length > 0),
     queryFn: async () => {
-      let query = supabase
-        .from("transactions")
-        .select("id, description, date, amount, type, conto_id, category_id")
-        .is("deleted_at", null)
-        .order("date", { ascending: false })
-        .limit(200);
+      const PAGE = 1000;
+      let from = 0;
+      const allMatched: any[] = [];
 
-      if (matchType !== "both") {
-        query = query.eq("type", matchType);
+      while (true) {
+        let query = supabase
+          .from("transactions")
+          .select("id, description, date, amount, type, conto_id, category_id")
+          .is("deleted_at", null)
+          .order("date", { ascending: false })
+          .range(from, from + PAGE - 1);
+
+        if (matchType !== "both") {
+          query = query.eq("type", matchType);
+        }
+        if (contoId) {
+          query = query.eq("conto_id", contoId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        const matched = data.filter((t: any) =>
+          matchesKeywords(t.description, keywords) &&
+          !matchesExcludeKeywords(t.description, excludeKeywords)
+        );
+        allMatched.push(...matched);
+
+        if (data.length < PAGE) break;
+        from += PAGE;
       }
-      if (contoId) {
-        query = query.eq("conto_id", contoId);
-      }
 
-      const { data, error } = await query;
-      if (error) throw error;
-
-      return (data || []).filter((t: any) =>
-        matchesKeywords(t.description, keywords) &&
-        !matchesExcludeKeywords(t.description, excludeKeywords)
-      );
+      return allMatched;
     },
   });
 }
