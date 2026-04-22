@@ -78,15 +78,35 @@ export default function Regole() {
         toast({ title: "Regola aggiornata" });
       } else {
         const created = await createMutation.mutateAsync(data);
-        toast({ title: "Regola creata, applicazione in corso..." });
+        // Build a complete rule object merging DB response with our data
+        // to ensure all fields (keywords, exclude_keywords, etc.) are correct
+        const fullRule: CategorizationRule = {
+          id: created.id,
+          user_id: created.user_id,
+          name: data.name,
+          keywords: data.keywords || [],
+          exclude_keywords: data.exclude_keywords || [],
+          match_type: data.match_type,
+          conto_id: data.conto_id,
+          category_id: data.category_id,
+          priority: data.priority,
+          apply_to_categorized: data.apply_to_categorized,
+          active: data.active,
+          created_at: created.created_at,
+          updated_at: created.updated_at,
+        };
+        console.log("[Regole] Created rule, applying to existing:", fullRule);
         // Auto-apply the new rule to existing transactions
-        if (created && data.active) {
+        if (fullRule.active) {
           try {
-            const count = await applyMutation.mutateAsync(created as CategorizationRule);
-            toast({ title: `Categoria assegnata a ${count} moviment${count === 1 ? "o" : "i"}` });
-          } catch {
+            const count = await applyMutation.mutateAsync(fullRule);
+            toast({ title: `Regola creata e categoria assegnata a ${count} moviment${count === 1 ? "o" : "i"}` });
+          } catch (applyErr) {
+            console.error("[Regole] Apply error:", applyErr);
             toast({ title: "Regola creata ma errore nell'applicazione automatica", variant: "destructive" });
           }
+        } else {
+          toast({ title: "Regola creata (disattivata, non applicata)" });
         }
       }
       setDialogOpen(false);
