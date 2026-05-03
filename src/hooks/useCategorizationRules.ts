@@ -209,6 +209,12 @@ export function useRuleMatchCounts(rules: CategorizationRule[]) {
     enabled: rules.length > 0,
     staleTime: 30_000,
     queryFn: async () => {
+      const { data: classCats } = await supabase
+        .from("categories")
+        .select("id")
+        .eq("name", "Da classificare");
+      const classifIds = new Set<string>((classCats || []).map((c: any) => c.id));
+
       // Fetch all active transactions in pages
       const PAGE = 1000;
       let from = 0;
@@ -219,6 +225,7 @@ export function useRuleMatchCounts(rules: CategorizationRule[]) {
           .from("transactions")
           .select("id, description, type, conto_id, category_id")
           .is("deleted_at", null)
+          .is("transfer_id", null)
           .range(from, from + PAGE - 1);
         if (error) throw error;
         if (!data || data.length === 0) break;
@@ -238,7 +245,11 @@ export function useRuleMatchCounts(rules: CategorizationRule[]) {
         for (const t of allTxs) {
           if (rule.match_type !== "both" && t.type !== rule.match_type) continue;
           if (rule.conto_id && t.conto_id !== rule.conto_id) continue;
-          if (!rule.apply_to_categorized && t.category_id != null) continue;
+          if (!rule.apply_to_categorized) {
+            const isUnclassified = t.category_id == null || classifIds.has(t.category_id);
+            if (!isUnclassified) continue;
+          }
+          if (t.category_id === rule.category_id) continue;
           if (matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords)) count++;
         }
         counts[rule.id] = count;
@@ -250,6 +261,12 @@ export function useRuleMatchCounts(rules: CategorizationRule[]) {
 
 /** Count matching transactions for a rule (for confirmation dialog) */
 export async function countRuleMatches(rule: CategorizationRule): Promise<number> {
+  const { data: classCats } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("name", "Da classificare");
+  const classifIds = new Set<string>((classCats || []).map((c: any) => c.id));
+
   const PAGE = 1000;
   let from = 0;
   let total = 0;
@@ -259,17 +276,24 @@ export async function countRuleMatches(rule: CategorizationRule): Promise<number
       .from("transactions")
       .select("id, description, type, conto_id, category_id")
       .is("deleted_at", null)
+      .is("transfer_id", null)
       .range(from, from + PAGE - 1);
 
     if (rule.match_type !== "both") query = query.eq("type", rule.match_type);
     if (rule.conto_id) query = query.eq("conto_id", rule.conto_id);
-    if (!rule.apply_to_categorized) query = query.is("category_id", null);
 
     const { data, error } = await query;
     if (error) throw error;
     if (!data || data.length === 0) break;
 
-    total += data.filter((t: any) => matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords)).length;
+    total += data.filter((t: any) => {
+      if (!rule.apply_to_categorized) {
+        const isUnclassified = t.category_id == null || classifIds.has(t.category_id);
+        if (!isUnclassified) return false;
+      }
+      if (t.category_id === rule.category_id) return false;
+      return matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords);
+    }).length;
 
     if (data.length < PAGE) break;
     from += PAGE;
