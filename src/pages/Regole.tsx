@@ -55,6 +55,39 @@ export default function Regole() {
   const [applyCount, setApplyCount] = useState<number | null>(null);
   const [countingMatches, setCountingMatches] = useState(false);
 
+  // Bulk apply state
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [confirmBulkOpen, setConfirmBulkOpen] = useState(false);
+
+  const handleBulkApply = async () => {
+    setConfirmBulkOpen(false);
+    setBulkApplying(true);
+    const activeRules = [...rules]
+      .filter((r) => r.active)
+      .sort((a, b) => (b.priority - a.priority) || a.created_at.localeCompare(b.created_at));
+    let totalUpdated = 0;
+    const perRule: Record<string, number> = {};
+    try {
+      for (const rule of activeRules) {
+        try {
+          const n = await applyMutation.mutateAsync(rule);
+          perRule[rule.name] = n;
+          totalUpdated += n;
+        } catch (e) {
+          console.error("[Bulk Apply] errore regola", rule.name, e);
+        }
+      }
+      console.log("[Bulk Apply] Risultati per regola:", perRule);
+      console.log("[Bulk Apply] Totale aggiornati:", totalUpdated);
+      toast({
+        title: "Regole applicate",
+        description: `${totalUpdated} moviment${totalUpdated === 1 ? "o aggiornato" : "i aggiornati"} su ${activeRules.length} regol${activeRules.length === 1 ? "a" : "e"}.`,
+      });
+    } finally {
+      setBulkApplying(false);
+    }
+  };
+
   const categoryMap = useMemo(() => {
     const m = new Map<string, string>();
     categories.forEach((c) => m.set(c.id, c.name));
