@@ -345,10 +345,21 @@ export default function Regole() {
             Automatizza la classificazione dei movimenti con regole personalizzate
           </p>
         </div>
-        <Button className="gap-2" onClick={() => { setSelectedRule(null); setDialogOpen(true); }}>
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Nuova Regola</span>
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setConfirmBulkOpen(true)}
+            disabled={bulkApplying || rules.filter((r) => r.active).length === 0}
+          >
+            {bulkApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+            <span className="hidden sm:inline">Applica tutte</span>
+          </Button>
+          <Button className="gap-2" onClick={() => { setSelectedRule(null); setDialogOpen(true); }}>
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Nuova Regola</span>
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-4 text-sm">
