@@ -99,6 +99,7 @@ interface ParsedRow {
   date: string | null;
   description: string;
   amount: number | null;
+  type?: "income" | "expense";
 }
 
 function parseWorkbook(workbook: XLSX.WorkBook): ParsedRow[] | string {
@@ -475,6 +476,7 @@ export default function ImportTransazioni() {
           date: r.date!,
           description: r.description,
           amount: r.amount!,
+          type: r.type,
         });
       }
 

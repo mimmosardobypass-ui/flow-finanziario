@@ -229,7 +229,8 @@ export function useEnsureClassificationCategories() {
 export interface ParsedTransaction {
   date: string; // yyyy-MM-dd
   description: string;
-  amount: number; // raw value, sign determines type
+  amount: number; // raw value, sign determines type if `type` is omitted
+  type?: "income" | "expense"; // explicit type from parser (PDF) wins over sign
 }
 
 interface ImportResult {
@@ -254,15 +255,18 @@ export function useImportTransactions() {
     }): Promise<ImportResult> => {
       if (!user) throw new Error("Utente non autenticato");
 
-      const rows = transactions.map((t) => ({
-        user_id: user.id,
-        date: t.date,
-        description: t.description || null,
-        amount: Math.abs(t.amount),
-        type: t.amount >= 0 ? "income" : "expense",
-        category_id: t.amount >= 0 ? categories.incomeId : categories.expenseId,
-        conto_id: contoId,
-      }));
+      const rows = transactions.map((t) => {
+        const finalType: "income" | "expense" = t.type ?? (t.amount >= 0 ? "income" : "expense");
+        return {
+          user_id: user.id,
+          date: t.date,
+          description: t.description || null,
+          amount: Math.abs(t.amount),
+          type: finalType,
+          category_id: finalType === "income" ? categories.incomeId : categories.expenseId,
+          conto_id: contoId,
+        };
+      });
 
       let imported = 0;
       const chunkSize = 100;
