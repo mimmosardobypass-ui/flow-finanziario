@@ -285,6 +285,14 @@ export function useApplyRuleToExisting() {
     mutationFn: async (rule: CategorizationRule) => {
       if (!rule.active) throw new Error("Cannot apply inactive rule");
 
+      // Load IDs of "Da classificare" categories — these count as "uncategorized"
+      // so rules can overwrite them even when apply_to_categorized=false
+      const { data: classCats } = await supabase
+        .from("categories")
+        .select("id")
+        .eq("name", "Da classificare");
+      const classifIds = new Set<string>((classCats || []).map((c: any) => c.id));
+
       const PAGE = 1000;
       let from = 0;
       let allIds: string[] = [];
@@ -294,23 +302,36 @@ export function useApplyRuleToExisting() {
           .from("transactions")
           .select("id, description, type, conto_id, category_id")
           .is("deleted_at", null)
+          .is("transfer_id", null)
           .range(from, from + PAGE - 1);
 
         if (rule.match_type !== "both") query = query.eq("type", rule.match_type);
         if (rule.conto_id) query = query.eq("conto_id", rule.conto_id);
-        if (!rule.apply_to_categorized) query = query.is("category_id", null);
+        // NOTE: do NOT filter category_id at SQL level — we need to include
+        // transactions whose category_id points to "Da classificare"
 
         const { data, error } = await query;
         if (error) throw error;
         if (!data || data.length === 0) break;
 
-        const matched = data.filter((t: any) => matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords));
+        const matched = data.filter((t: any) => {
+          // Skip if already has a real category (not null and not "Da classificare")
+          // unless rule is configured to overwrite
+          if (!rule.apply_to_categorized) {
+            const isUnclassified = t.category_id == null || classifIds.has(t.category_id);
+            if (!isUnclassified) return false;
+          }
+          // Skip if already assigned to the same category (no-op)
+          if (t.category_id === rule.category_id) return false;
+          return matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords);
+        });
         allIds.push(...matched.map((t: any) => t.id));
 
         if (data.length < PAGE) break;
         from += PAGE;
       }
 
+      console.log(`[ApplyRule] "${rule.name}" → ${allIds.length} movimenti da aggiornare`);
       if (allIds.length === 0) return 0;
 
       const BATCH = 100;
