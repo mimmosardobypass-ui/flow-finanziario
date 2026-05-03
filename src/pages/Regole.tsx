@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Plus, Pencil, Trash2, Play, Zap, Loader2, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Play, Zap, Loader2, AlertTriangle, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -54,6 +54,39 @@ export default function Regole() {
   const [applyTarget, setApplyTarget] = useState<CategorizationRule | null>(null);
   const [applyCount, setApplyCount] = useState<number | null>(null);
   const [countingMatches, setCountingMatches] = useState(false);
+
+  // Bulk apply state
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [confirmBulkOpen, setConfirmBulkOpen] = useState(false);
+
+  const handleBulkApply = async () => {
+    setConfirmBulkOpen(false);
+    setBulkApplying(true);
+    const activeRules = [...rules]
+      .filter((r) => r.active)
+      .sort((a, b) => (b.priority - a.priority) || a.created_at.localeCompare(b.created_at));
+    let totalUpdated = 0;
+    const perRule: Record<string, number> = {};
+    try {
+      for (const rule of activeRules) {
+        try {
+          const n = await applyMutation.mutateAsync(rule);
+          perRule[rule.name] = n;
+          totalUpdated += n;
+        } catch (e) {
+          console.error("[Bulk Apply] errore regola", rule.name, e);
+        }
+      }
+      console.log("[Bulk Apply] Risultati per regola:", perRule);
+      console.log("[Bulk Apply] Totale aggiornati:", totalUpdated);
+      toast({
+        title: "Regole applicate",
+        description: `${totalUpdated} moviment${totalUpdated === 1 ? "o aggiornato" : "i aggiornati"} su ${activeRules.length} regol${activeRules.length === 1 ? "a" : "e"}.`,
+      });
+    } finally {
+      setBulkApplying(false);
+    }
+  };
 
   const categoryMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -312,10 +345,21 @@ export default function Regole() {
             Automatizza la classificazione dei movimenti con regole personalizzate
           </p>
         </div>
-        <Button className="gap-2" onClick={() => { setSelectedRule(null); setDialogOpen(true); }}>
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Nuova Regola</span>
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setConfirmBulkOpen(true)}
+            disabled={bulkApplying || rules.filter((r) => r.active).length === 0}
+          >
+            {bulkApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+            <span className="hidden sm:inline">Applica tutte</span>
+          </Button>
+          <Button className="gap-2" onClick={() => { setSelectedRule(null); setDialogOpen(true); }}>
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Nuova Regola</span>
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-4 text-sm">
@@ -401,6 +445,28 @@ export default function Regole() {
             >
               {applyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Applica
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk apply confirmation */}
+      <AlertDialog open={confirmBulkOpen} onOpenChange={setConfirmBulkOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5 text-primary" />
+              Applica tutte le regole attive
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Verranno eseguite in ordine di priorità tutte le {rules.filter((r) => r.active).length} regole attive sui movimenti esistenti. Le categorie già assegnate non verranno sovrascritte (a meno che la regola non abbia "Sovrascrive categoria" attivo).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkApply} disabled={bulkApplying}>
+              {bulkApplying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Applica tutte
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
