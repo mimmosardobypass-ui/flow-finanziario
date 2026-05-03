@@ -117,7 +117,7 @@ async function applyRulesToImported(
       if (exclHit) reasons.push(`exclude_keyword trovata (${JSON.stringify(rule.exclude_keywords)})`);
 
       if (reasons.length === 0) {
-        console.log("[AUTO CAT] MATCH:", { tx: tx.description, rule: rule.name, →: rule.category_id });
+        console.log("[AUTO CAT] MATCH:", { tx: tx.description, rule: rule.name, category_id: rule.category_id });
         const arr = updates.get(rule.category_id) || [];
         arr.push(tx.id);
         updates.set(rule.category_id, arr);
