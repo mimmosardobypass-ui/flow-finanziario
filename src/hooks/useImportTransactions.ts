@@ -18,6 +18,7 @@ async function applyRulesToImported(
   userId: string,
   classificationIds: { incomeId: string; expenseId: string }
 ) {
+  console.log("[AUTO CAT] importedIds", importedIds);
   if (importedIds.length === 0) return { categorized: 0, perRule: {} as Record<string, number> };
 
   // 1. Load active rules ordered by priority
@@ -30,7 +31,22 @@ async function applyRulesToImported(
     .order("created_at", { ascending: true });
   if (rulesErr) throw rulesErr;
   const rules = (rulesRaw || []) as any[];
-  if (rules.length === 0) return { categorized: 0, perRule: {} };
+  console.log("[AUTO CAT] regole attive caricate:", rules.length);
+  rules.forEach((r) => {
+    console.log("[AUTO CAT] regola:", {
+      name: r.name,
+      keywords: r.keywords,
+      exclude_keywords: r.exclude_keywords,
+      match_type: r.match_type,
+      conto_id: r.conto_id,
+      category_id: r.category_id,
+      priority: r.priority,
+    });
+  });
+  if (rules.length === 0) {
+    console.warn("[AUTO CAT] Nessuna regola attiva: nulla da applicare.");
+    return { categorized: 0, perRule: {} };
+  }
 
   // 2. Load only the freshly imported transactions
   const txs: any[] = [];
@@ -44,28 +60,80 @@ async function applyRulesToImported(
     if (error) throw error;
     txs.push(...(data || []));
   }
+  console.log("[AUTO CAT] transazioni ricaricate:", txs.length);
+  txs.forEach((t) =>
+    console.log("[AUTO CAT] tx iniziale:", {
+      id: t.id,
+      description: t.description,
+      type: t.type,
+      conto_id: t.conto_id,
+      category_id: t.category_id,
+    })
+  );
 
-  const overridable = new Set([classificationIds.incomeId, classificationIds.expenseId]);
+  // Determine which category_ids are considered "overridable" (i.e. "Da classificare")
+  // We use BOTH the IDs passed in AND we look up by name to be safe.
+  const { data: classCats } = await supabase
+    .from("categories")
+    .select("id, name")
+    .eq("user_id", userId)
+    .eq("name", "Da classificare");
+  const overridable = new Set<string>([
+    classificationIds.incomeId,
+    classificationIds.expenseId,
+    ...((classCats || []).map((c: any) => c.id)),
+  ]);
+  console.log("[AUTO CAT] category_id sovrascrivibili (Da classificare):", Array.from(overridable));
+
   const updates = new Map<string, string[]>(); // category_id -> tx ids
   const perRule: Record<string, number> = {};
 
   for (const tx of txs) {
-    // Skip if already has a real (non-"Da classificare") category
-    if (tx.category_id && !overridable.has(tx.category_id)) continue;
+    // Treat null OR "Da classificare" as overridable
+    const isOverridable = !tx.category_id || overridable.has(tx.category_id);
+    if (!isOverridable) {
+      console.log("[AUTO CAT] SKIP (categoria reale già presente):", tx.id, tx.description);
+      continue;
+    }
 
+    let matched = false;
     for (const rule of rules) {
       const ruleType = normalizeMatchType(rule.match_type);
-      if (ruleType !== "both" && ruleType !== tx.type) continue;
-      if (rule.conto_id && rule.conto_id !== tx.conto_id) continue;
       const desc = tx.description || "";
-      if (!matchesKeywords(desc, rule.keywords || [])) continue;
-      if (matchesExcludeKeywords(desc, rule.exclude_keywords || [])) continue;
+      const reasons: string[] = [];
 
-      const arr = updates.get(rule.category_id) || [];
-      arr.push(tx.id);
-      updates.set(rule.category_id, arr);
-      perRule[rule.name] = (perRule[rule.name] || 0) + 1;
-      break; // first matching rule wins (priority order)
+      if (ruleType !== "both" && ruleType !== tx.type) {
+        reasons.push(`tipo non compatibile (regola=${ruleType}, tx=${tx.type})`);
+      }
+      if (rule.conto_id && rule.conto_id !== tx.conto_id) {
+        reasons.push(`conto non compatibile (regola=${rule.conto_id}, tx=${tx.conto_id})`);
+      }
+      if (!rule.category_id) {
+        reasons.push("category_id mancante nella regola");
+      }
+      const kwOk = matchesKeywords(desc, rule.keywords || []);
+      if (!kwOk) reasons.push(`nessuna keyword trovata (${JSON.stringify(rule.keywords)})`);
+      const exclHit = matchesExcludeKeywords(desc, rule.exclude_keywords || []);
+      if (exclHit) reasons.push(`exclude_keyword trovata (${JSON.stringify(rule.exclude_keywords)})`);
+
+      if (reasons.length === 0) {
+        console.log("[AUTO CAT] MATCH:", { tx: tx.description, rule: rule.name, category_id: rule.category_id });
+        const arr = updates.get(rule.category_id) || [];
+        arr.push(tx.id);
+        updates.set(rule.category_id, arr);
+        perRule[rule.name] = (perRule[rule.name] || 0) + 1;
+        matched = true;
+        break;
+      } else {
+        console.log("[AUTO CAT] NO MATCH:", {
+          tx: tx.description,
+          rule: rule.name,
+          motivi: reasons,
+        });
+      }
+    }
+    if (!matched) {
+      console.warn("[AUTO CAT] Nessuna regola applicabile per tx:", tx.id, tx.description);
     }
   }
 
@@ -78,9 +146,30 @@ async function applyRulesToImported(
         .from("transactions")
         .update({ category_id: categoryId } as any)
         .in("id", batch);
-      if (error) throw error;
+      if (error) {
+        console.error("[AUTO CAT] Errore UPDATE batch:", error);
+        throw error;
+      }
       categorized += batch.length;
     }
+  }
+
+  // 4. Verifica finale: rilegge i movimenti aggiornati
+  if (updates.size > 0) {
+    const allUpdatedIds = Array.from(updates.values()).flat();
+    const verify: any[] = [];
+    for (let i = 0; i < allUpdatedIds.length; i += 200) {
+      const slice = allUpdatedIds.slice(i, i + 200);
+      const { data } = await supabase
+        .from("transactions")
+        .select("id, description, category_id")
+        .in("id", slice);
+      verify.push(...(data || []));
+    }
+    console.log("[AUTO CAT] Verifica post-update:");
+    verify.forEach((t) =>
+      console.log("[AUTO CAT] post:", { id: t.id, desc: t.description, category_id: t.category_id })
+    );
   }
 
   return { categorized, perRule };
