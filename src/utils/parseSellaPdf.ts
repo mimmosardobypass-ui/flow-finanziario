@@ -6,182 +6,258 @@ export interface ParsedRow {
   date: string | null;
   description: string;
   amount: number | null;
+  type?: "income" | "expense";
 }
 
 /* ── Regex ──────────────────────────────────────── */
 
 const TWO_DATES_RE = /(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})/;
-const AMOUNT_RE = /([+-])?\s*(\d{1,3}(?:\.\d{3})*,\d{2})/g;
+const AMOUNT_RE = /(\d{1,3}(?:\.\d{3})*,\d{2})/;
+const AMOUNT_RE_G = /(\d{1,3}(?:\.\d{3})*,\d{2})/g;
 const CODE_RE = /\b\d{14,}\b/;
-const NOISE_RE = [
-  /^pagina\s*\d/i,
-  /^pagina$/i,
-  /saldo\s*(iniziale|finale|contabile|disponibile)/i,
-  /totale\s+movimenti/i,
-  /estratto\s+conto/i,
-  /^iban/i,
-  /^intestat/i,
-  /^filiale/i,
-  /^conto\s+corrente/i,
-  /^codice\s+identificativo/i,
-  /^data\s+operazione/i,
-  /^data\s+valuta/i,
-  /^descrizione$/i,
-  /^divisa$/i,
-  /^importo$/i,
-];
 
 /* ── Helpers ────────────────────────────────────── */
-
-function isNoise(line: string): boolean {
-  const t = line.trim();
-  if (!t) return true;
-  if (t === "EUR") return true;
-  if (CODE_RE.test(t)) return true;
-  return NOISE_RE.some((re) => re.test(t));
-}
 
 function formatDate(ddmmyyyy: string): string | null {
   const m = ddmmyyyy.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!m) return null;
-  const d = parseInt(m[1], 10);
-  const mo = parseInt(m[2], 10);
-  const y = parseInt(m[3], 10);
+  const d = +m[1], mo = +m[2], y = +m[3];
   if (d < 1 || d > 31 || mo < 1 || mo > 12 || y < 1900 || y > 2100) return null;
   return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
 function parseItalianAmount(raw: string): number | null {
-  const m = raw.match(/([+-])?\s*(\d{1,3}(?:\.\d{3})*,\d{2})/);
+  const m = raw.match(AMOUNT_RE);
   if (!m) return null;
-  const sign = m[1] === "-" ? -1 : 1;
-  const num = parseFloat(m[2].replace(/\./g, "").replace(",", "."));
-  return isNaN(num) ? null : sign * num;
+  const num = parseFloat(m[1].replace(/\./g, "").replace(",", "."));
+  return isNaN(num) ? null : num;
 }
 
-/* ── Text-based parser ─────────────────────────── */
+/* ── Types ──────────────────────────────────────── */
 
-export function parseSellaPdfText(rawText: string): ParsedRow[] {
-  const lines = rawText.split("\n");
-  const results: ParsedRow[] = [];
-
-  interface Block {
-    dateStr: string;
-    textLines: string[];
-  }
-
-  let current: Block | null = null;
-
-  function flushBlock(block: Block) {
-    // Join all text lines
-    const fullText = block.textLines
-      .filter((l) => !isNoise(l))
-      .join(" ")
-      .replace(/\s{2,}/g, " ")
-      .trim();
-
-    // Extract amount: last match in the full text
-    let amount: number | null = null;
-    let lastAmountMatch: RegExpMatchArray | null = null;
-    const amountRegex = /([+-])?\s*(\d{1,3}(?:\.\d{3})*,\d{2})/g;
-    let m: RegExpExecArray | null;
-    while ((m = amountRegex.exec(fullText)) !== null) {
-      lastAmountMatch = m;
-    }
-    if (lastAmountMatch) {
-      amount = parseItalianAmount(lastAmountMatch[0]);
-    }
-
-    // Build description: remove the amount portion, codes, EUR, dates
-    let description = fullText;
-    if (lastAmountMatch) {
-      description = description.slice(0, lastAmountMatch.index!) + description.slice(lastAmountMatch.index! + lastAmountMatch[0].length);
-    }
-    // Clean up residual noise from description
-    description = description
-      .replace(CODE_RE, "")
-      .replace(/\bEUR\b/g, "")
-      .replace(/\d{2}\/\d{2}\/\d{4}/g, "")
-      .replace(/\s{2,}/g, " ")
-      .trim();
-
-    const date = formatDate(block.dateStr);
-
-    if (date || amount !== null) {
-      const row: ParsedRow = { date, description, amount };
-      console.log("[parseSellaPdf] Transaction:", JSON.stringify(row));
-      results.push(row);
-    }
-  }
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    const dateMatch = TWO_DATES_RE.exec(line);
-    if (dateMatch) {
-      // Flush previous block
-      if (current) flushBlock(current);
-
-      // Start new block
-      current = {
-        dateStr: dateMatch[1],
-        textLines: [],
-      };
-
-      // Anything on this line after the two dates is part of description
-      const after = line.slice(dateMatch.index! + dateMatch[0].length).trim();
-      if (after && !isNoise(after)) {
-        current.textLines.push(after);
-      }
-    } else if (current) {
-      // Continuation line → add to current block
-      if (!isNoise(line)) {
-        current.textLines.push(line);
-      }
-    }
-  }
-
-  // Flush last block
-  if (current) flushBlock(current);
-
-  console.log(`[parseSellaPdf] Total transactions parsed: ${results.length}`);
-  return results;
+interface PdfFragment {
+  x: number;
+  str: string;
+}
+interface PdfLine {
+  y: number;
+  fragments: PdfFragment[];
+  text: string; // joined
 }
 
-/* ── PDF extraction + parsing ──────────────────── */
+/* ── PDF extraction (X-aware) ──────────────────── */
 
-export async function parseSellaPdf(arrayBuffer: ArrayBuffer): Promise<ParsedRow[]> {
+async function extractLines(arrayBuffer: ArrayBuffer): Promise<PdfLine[]> {
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const textParts: string[] = [];
+  const allLines: PdfLine[] = [];
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
 
-    let lastY: number | null = null;
-    const pageText: string[] = [];
-
+    // Group fragments by Y (rounded) per page
+    const byY = new Map<number, PdfFragment[]>();
     for (const item of content.items) {
       if (!("str" in item)) continue;
-      const str = (item as any).str;
-      if (!str) continue;
+      const str = String((item as any).str || "");
+      if (!str.trim()) continue;
+      const x = Math.round((item as any).transform[4]);
       const y = Math.round((item as any).transform[5]);
-
-      if (lastY !== null && Math.abs(y - lastY) > 5) {
-        pageText.push("\n");
-      } else if (pageText.length > 0) {
-        pageText.push(" ");
-      }
-      pageText.push(str);
-      lastY = y;
+      // Bucket Y by 2px to merge slight variations
+      const key = Math.round(y / 2) * 2;
+      const arr = byY.get(key) || [];
+      arr.push({ x, str });
+      byY.set(key, arr);
     }
 
-    textParts.push(pageText.join(""));
+    const sortedYs = Array.from(byY.keys()).sort((a, b) => b - a); // top-to-bottom
+    for (const y of sortedYs) {
+      const frags = (byY.get(y) || []).sort((a, b) => a.x - b.x);
+      const text = frags.map((f) => f.str).join(" ").replace(/\s{2,}/g, " ").trim();
+      if (text) allLines.push({ y, fragments: frags, text });
+    }
+  }
+  return allLines;
+}
+
+/* ── Column detection ──────────────────────────── */
+
+interface Columns {
+  xAddebiti: number;
+  xAccrediti: number;
+  xSaldo: number | null;
+}
+
+function detectColumns(lines: PdfLine[]): Columns | null {
+  for (const line of lines) {
+    let xAdd: number | null = null;
+    let xAcc: number | null = null;
+    let xSaldo: number | null = null;
+    for (const f of line.fragments) {
+      const s = f.str.toLowerCase();
+      if (s.includes("addebit")) xAdd = f.x;
+      else if (s.includes("accredit")) xAcc = f.x;
+      else if (s === "saldo" || s.includes("saldo")) xSaldo = f.x;
+    }
+    if (xAdd != null && xAcc != null) {
+      console.log("[AUTO IMPORT PDF] Header colonne rilevato:", { xAddebiti: xAdd, xAccrediti: xAcc, xSaldo });
+      return { xAddebiti: xAdd, xAccrediti: xAcc, xSaldo };
+    }
+  }
+  return null;
+}
+
+/* ── Block flushing ────────────────────────────── */
+
+interface AmountAtX {
+  x: number;
+  value: number;
+  raw: string;
+}
+
+interface Block {
+  dateStr: string;
+  lines: PdfLine[];
+}
+
+function classifyAmount(x: number, cols: Columns): "addebito" | "accredito" | "saldo" {
+  // Distances to each column anchor
+  const dAdd = Math.abs(x - cols.xAddebiti);
+  const dAcc = Math.abs(x - cols.xAccrediti);
+  const dSaldo = cols.xSaldo != null ? Math.abs(x - cols.xSaldo) : Infinity;
+
+  // Closest wins
+  if (dSaldo <= dAdd && dSaldo <= dAcc) return "saldo";
+  if (dAdd <= dAcc) return "addebito";
+  return "accredito";
+}
+
+function isNoiseLine(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (CODE_RE.test(t) && t.length < 25) return true;
+  if (/^pagina/i.test(t)) return true;
+  if (/saldo\s+(iniziale|finale|contabile|disponibile|progressivo)/i.test(t)) return true;
+  if (/totale\s+movimenti/i.test(t)) return true;
+  if (/^estratto\s+conto/i.test(t)) return true;
+  if (/^iban|^intestat|^filiale|^conto\s+corrente|^codice\s+identificativo/i.test(t)) return true;
+  return false;
+}
+
+/* ── Main parsing ──────────────────────────────── */
+
+function parseBlocks(lines: PdfLine[], cols: Columns): ParsedRow[] {
+  const results: ParsedRow[] = [];
+  let current: Block | null = null;
+
+  const flush = (block: Block) => {
+    // Collect amounts (with their X) across all lines of the block
+    const amounts: AmountAtX[] = [];
+    const descParts: string[] = [];
+
+    for (const line of block.lines) {
+      for (const f of line.fragments) {
+        const m = f.str.match(AMOUNT_RE);
+        if (m && /^\s*[\d.,+-]+\s*$/.test(f.str.replace(/\s/g, ""))) {
+          // Pure numeric fragment → amount candidate
+          const v = parseItalianAmount(f.str);
+          if (v != null) {
+            amounts.push({ x: f.x, value: v, raw: f.str });
+            continue;
+          }
+        }
+        // Otherwise, contribute to description if not date/code/EUR
+        const s = f.str;
+        if (/\d{2}\/\d{2}\/\d{4}/.test(s)) continue;
+        if (CODE_RE.test(s)) continue;
+        if (/^EUR$/i.test(s.trim())) continue;
+        if (AMOUNT_RE.test(s) && /^[\d.,\s+-]+$/.test(s)) continue;
+        descParts.push(s);
+      }
+    }
+
+    // Classify each amount by column
+    let addebito: AmountAtX | null = null;
+    let accredito: AmountAtX | null = null;
+    for (const a of amounts) {
+      const cls = classifyAmount(a.x, cols);
+      if (cls === "addebito") {
+        if (!addebito || Math.abs(a.x - cols.xAddebiti) < Math.abs(addebito.x - cols.xAddebiti)) addebito = a;
+      } else if (cls === "accredito") {
+        if (!accredito || Math.abs(a.x - cols.xAccrediti) < Math.abs(accredito.x - cols.xAccrediti)) accredito = a;
+      }
+      // saldo → ignored
+    }
+
+    const description = descParts.join(" ").replace(/\s{2,}/g, " ").trim();
+    const date = formatDate(block.dateStr);
+
+    let amount: number | null = null;
+    let type: "income" | "expense" | undefined;
+
+    if (addebito && accredito) {
+      console.error("[AUTO IMPORT PDF] - ERRORE: sia addebito che accredito valorizzati, riga ignorata.", {
+        descrizione: description,
+        addebitoLetto: addebito.raw,
+        accreditoLetto: accredito.raw,
+      });
+      return;
+    } else if (addebito) {
+      amount = -Math.abs(addebito.value);
+      type = "expense";
+    } else if (accredito) {
+      amount = Math.abs(accredito.value);
+      type = "income";
+    } else {
+      console.log("[AUTO IMPORT PDF] - SKIP: nessun importo addebito/accredito.", { descrizione: description, date });
+      return;
+    }
+
+    console.log("[AUTO IMPORT PDF]", {
+      descrizione: description,
+      addebitoLetto: addebito?.raw ?? null,
+      accreditoLetto: accredito?.raw ?? null,
+      amountFinale: amount,
+      typeFinale: type,
+    });
+
+    results.push({ date, description, amount, type });
+  };
+
+  for (const line of lines) {
+    if (isNoiseLine(line.text)) continue;
+    const dateMatch = TWO_DATES_RE.exec(line.text);
+    if (dateMatch) {
+      if (current) flush(current);
+      current = { dateStr: dateMatch[1], lines: [line] };
+    } else if (current) {
+      current.lines.push(line);
+    }
+  }
+  if (current) flush(current);
+
+  return results;
+}
+
+/* ── Public API ────────────────────────────────── */
+
+export async function parseSellaPdf(arrayBuffer: ArrayBuffer): Promise<ParsedRow[]> {
+  const lines = await extractLines(arrayBuffer);
+  console.log(`[AUTO IMPORT PDF] Linee estratte: ${lines.length}`);
+
+  const cols = detectColumns(lines);
+  if (!cols) {
+    console.error("[AUTO IMPORT PDF] Impossibile rilevare colonne 'Addebiti'/'Accrediti' nell'header.");
+    return [];
   }
 
-  const rawText = textParts.join("\n");
-  console.log("[parseSellaPdf] Raw text extracted:\n", rawText);
+  const rows = parseBlocks(lines, cols);
+  console.log(`[AUTO IMPORT PDF] Transazioni totali: ${rows.length}`);
+  return rows;
+}
 
-  return parseSellaPdfText(rawText);
+// Backward-compat export (no longer used externally, kept for safety)
+export function parseSellaPdfText(_rawText: string): ParsedRow[] {
+  console.warn("[parseSellaPdfText] deprecato: il parser ora richiede coordinate X dal PDF.");
+  return [];
 }
