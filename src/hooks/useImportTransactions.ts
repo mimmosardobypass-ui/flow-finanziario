@@ -190,7 +190,20 @@ export function useImportTransactions() {
         importedIds.push(...(data || []).map((t) => t.id));
       }
 
+      // Auto-apply categorization rules ONLY to newly imported movements
+      if (importedIds.length > 0) {
+        try {
+          const { categorized, perRule } = await applyRulesToImported(importedIds, user.id, categories);
+          console.log("[Import] Movimenti importati:", importedIds.length);
+          console.log("[Import] Movimenti auto-categorizzati:", categorized);
+          console.log("[Import] Regole applicate:", perRule);
+        } catch (e) {
+          console.error("[Import] Errore auto-categorizzazione:", e);
+        }
+      }
+
       await queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      await queryClient.invalidateQueries({ queryKey: ["filtered-transactions"] });
       await queryClient.invalidateQueries({ queryKey: ["categories"] });
 
       // Auto-generate reconciliation suggestions for imported transactions
