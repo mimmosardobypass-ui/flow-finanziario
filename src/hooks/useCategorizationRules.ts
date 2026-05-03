@@ -70,6 +70,24 @@ function matchesExcludeKeywords(description: string, excludeKeywords: string[]):
   return excludeKeywords.some((kw) => keywordMatchesDesc(desc, kw));
 }
 
+function isUnclassifiedCategory(categoryId: string | null | undefined, classifIds: Set<string>): boolean {
+  return !categoryId || classifIds.has(categoryId);
+}
+
+function ruleMatchesTransaction(rule: CategorizationRule, t: any, classifIds: Set<string>): boolean {
+  const isUnclassified = isUnclassifiedCategory(t.category_id, classifIds);
+  if (rule.match_type !== "both" && t.type !== rule.match_type) return false;
+  if (!rule.apply_to_categorized && !isUnclassified) return false;
+  if (t.category_id === rule.category_id) return false;
+  if (!matchesKeywords(t.description, rule.keywords) || matchesExcludeKeywords(t.description, rule.exclude_keywords)) return false;
+
+  // Il conto resta vincolante solo per movimenti già realmente categorizzati.
+  // I movimenti "Da classificare" importati spesso arrivano da un conto diverso
+  // da quello scelto nella regola: in quel caso la keyword deve poterli classificare.
+  if (rule.conto_id && t.conto_id !== rule.conto_id && !isUnclassified) return false;
+  return true;
+}
+
 export { normalize, matchesKeywords, matchesExcludeKeywords };
 
 export function useCategorizationRules() {
