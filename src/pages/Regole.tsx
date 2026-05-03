@@ -449,6 +449,28 @@ export default function Regole() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk apply confirmation */}
+      <AlertDialog open={confirmBulkOpen} onOpenChange={setConfirmBulkOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5 text-primary" />
+              Applica tutte le regole attive
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Verranno eseguite in ordine di priorità tutte le {rules.filter((r) => r.active).length} regole attive sui movimenti esistenti. Le categorie già assegnate non verranno sovrascritte (a meno che la regola non abbia "Sovrascrive categoria" attivo).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkApply} disabled={bulkApplying}>
+              {bulkApplying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Applica tutte
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
