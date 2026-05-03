@@ -105,7 +105,7 @@ async function applyRulesToImported(
       if (ruleType !== "both" && ruleType !== tx.type) {
         reasons.push(`tipo non compatibile (regola=${ruleType}, tx=${tx.type})`);
       }
-      if (rule.conto_id && rule.conto_id !== tx.conto_id) {
+      if (rule.conto_id && rule.conto_id !== tx.conto_id && !isOverridable) {
         reasons.push(`conto non compatibile (regola=${rule.conto_id}, tx=${tx.conto_id})`);
       }
       if (!rule.category_id) {
