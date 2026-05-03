@@ -261,14 +261,7 @@ export function useRuleMatchCounts(rules: CategorizationRule[]) {
         }
         let count = 0;
         for (const t of allTxs) {
-          if (rule.match_type !== "both" && t.type !== rule.match_type) continue;
-          if (rule.conto_id && t.conto_id !== rule.conto_id) continue;
-          if (!rule.apply_to_categorized) {
-            const isUnclassified = t.category_id == null || classifIds.has(t.category_id);
-            if (!isUnclassified) continue;
-          }
-          if (t.category_id === rule.category_id) continue;
-          if (matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords)) count++;
+          if (ruleMatchesTransaction(rule, t, classifIds)) count++;
         }
         counts[rule.id] = count;
       }
@@ -298,19 +291,13 @@ export async function countRuleMatches(rule: CategorizationRule): Promise<number
       .range(from, from + PAGE - 1);
 
     if (rule.match_type !== "both") query = query.eq("type", rule.match_type);
-    if (rule.conto_id) query = query.eq("conto_id", rule.conto_id);
 
     const { data, error } = await query;
     if (error) throw error;
     if (!data || data.length === 0) break;
 
     total += data.filter((t: any) => {
-      if (!rule.apply_to_categorized) {
-        const isUnclassified = t.category_id == null || classifIds.has(t.category_id);
-        if (!isUnclassified) return false;
-      }
-      if (t.category_id === rule.category_id) return false;
-      return matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords);
+      return ruleMatchesTransaction(rule, t, classifIds);
     }).length;
 
     if (data.length < PAGE) break;
@@ -348,7 +335,6 @@ export function useApplyRuleToExisting() {
           .range(from, from + PAGE - 1);
 
         if (rule.match_type !== "both") query = query.eq("type", rule.match_type);
-        if (rule.conto_id) query = query.eq("conto_id", rule.conto_id);
         // NOTE: do NOT filter category_id at SQL level — we need to include
         // transactions whose category_id points to "Da classificare"
 
@@ -357,15 +343,7 @@ export function useApplyRuleToExisting() {
         if (!data || data.length === 0) break;
 
         const matched = data.filter((t: any) => {
-          // Skip if already has a real category (not null and not "Da classificare")
-          // unless rule is configured to overwrite
-          if (!rule.apply_to_categorized) {
-            const isUnclassified = t.category_id == null || classifIds.has(t.category_id);
-            if (!isUnclassified) return false;
-          }
-          // Skip if already assigned to the same category (no-op)
-          if (t.category_id === rule.category_id) return false;
-          return matchesKeywords(t.description, rule.keywords) && !matchesExcludeKeywords(t.description, rule.exclude_keywords);
+          return ruleMatchesTransaction(rule, t, classifIds);
         });
         allIds.push(...matched.map((t: any) => t.id));
 
