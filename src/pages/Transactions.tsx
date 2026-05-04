@@ -400,9 +400,9 @@ export default function Transactions() {
       ) : (
         <Card className="bg-card border-border print:shadow-none print:border-0">
           <CardContent className="p-4 md:p-6 print:p-0">
-            <div className="rounded-md border border-border overflow-hidden print:border-0">
+            <div className="rounded-md border border-border overflow-auto print:overflow-visible print:border-0 print:max-h-none max-h-[calc(100vh-360px)]">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-10 bg-card shadow-sm print:static">
                   <TableRow>
                     <TableHead>Data</TableHead>
                     <TableHead>Conto</TableHead>
