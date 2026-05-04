@@ -5,12 +5,40 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+const memoryStorage = new Map<string, string>();
+
+const safeAuthStorage = {
+  getItem: (key: string) => {
+    try {
+      return window.localStorage.getItem(key) ?? memoryStorage.get(key) ?? null;
+    } catch {
+      return memoryStorage.get(key) ?? null;
+    }
+  },
+  setItem: (key: string, value: string) => {
+    memoryStorage.set(key, value);
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      // Storage can be blocked inside the Lovable preview iframe.
+    }
+  },
+  removeItem: (key: string) => {
+    memoryStorage.delete(key);
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // Storage can be blocked inside the Lovable preview iframe.
+    }
+  },
+};
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: safeAuthStorage,
     persistSession: true,
     autoRefreshToken: true,
   }
