@@ -639,16 +639,25 @@ export function useRecalculateAllSuggestions() {
       if (!user) throw new Error("Non autenticato");
       console.log(`[RIC_RECALC] start user=${user.id.slice(0,8)}`);
 
-      // Fetch all non-reconciled transaction IDs (none + suggested — NOT "unreconciled" which doesn't exist)
-      const { data: txns, error } = await supabase
-        .from("transactions")
-        .select("id, reconciliation_status")
-        .eq("user_id", user.id)
-        .is("deleted_at", null)
-        .neq("reconciliation_status", "reconciled")
-        .limit(2000);
-
-      if (error) throw error;
+      // Fetch all non-reconciled transaction IDs (paginated to bypass 1000-row limit)
+      const txns: { id: string; reconciliation_status: string }[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        const { data: page, error } = await supabase
+          .from("transactions")
+          .select("id, reconciliation_status")
+          .eq("user_id", user.id)
+          .is("deleted_at", null)
+          .neq("reconciliation_status", "reconciled")
+          .order("date", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!page || page.length === 0) break;
+        txns.push(...page);
+        if (page.length < pageSize) break;
+        from += pageSize;
+      }
       if (!txns || txns.length === 0) {
         console.log("[RIC_RECALC] No eligible transactions found");
         return 0;
