@@ -386,12 +386,15 @@ export async function generateSuggestionsForIds(
 
   for (const src of sourceTxns) {
     if (src.reconciliation_status === "reconciled") continue;
+    const beforeKept = metrics.suggestions_kept;
     const suggestions = computeSuggestionsForTransaction(
       src as MinimalTxn,
       allTxns as MinimalTxn[],
       userId,
       metrics,
     );
+    const kept = metrics.suggestions_kept - beforeKept;
+    console.log(`[RIC_RECALC_SRC] src=${src.id.slice(0,8)} desc="${(src.description || "").slice(0,40)}" amt=${src.amount} type=${src.type} → ${suggestions.length} suggestions${suggestions.length > 0 ? ": " + suggestions.map(s => `${s.candidate_transaction_id.slice(0,8)}(${s.score}pt:${s.reason})`).join(" | ") : " [no match]"}`);
     allSuggestions.push(...suggestions);
   }
 
