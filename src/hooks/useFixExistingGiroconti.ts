@@ -6,13 +6,29 @@ import { getOrCreateGirocontiCategory, getDaClassificareIds } from "./useReconci
 
 const SESSION_KEY = "giroconti_fix_done";
 
+function wasGirocontiFixDone() {
+  try {
+    return sessionStorage.getItem(SESSION_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markGirocontiFixDone() {
+  try {
+    sessionStorage.setItem(SESSION_KEY, "1");
+  } catch {
+    // Storage can be blocked inside the Lovable preview iframe.
+  }
+}
+
 export function useFixExistingGiroconti() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!user) return;
-    if (sessionStorage.getItem(SESSION_KEY)) return;
+    if (wasGirocontiFixDone()) return;
 
     const fix = async () => {
       try {
@@ -28,7 +44,7 @@ export function useFixExistingGiroconti() {
           .is("deleted_at", null);
 
         if (!txns || txns.length === 0) {
-          sessionStorage.setItem(SESSION_KEY, "1");
+          markGirocontiFixDone();
           return;
         }
 
@@ -38,7 +54,7 @@ export function useFixExistingGiroconti() {
           .map((t) => t.id);
 
         if (idsToFix.length === 0) {
-          sessionStorage.setItem(SESSION_KEY, "1");
+          markGirocontiFixDone();
           return;
         }
 
@@ -54,7 +70,7 @@ export function useFixExistingGiroconti() {
       } catch (e) {
         console.error("Fix giroconti failed:", e);
       } finally {
-        sessionStorage.setItem(SESSION_KEY, "1");
+        markGirocontiFixDone();
       }
     };
 
