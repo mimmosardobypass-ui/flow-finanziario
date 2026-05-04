@@ -215,89 +215,88 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
                 <ScrollArea className="max-h-[50vh]">
                   <div className="space-y-2">
                     <TooltipProvider>
-                      {suggestionsWithTxn.map(({ suggestion, transaction: candTxn }) => (
-                        <div
-                          key={suggestion.id}
-                          className="flex flex-col rounded-lg border border-border p-3"
-                        >
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-medium truncate max-w-[70%]">
-                              {candTxn!.description || "—"}
-                            </p>
-                            {(() => {
-                              const reason = suggestion.reason || "";
-                              const type = reason.includes("internal_transfer")
-                                ? "Giroconto"
-                                : reason.includes("same_amount")
-                                  ? "Importo"
-                                  : reason.includes("keyword")
-                                    ? "Keyword"
-                                    : "Match";
-                              return (
-                                <Badge variant="outline" className="text-[10px] shrink-0">
-                                  {type}
-                                </Badge>
-                              );
-                            })()}
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <Badge variant="secondary" className="text-[10px] shrink-0">
-                                  {suggestion.score}pt
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs">{suggestion.reason}</p>
-                              </TooltipContent>
-                            </Tooltip>
+                      {suggestionsWithTxn.map(({ suggestion, transaction: candTxn }) => {
+                        const reason = suggestion.reason || "";
+                        const matchType = reason.includes("internal_transfer")
+                          ? "Giroconto"
+                          : reason.includes("same_amount")
+                            ? "Importo"
+                            : reason.includes("keyword")
+                              ? "Keyword"
+                              : "Match";
+                        const days = transaction
+                          ? Math.abs(
+                              Math.round(
+                                (new Date(candTxn!.date).getTime() - new Date(transaction.date).getTime()) / 86400000
+                              )
+                            )
+                          : 0;
+                        return (
+                          <div
+                            key={suggestion.id}
+                            className="flex flex-col rounded-lg border border-border p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <p className="text-sm font-medium break-words">
+                                  {candTxn!.description || "—"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {candTxn!.conti?.nome_conto} ·{" "}
+                                  {format(new Date(candTxn!.date), "dd MMM yyyy", { locale: it })}
+                                  {days > 0 ? ` · Δ${days}gg` : null}
+                                </p>
+                                <div className="flex items-center gap-1 flex-wrap pt-1">
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {matchType}
+                                  </Badge>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Badge variant="secondary" className="text-[10px] cursor-help">
+                                        {suggestion.score}pt
+                                      </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="text-xs">{suggestion.reason}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </div>
+                              </div>
+                              <span
+                                className={`text-base font-semibold whitespace-nowrap shrink-0 text-right ${candTxn!.type === "income" ? "text-success" : "text-destructive"}`}
+                              >
+                                {candTxn!.type === "income" ? "+" : "-"}€
+                                {candTxn!.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                              <Button
+                                size="sm"
+                                className="flex-1 bg-green-600 hover:bg-green-700 text-white gap-1"
+                                onClick={() => handleAccept(suggestion)}
+                                disabled={acceptMutation.isPending}
+                              >
+                                {acceptMutation.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Check className="h-4 w-4" />
+                                )}
+                                Riconcilia
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 gap-1"
+                                onClick={() => handleDismiss(suggestion)}
+                                disabled={dismissMutation.isPending}
+                              >
+                                <X className="h-4 w-4" />
+                                Rifiuta
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center justify-between mt-1">
-                            <p className="text-xs text-muted-foreground">
-                              {candTxn!.conti?.nome_conto} ·{" "}
-                              {format(new Date(candTxn!.date), "dd MMM yyyy", { locale: it })}
-                              {(() => {
-                                if (!transaction) return null;
-                                const days = Math.abs(
-                                  Math.round(
-                                    (new Date(candTxn!.date).getTime() - new Date(transaction.date).getTime()) / 86400000
-                                  )
-                                );
-                                return days > 0 ? ` · Δ${days}gg` : null;
-                              })()}
-                            </p>
-                            <span
-                              className={`text-sm font-semibold ${candTxn!.type === "income" ? "text-success" : "text-destructive"}`}
-                            >
-                              {candTxn!.type === "income" ? "+" : "-"}€
-                              {candTxn!.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                          <div className="flex gap-2 mt-3">
-                            <Button
-                              size="sm"
-                              className="flex-1 bg-green-600 hover:bg-green-700 text-white gap-1"
-                              onClick={() => handleAccept(suggestion)}
-                              disabled={acceptMutation.isPending}
-                            >
-                              {acceptMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Check className="h-4 w-4" />
-                              )}
-                              Riconcilia
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 gap-1"
-                              onClick={() => handleDismiss(suggestion)}
-                              disabled={dismissMutation.isPending}
-                            >
-                              <X className="h-4 w-4" />
-                              Rifiuta
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </TooltipProvider>
                   </div>
                 </ScrollArea>
