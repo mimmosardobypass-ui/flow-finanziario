@@ -339,19 +339,44 @@ export async function generateSuggestionsForIds(
 
   console.log(`[RIC_RECALC] generateSuggestionsForIds batch size=${transactionIds.length}`);
 
-  // Fetch all non-deleted transactions for the user
-  const { data: allTxns, error } = await supabase
+  // Fetch source transactions first to compute date window
+  const { data: srcRows, error: srcErr } = await supabase
     .from("transactions")
-    .select("id, date, amount, type, conto_id, description, reconciliation_status, deleted_at, reconciliation_id")
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .limit(2000);
-
-  if (error || !allTxns) {
-    console.error("[RIC_RECALC] Error fetching transactions:", error);
+    .select("id, date")
+    .in("id", transactionIds);
+  if (srcErr || !srcRows || srcRows.length === 0) {
+    console.error("[RIC_RECALC] Error fetching source transactions:", srcErr);
     return metrics;
   }
-  console.log(`[RIC_RECALC] Total transactions fetched: ${allTxns.length}`);
+  const srcDates = srcRows.map((r: any) => new Date(r.date).getTime());
+  const minDate = new Date(Math.min(...srcDates) - 11 * 86400_000).toISOString().split("T")[0];
+  const maxDate = new Date(Math.max(...srcDates) + 11 * 86400_000).toISOString().split("T")[0];
+
+  // Fetch candidates within ±10 days window (algorithm only matches within 10d).
+  // Paginate to bypass the 1000-row default limit.
+  const allTxns: any[] = [];
+  const pageSize = 1000;
+  let from = 0;
+  while (true) {
+    const { data: page, error } = await supabase
+      .from("transactions")
+      .select("id, date, amount, type, conto_id, description, reconciliation_status, deleted_at, reconciliation_id")
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .gte("date", minDate)
+      .lte("date", maxDate)
+      .order("date", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) {
+      console.error("[RIC_RECALC] Error fetching transactions:", error);
+      return metrics;
+    }
+    if (!page || page.length === 0) break;
+    allTxns.push(...page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+  console.log(`[RIC_RECALC] Window ${minDate}..${maxDate} — fetched ${allTxns.length} candidates`);
 
   const sourceTxns = allTxns.filter((t) => transactionIds.includes(t.id));
   const allSuggestions: SuggestionRow[] = [];
@@ -614,16 +639,25 @@ export function useRecalculateAllSuggestions() {
       if (!user) throw new Error("Non autenticato");
       console.log(`[RIC_RECALC] start user=${user.id.slice(0,8)}`);
 
-      // Fetch all non-reconciled transaction IDs (none + suggested — NOT "unreconciled" which doesn't exist)
-      const { data: txns, error } = await supabase
-        .from("transactions")
-        .select("id, reconciliation_status")
-        .eq("user_id", user.id)
-        .is("deleted_at", null)
-        .neq("reconciliation_status", "reconciled")
-        .limit(2000);
-
-      if (error) throw error;
+      // Fetch all non-reconciled transaction IDs (paginated to bypass 1000-row limit)
+      const txns: { id: string; reconciliation_status: string }[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        const { data: page, error } = await supabase
+          .from("transactions")
+          .select("id, reconciliation_status")
+          .eq("user_id", user.id)
+          .is("deleted_at", null)
+          .neq("reconciliation_status", "reconciled")
+          .order("date", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!page || page.length === 0) break;
+        txns.push(...page);
+        if (page.length < pageSize) break;
+        from += pageSize;
+      }
       if (!txns || txns.length === 0) {
         console.log("[RIC_RECALC] No eligible transactions found");
         return 0;
