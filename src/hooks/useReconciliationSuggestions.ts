@@ -551,6 +551,15 @@ export function useGenerateSuggestionsForTransaction() {
   return useMutation({
     mutationFn: async (transactionId: string) => {
       if (!user) throw new Error("Non autenticato");
+      // Reset previously dismissed suggestions for this transaction (in both directions)
+      // so a manual "Cerca proposte" gives the user a fresh chance to see matches.
+      const { error: delErr } = await supabase
+        .from("reconciliation_suggestions" as any)
+        .delete()
+        .or(`source_transaction_id.eq.${transactionId},candidate_transaction_id.eq.${transactionId}`)
+        .eq("dismissed", true);
+      if (delErr) console.error("[RIC_SEARCH] reset dismissed error:", delErr);
+      else console.log(`[RIC_SEARCH] reset dismissed for ${transactionId.slice(0,8)}`);
       await generateSuggestionsForIds([transactionId], user.id);
     },
     onSuccess: () => {
