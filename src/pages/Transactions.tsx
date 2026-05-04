@@ -402,16 +402,16 @@ export default function Transactions() {
           <CardContent className="p-4 md:p-6 print:p-0">
             <div className="rounded-md border border-border overflow-auto print:overflow-visible print:border-0 print:max-h-none max-h-[calc(100vh-360px)]">
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-card shadow-sm print:static">
+                <TableHeader>
                   <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Conto</TableHead>
-                    <TableHead className="hidden print:table-cell">Tipo</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Descrizione</TableHead>
-                    <TableHead className="text-right">Importo</TableHead>
-                    <TableHead className="w-[50px] print:hidden">Ric.</TableHead>
-                    <TableHead className="w-[100px] print:hidden">Azioni</TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-card">Data</TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-card">Conto</TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-card hidden print:table-cell">Tipo</TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-card">Categoria</TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-card">Descrizione</TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-card text-right">Importo</TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-card w-[50px] print:hidden">Ric.</TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-card w-[100px] print:hidden">Azioni</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
