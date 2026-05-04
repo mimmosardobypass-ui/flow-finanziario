@@ -593,6 +593,7 @@ export function useDismissSuggestion() {
 
 export function useAcceptSuggestion() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async ({
@@ -602,9 +603,10 @@ export function useAcceptSuggestion() {
       sourceId: string;
       candidateId: string;
     }) => {
+      if (!user) throw new Error("Non autenticato");
       const reconciliation_id = crypto.randomUUID();
 
-      // Set both transactions as reconciled
+      // Set both transactions as reconciled (transfer)
       const { error: e1 } = await supabase
         .from("transactions")
         .update({
@@ -616,6 +618,31 @@ export function useAcceptSuggestion() {
 
       if (e1) throw e1;
 
+      // Auto-categorize as "Giroconti" so they're excluded from income/expense totals
+      try {
+        const girocontiCatId = await getOrCreateGirocontiCategory(user.id);
+        const daClassificareIds = await getDaClassificareIds(user.id);
+
+        const { data: fullTxns } = await supabase
+          .from("transactions")
+          .select("id, category_id")
+          .in("id", [sourceId, candidateId]);
+
+        const idsToUpdate = (fullTxns || [])
+          .filter((t) => !t.category_id || daClassificareIds.has(t.category_id))
+          .map((t) => t.id);
+
+        if (idsToUpdate.length > 0) {
+          await supabase
+            .from("transactions")
+            .update({ category_id: girocontiCatId })
+            .in("id", idsToUpdate);
+        }
+        console.log(`[RIC_ACCEPT] reconciled=${sourceId.slice(0,8)}+${candidateId.slice(0,8)} categorized_as_giroconti=${idsToUpdate.length}`);
+      } catch (err) {
+        console.error("[RIC_ACCEPT] Giroconti categorization failed:", err);
+      }
+
       // Dismiss all suggestions for both transactions
       await supabase
         .from("reconciliation_suggestions" as any)
@@ -626,6 +653,7 @@ export function useAcceptSuggestion() {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
       queryClient.invalidateQueries({ queryKey: ["reconciliation-group"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
       await queryClient.refetchQueries({ queryKey: ["transactions"], type: "active" });
     },
   });
