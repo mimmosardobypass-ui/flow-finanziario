@@ -103,7 +103,32 @@ export default function Transactions() {
     return () => clearTimeout(urlSyncTimerRef.current);
   }, [filters, setSearchParams]);
 
-  const { data: transactions = [], isLoading, isFetching, isPlaceholderData } = useFilteredTransactions(filters);
+  const {
+    allTransactions,
+    isLoading,
+    isFetching,
+    isPlaceholderData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useFilteredTransactions(filters);
+  const transactions = allTransactions;
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, allTransactions.length]);
   const { data: allCategories = [] } = useCategories();
   const deleteMutation = useDeleteTransaction();
 
