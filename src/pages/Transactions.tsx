@@ -536,6 +536,11 @@ export default function Transactions() {
                   ))}
                 </TableBody>
               </Table>
+              <div ref={sentinelRef} className="flex items-center justify-center py-4 print:hidden">
+                {isFetchingNextPage && (
+                  <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30 border-t-primary animate-spin" />
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
