@@ -95,12 +95,12 @@ export function useCategorizationRules() {
     queryKey: QUERY_KEY,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("categorization_rules" as any)
+        .from("categorization_rules")
         .select("*")
         .order("priority", { ascending: false })
         .order("created_at", { ascending: true }); // stable tiebreak: oldest first
       if (error) throw error;
-      return (data || []) as unknown as CategorizationRule[];
+      return data || [];
     },
   });
 }
@@ -111,12 +111,12 @@ export function useCreateRule() {
   return useMutation({
     mutationFn: async (rule: Omit<RuleInsert, "user_id">) => {
       const { data, error } = await supabase
-        .from("categorization_rules" as any)
-        .insert({ ...rule, user_id: user!.id } as any)
+        .from("categorization_rules")
+        .insert({ ...rule, user_id: user!.id })
         .select()
         .single();
       if (error) throw error;
-      return data as unknown as CategorizationRule;
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEY });
@@ -130,13 +130,13 @@ export function useUpdateRule() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: RuleUpdate & { id: string }) => {
       const { data, error } = await supabase
-        .from("categorization_rules" as any)
-        .update({ ...updates, updated_at: new Date().toISOString() } as any)
+        .from("categorization_rules")
+        .update({ ...updates, updated_at: new Date().toISOString() })
         .eq("id", id)
         .select()
         .single();
       if (error) throw error;
-      return data as unknown as CategorizationRule;
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEY });
@@ -150,7 +150,7 @@ export function useDeleteRule() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from("categorization_rules" as any)
+        .from("categorization_rules")
         .delete()
         .eq("id", id);
       if (error) throw error;
@@ -167,7 +167,7 @@ export function useToggleRule() {
   return useMutation({
     mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
       const { error } = await supabase
-        .from("categorization_rules" as any)
+        .from("categorization_rules")
         .update({ active, updated_at: new Date().toISOString() } as any)
         .eq("id", id);
       if (error) throw error;
