@@ -8,7 +8,7 @@ export interface CategorizationRule {
   name: string;
   keywords: string[];
   exclude_keywords: string[];
-  match_type: "income" | "expense" | "both";
+  match_type: string;
   conto_id: string | null;
   category_id: string;
   priority: number;
