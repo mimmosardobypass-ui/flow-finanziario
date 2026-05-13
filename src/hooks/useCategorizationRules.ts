@@ -227,43 +227,14 @@ export function useRuleMatchCounts(rules: CategorizationRule[]) {
     enabled: rules.length > 0,
     staleTime: 30_000,
     queryFn: async () => {
-      const { data: classCats } = await supabase
-        .from("categories")
-        .select("id")
-        .eq("name", "Da classificare");
-      const classifIds = new Set<string>((classCats || []).map((c: any) => c.id));
-
-      // Fetch all active transactions in pages
-      const PAGE = 1000;
-      let from = 0;
-      const allTxs: any[] = [];
-
-      while (true) {
-        const { data, error } = await supabase
-          .from("transactions")
-          .select("id, description, type, conto_id, category_id")
-          .is("deleted_at", null)
-          .is("transfer_id", null)
-          .range(from, from + PAGE - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        allTxs.push(...data);
-        if (data.length < PAGE) break;
-        from += PAGE;
-      }
-
-      // Count matches per rule
       const counts: Record<string, number> = {};
       for (const rule of rules) {
-        if (!rule.active) {
-          counts[rule.id] = 0;
-          continue;
-        }
-        let count = 0;
-        for (const t of allTxs) {
-          if (ruleMatchesTransaction(rule, t, classifIds)) count++;
-        }
-        counts[rule.id] = count;
+        if (!rule.active) { counts[rule.id] = 0; continue; }
+        const { data, error } = await supabase.rpc("count_categorization_rule_matches", {
+          p_rule_id: rule.id,
+          p_user_id: rule.user_id,
+        });
+        if (!error) counts[rule.id] = data ?? 0;
       }
       return counts;
     },
@@ -272,39 +243,12 @@ export function useRuleMatchCounts(rules: CategorizationRule[]) {
 
 /** Count matching transactions for a rule (for confirmation dialog) */
 export async function countRuleMatches(rule: CategorizationRule): Promise<number> {
-  const { data: classCats } = await supabase
-    .from("categories")
-    .select("id")
-    .eq("name", "Da classificare");
-  const classifIds = new Set<string>((classCats || []).map((c: any) => c.id));
-
-  const PAGE = 1000;
-  let from = 0;
-  let total = 0;
-
-  while (true) {
-    let query = supabase
-      .from("transactions")
-      .select("id, description, type, conto_id, category_id")
-      .is("deleted_at", null)
-      .is("transfer_id", null)
-      .range(from, from + PAGE - 1);
-
-    if (rule.match_type !== "both") query = query.eq("type", rule.match_type);
-
-    const { data, error } = await query;
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-
-    total += data.filter((t: any) => {
-      return ruleMatchesTransaction(rule, t, classifIds);
-    }).length;
-
-    if (data.length < PAGE) break;
-    from += PAGE;
-  }
-
-  return total;
+  const { data, error } = await supabase.rpc("count_categorization_rule_matches", {
+    p_rule_id: rule.id,
+    p_user_id: rule.user_id,
+  });
+  if (error) throw error;
+  return data ?? 0;
 }
 
 /** Apply a single rule to existing transactions */
@@ -313,58 +257,12 @@ export function useApplyRuleToExisting() {
   return useMutation({
     mutationFn: async (rule: CategorizationRule) => {
       if (!rule.active) throw new Error("Cannot apply inactive rule");
-
-      // Load IDs of "Da classificare" categories — these count as "uncategorized"
-      // so rules can overwrite them even when apply_to_categorized=false
-      const { data: classCats } = await supabase
-        .from("categories")
-        .select("id")
-        .eq("name", "Da classificare");
-      const classifIds = new Set<string>((classCats || []).map((c: any) => c.id));
-
-      const PAGE = 1000;
-      let from = 0;
-      let allIds: string[] = [];
-
-      while (true) {
-        let query = supabase
-          .from("transactions")
-          .select("id, description, type, conto_id, category_id")
-          .is("deleted_at", null)
-          .is("transfer_id", null)
-          .range(from, from + PAGE - 1);
-
-        if (rule.match_type !== "both") query = query.eq("type", rule.match_type);
-        // NOTE: do NOT filter category_id at SQL level — we need to include
-        // transactions whose category_id points to "Da classificare"
-
-        const { data, error } = await query;
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-
-        const matched = data.filter((t: any) => {
-          return ruleMatchesTransaction(rule, t, classifIds);
-        });
-        allIds.push(...matched.map((t: any) => t.id));
-
-        if (data.length < PAGE) break;
-        from += PAGE;
-      }
-
-      console.log(`[ApplyRule] "${rule.name}" → ${allIds.length} movimenti da aggiornare`);
-      if (allIds.length === 0) return 0;
-
-      const BATCH = 100;
-      for (let i = 0; i < allIds.length; i += BATCH) {
-        const batch = allIds.slice(i, i + BATCH);
-        const { error } = await supabase
-          .from("transactions")
-          .update({ category_id: rule.category_id } as any)
-          .in("id", batch);
-        if (error) throw error;
-      }
-
-      return allIds.length;
+      const { data, error } = await supabase.rpc("apply_categorization_rule", {
+        p_rule_id: rule.id,
+        p_user_id: rule.user_id,
+      });
+      if (error) throw error;
+      return data ?? 0;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });

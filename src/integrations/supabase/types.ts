@@ -361,6 +361,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_categorization_rule: {
+        Args: { p_rule_id: string; p_user_id: string }
+        Returns: number
+      }
+      count_categorization_rule_matches: {
+        Args: { p_rule_id: string; p_user_id: string }
+        Returns: number
+      }
       seed_user_data: { Args: { user_uuid: string }; Returns: undefined }
     }
     Enums: {
