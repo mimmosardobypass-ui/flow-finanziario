@@ -2,15 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { generateSuggestionsForIds } from "./useReconciliationSuggestions";
-import { matchesKeywords, matchesExcludeKeywords } from "./useCategorizationRules";
-
-/** Normalize rule match_type to compare against transaction.type (income/expense) */
-function normalizeMatchType(mt: string | null | undefined): "income" | "expense" | "both" {
-  const v = (mt || "both").toLowerCase();
-  if (v === "entrata" || v === "income") return "income";
-  if (v === "uscita" || v === "expense") return "expense";
-  return "both";
-}
+import { CategorizationRule } from "./useCategorizationRules";
 
 /** Auto-apply categorization rules to a set of newly imported transaction IDs */
 async function applyRulesToImported(
@@ -18,158 +10,31 @@ async function applyRulesToImported(
   userId: string,
   classificationIds: { incomeId: string; expenseId: string }
 ) {
-  console.log("[AUTO CAT] importedIds", importedIds);
   if (importedIds.length === 0) return { categorized: 0, perRule: {} as Record<string, number> };
 
-  // 1. Load active rules ordered by priority
   const { data: rulesRaw, error: rulesErr } = await supabase
-    .from("categorization_rules" as any)
+    .from("categorization_rules")
     .select("*")
     .eq("user_id", userId)
     .eq("active", true)
     .order("priority", { ascending: false })
     .order("created_at", { ascending: true });
   if (rulesErr) throw rulesErr;
-  const rules = (rulesRaw || []) as any[];
-  console.log("[AUTO CAT] regole attive caricate:", rules.length);
-  rules.forEach((r) => {
-    console.log("[AUTO CAT] regola:", {
-      name: r.name,
-      keywords: r.keywords,
-      exclude_keywords: r.exclude_keywords,
-      match_type: r.match_type,
-      conto_id: r.conto_id,
-      category_id: r.category_id,
-      priority: r.priority,
-    });
-  });
-  if (rules.length === 0) {
-    console.warn("[AUTO CAT] Nessuna regola attiva: nulla da applicare.");
-    return { categorized: 0, perRule: {} };
-  }
+  const rules = (rulesRaw || []) as CategorizationRule[];
+  if (rules.length === 0) return { categorized: 0, perRule: {} };
 
-  // 2. Load only the freshly imported transactions
-  const txs: any[] = [];
-  const CHUNK = 200;
-  for (let i = 0; i < importedIds.length; i += CHUNK) {
-    const slice = importedIds.slice(i, i + CHUNK);
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("id, description, type, conto_id, category_id")
-      .in("id", slice);
-    if (error) throw error;
-    txs.push(...(data || []));
-  }
-  console.log("[AUTO CAT] transazioni ricaricate:", txs.length);
-  txs.forEach((t) =>
-    console.log("[AUTO CAT] tx iniziale:", {
-      id: t.id,
-      description: t.description,
-      type: t.type,
-      conto_id: t.conto_id,
-      category_id: t.category_id,
-    })
-  );
-
-  // Determine which category_ids are considered "overridable" (i.e. "Da classificare")
-  // We use BOTH the IDs passed in AND we look up by name to be safe.
-  const { data: classCats } = await supabase
-    .from("categories")
-    .select("id, name")
-    .eq("user_id", userId)
-    .eq("name", "Da classificare");
-  const overridable = new Set<string>([
-    classificationIds.incomeId,
-    classificationIds.expenseId,
-    ...((classCats || []).map((c: any) => c.id)),
-  ]);
-  console.log("[AUTO CAT] category_id sovrascrivibili (Da classificare):", Array.from(overridable));
-
-  const updates = new Map<string, string[]>(); // category_id -> tx ids
+  let categorized = 0;
   const perRule: Record<string, number> = {};
 
-  for (const tx of txs) {
-    // Treat null OR "Da classificare" as overridable
-    const isOverridable = !tx.category_id || overridable.has(tx.category_id);
-    if (!isOverridable) {
-      console.log("[AUTO CAT] SKIP (categoria reale già presente):", tx.id, tx.description);
-      continue;
+  for (const rule of rules) {
+    const { data, error } = await supabase.rpc("apply_categorization_rule", {
+      p_rule_id: rule.id,
+      p_user_id: userId,
+    });
+    if (!error && data) {
+      categorized += data;
+      if (data > 0) perRule[rule.name] = data;
     }
-
-    let matched = false;
-    for (const rule of rules) {
-      const ruleType = normalizeMatchType(rule.match_type);
-      const desc = tx.description || "";
-      const reasons: string[] = [];
-
-      if (ruleType !== "both" && ruleType !== tx.type) {
-        reasons.push(`tipo non compatibile (regola=${ruleType}, tx=${tx.type})`);
-      }
-      if (rule.conto_id && rule.conto_id !== tx.conto_id && !isOverridable) {
-        reasons.push(`conto non compatibile (regola=${rule.conto_id}, tx=${tx.conto_id})`);
-      }
-      if (!rule.category_id) {
-        reasons.push("category_id mancante nella regola");
-      }
-      const kwOk = matchesKeywords(desc, rule.keywords || []);
-      if (!kwOk) reasons.push(`nessuna keyword trovata (${JSON.stringify(rule.keywords)})`);
-      const exclHit = matchesExcludeKeywords(desc, rule.exclude_keywords || []);
-      if (exclHit) reasons.push(`exclude_keyword trovata (${JSON.stringify(rule.exclude_keywords)})`);
-
-      if (reasons.length === 0) {
-        console.log("[AUTO CAT] MATCH:", { tx: tx.description, rule: rule.name, category_id: rule.category_id });
-        const arr = updates.get(rule.category_id) || [];
-        arr.push(tx.id);
-        updates.set(rule.category_id, arr);
-        perRule[rule.name] = (perRule[rule.name] || 0) + 1;
-        matched = true;
-        break;
-      } else {
-        console.log("[AUTO CAT] NO MATCH:", {
-          tx: tx.description,
-          rule: rule.name,
-          motivi: reasons,
-        });
-      }
-    }
-    if (!matched) {
-      console.warn("[AUTO CAT] Nessuna regola applicabile per tx:", tx.id, tx.description);
-    }
-  }
-
-  // 3. Batch update by category
-  let categorized = 0;
-  for (const [categoryId, ids] of updates.entries()) {
-    for (let i = 0; i < ids.length; i += 100) {
-      const batch = ids.slice(i, i + 100);
-      const { error } = await supabase
-        .from("transactions")
-        .update({ category_id: categoryId } as any)
-        .in("id", batch);
-      if (error) {
-        console.error("[AUTO CAT] Errore UPDATE batch:", error);
-        throw error;
-      }
-      categorized += batch.length;
-    }
-  }
-
-  // 4. Verifica finale: rilegge i movimenti aggiornati
-  if (updates.size > 0) {
-    const allUpdatedIds = Array.from(updates.values()).flat();
-    const verify: any[] = [];
-    for (let i = 0; i < allUpdatedIds.length; i += 200) {
-      const slice = allUpdatedIds.slice(i, i + 200);
-      const { data } = await supabase
-        .from("transactions")
-        .select("id, description, category_id")
-        .in("id", slice);
-      verify.push(...(data || []));
-    }
-    console.log("[AUTO CAT] Verifica post-update:");
-    verify.forEach((t) =>
-      console.log("[AUTO CAT] post:", { id: t.id, desc: t.description, category_id: t.category_id })
-    );
   }
 
   return { categorized, perRule };
