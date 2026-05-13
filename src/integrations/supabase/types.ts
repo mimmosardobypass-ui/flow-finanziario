@@ -142,6 +142,87 @@ export type Database = {
         }
         Relationships: []
       }
+      reconciliation_rules: {
+        Row: {
+          active: boolean
+          commissione_percent: number
+          conto_dest_id: string | null
+          conto_origine_id: string | null
+          created_at: string
+          giorni_max: number
+          giorni_min: number
+          id: string
+          importo_match: string
+          keywords_dest: string[]
+          keywords_origine: string[]
+          name: string
+          priority: number
+          reconciliation_type: string
+          tolleranza_euro: number
+          type_dest: string
+          type_origine: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          commissione_percent?: number
+          conto_dest_id?: string | null
+          conto_origine_id?: string | null
+          created_at?: string
+          giorni_max?: number
+          giorni_min?: number
+          id?: string
+          importo_match?: string
+          keywords_dest?: string[]
+          keywords_origine?: string[]
+          name: string
+          priority?: number
+          reconciliation_type?: string
+          tolleranza_euro?: number
+          type_dest?: string
+          type_origine?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          commissione_percent?: number
+          conto_dest_id?: string | null
+          conto_origine_id?: string | null
+          created_at?: string
+          giorni_max?: number
+          giorni_min?: number
+          id?: string
+          importo_match?: string
+          keywords_dest?: string[]
+          keywords_origine?: string[]
+          name?: string
+          priority?: number
+          reconciliation_type?: string
+          tolleranza_euro?: number
+          type_dest?: string
+          type_origine?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reconciliation_rules_conto_dest_id_fkey"
+            columns: ["conto_dest_id"]
+            isOneToOne: false
+            referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reconciliation_rules_conto_origine_id_fkey"
+            columns: ["conto_origine_id"]
+            isOneToOne: false
+            referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reconciliation_suggestions: {
         Row: {
           candidate_transaction_id: string
@@ -368,6 +449,28 @@ export type Database = {
       count_categorization_rule_matches: {
         Args: { p_rule_id: string; p_user_id: string }
         Returns: number
+      }
+      find_reconciliation_matches: {
+        Args: { p_user_id: string }
+        Returns: {
+          dest_amount: number
+          dest_conto: string
+          dest_date: string
+          dest_desc: string
+          dest_id: string
+          dest_type: string
+          differenza_euro: number
+          giorni_distanza: number
+          rule_id: string
+          rule_name: string
+          score: number
+          source_amount: number
+          source_conto: string
+          source_date: string
+          source_desc: string
+          source_id: string
+          source_type: string
+        }[]
       }
       seed_user_data: { Args: { user_uuid: string }; Returns: undefined }
     }
