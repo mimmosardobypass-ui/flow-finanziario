@@ -1,4 +1,4 @@
-import { LayoutDashboard, Receipt, LogOut, Wallet, Tag, CalendarClock, Landmark, Scale, Zap } from "lucide-react";
+import { LayoutDashboard, Receipt, LogOut, Wallet, Tag, CalendarClock, Landmark, Scale, Zap, GitMerge } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
