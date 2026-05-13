@@ -120,6 +120,16 @@ const App = () => (
               }
             />
             <Route
+              path="/riconciliazione-intelligente"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <RiconciliazioneIntelligente />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/import-transazioni"
               element={
                 <ProtectedRoute>
