@@ -21,6 +21,7 @@ const navItems = [
   { title: "Conti", url: "/conti", icon: Landmark },
   { title: "Scadenziario", url: "/scadenziario", icon: CalendarClock },
   { title: "Regole", url: "/regole", icon: Zap },
+  { title: "Riconciliazione", url: "/riconciliazione-intelligente", icon: GitMerge },
   { title: "Bilancio", url: "/bilancio", icon: Scale },
 ];
 
