@@ -428,7 +428,13 @@ export function TransactionDialog({
                     {date ? format(date, "dd/MM/yyyy") : "Seleziona data"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent
+                  className="w-auto p-0 min-h-[320px]"
+                  align="start"
+                  side="bottom"
+                  sideOffset={4}
+                  avoidCollisions={false}
+                >
                   <Calendar
                     mode="single"
                     selected={date}
