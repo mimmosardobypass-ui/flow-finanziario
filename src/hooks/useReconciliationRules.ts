@@ -126,6 +126,28 @@ export function useToggleReconciliationRule() {
   });
 }
 
+export function useReconcileSumupPairs() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (pairs: Array<{ source_id: string; dest_id: string; rule_id: string }>) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await (supabase as any).rpc("reconcile_sumup_batch", {
+        p_user_id: user.id,
+        p_pairs: pairs,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["reconciliation-matches"] });
+      queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+    },
+  });
+}
+
 export function useFindReconciliationMatches() {
   const { user } = useAuth();
   return useMutation({
