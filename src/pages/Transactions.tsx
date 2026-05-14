@@ -427,7 +427,7 @@ export default function Transactions() {
           <CardContent className="p-4 md:p-6 print:p-0">
             <div className="rounded-md border border-border overflow-auto print:overflow-visible print:border-0 print:max-h-none max-h-[calc(100vh-360px)]">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead className="sticky top-0 z-20 bg-card">Data</TableHead>
                     <TableHead className="sticky top-0 z-20 bg-card">Conto</TableHead>
