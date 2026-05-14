@@ -271,15 +271,15 @@ export function ReconciliationRuleDialog({ open, onOpenChange, rule, onSave, isS
               </div>
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="pt-4">
+        <div className="border-t pt-4 px-6 pb-6 flex justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Annulla</Button>
           <Button onClick={handleSave} disabled={!canSave || isSaving}>
             {isSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             {rule ? "Salva modifiche" : "Crea regola"}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
