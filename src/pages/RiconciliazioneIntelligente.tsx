@@ -20,6 +20,7 @@ import {
   useDeleteReconciliationRule,
   useToggleReconciliationRule,
   useFindReconciliationMatches,
+  useReconcileSumupPairs,
   ReconciliationRule,
   ReconciliationMatch,
 } from "@/hooks/useReconciliationRules";
