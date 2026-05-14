@@ -472,6 +472,19 @@ export type Database = {
           source_type: string
         }[]
       }
+      reconcile_sumup_batch: {
+        Args: { p_pairs: Json; p_user_id: string }
+        Returns: Json
+      }
+      reconcile_sumup_pair: {
+        Args: {
+          p_dest_id: string
+          p_rule_id: string
+          p_source_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       seed_user_data: { Args: { user_uuid: string }; Returns: undefined }
     }
     Enums: {
