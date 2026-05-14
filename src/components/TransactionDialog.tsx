@@ -212,7 +212,7 @@ export function TransactionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? "Modifica Transazione" : "Nuova Transazione"}
@@ -428,7 +428,13 @@ export function TransactionDialog({
                     {date ? format(date, "dd/MM/yyyy") : "Seleziona data"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent
+                  className="w-auto p-0 min-h-[320px]"
+                  align="start"
+                  side="bottom"
+                  sideOffset={4}
+                  avoidCollisions={false}
+                >
                   <Calendar
                     mode="single"
                     selected={date}
