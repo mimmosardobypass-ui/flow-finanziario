@@ -134,13 +134,13 @@ export function ReconciliationRuleDialog({ open, onOpenChange, rule, onSave, isS
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle>{rule ? "Modifica regola di riconciliazione" : "Nuova regola di riconciliazione"}</DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-5 pb-4">
+        <div className="overflow-y-auto flex-1 px-6 py-4">
+          <div className="space-y-5">
             <div className="space-y-2">
               <Label>Nome regola</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="es. SumUp → Postepay" />
