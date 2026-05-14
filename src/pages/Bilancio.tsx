@@ -101,7 +101,7 @@ export default function Bilancio() {
     return transactions.filter((t) => {
       if (t.deleted_at) return false;
       if (t.transfer_id) return false;
-      if ((t as any).reconciliation_type === "transfer") return false;
+      if ((t as any).reconciliation_type === "transfer" && t.categories?.name !== "Commissioni SumUp") return false;
       const catName = t.categories?.name?.toLowerCase();
       if (catName === "giroconti" || catName === "giroconto") return false;
       const date = parseISO(t.date);
