@@ -107,12 +107,43 @@ export default function RiconciliazioneIntelligente() {
     });
   };
 
+  const SUMUP_RULE_NAME = "SumUp POS → Payout Postepay";
+
+  const sumupMatches = useMemo(
+    () => matches.filter((m) => m.rule_name === SUMUP_RULE_NAME),
+    [matches]
+  );
+  const sumupCommissionTotal = useMemo(
+    () => sumupMatches.reduce((s, m) => s + (Number(m.source_amount) - Number(m.dest_amount)), 0),
+    [sumupMatches]
+  );
+
   const reconcilePairs = async (pairs: ReconciliationMatch[]) => {
     setReconciling(true);
     let ok = 0;
     let fail = 0;
+    let commissioniTotal = 0;
     try {
-      for (const p of pairs) {
+      const sumupPairs = pairs.filter((p) => p.rule_name === SUMUP_RULE_NAME);
+      const otherPairs = pairs.filter((p) => p.rule_name !== SUMUP_RULE_NAME);
+
+      if (sumupPairs.length > 0) {
+        try {
+          await sumupMut.mutateAsync(
+            sumupPairs.map((p) => ({ source_id: p.source_id, dest_id: p.dest_id, rule_id: p.rule_id }))
+          );
+          ok += sumupPairs.length;
+          commissioniTotal = sumupPairs.reduce(
+            (s, p) => s + (Number(p.source_amount) - Number(p.dest_amount)),
+            0
+          );
+        } catch (e) {
+          console.error("[Riconciliazione SumUp] errore batch", e);
+          fail += sumupPairs.length;
+        }
+      }
+
+      for (const p of otherPairs) {
         try {
           await reconcileMut.mutateAsync({
             transactionIds: [p.source_id, p.dest_id],
@@ -130,9 +161,12 @@ export default function RiconciliazioneIntelligente() {
       setSelected(new Set());
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+      const commStr = commissioniTotal > 0
+        ? ` · Commissioni SumUp generate: €${commissioniTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : "";
       toast({
         title: "Riconciliazione completata",
-        description: `${ok} coppie riconciliate${fail ? `, ${fail} errori` : ""}`,
+        description: `${ok} coppie riconciliate${fail ? `, ${fail} errori` : ""}${commStr}`,
       });
     } finally {
       setReconciling(false);
