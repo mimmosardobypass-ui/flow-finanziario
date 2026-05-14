@@ -63,6 +63,7 @@ export default function RiconciliazioneIntelligente() {
   const toggleMut = useToggleReconciliationRule();
   const findMut = useFindReconciliationMatches();
   const reconcileMut = useReconcile();
+  const sumupMut = useReconcileSumupPairs();
 
   const [tab, setTab] = useState("matches");
   const [dialogOpen, setDialogOpen] = useState(false);
