@@ -232,6 +232,24 @@ export default function RiconciliazioneIntelligente() {
             </CardContent>
           </Card>
 
+          {sumupMatches.length > 0 && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="p-4 text-sm space-y-1">
+                <div className="font-semibold">SumUp POS → Payout Postepay: {sumupMatches.length} coppie trovate</div>
+                <div>
+                  Commissioni che verranno generate:{" "}
+                  <span className="font-semibold">
+                    €{sumupCommissionTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>{" "}
+                  totali
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  (calcolate come differenza tra importo incassato e importo accreditato)
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {matches.length === 0 && !findMut.isPending && (
             <Card>
               <CardContent className="p-10 text-center text-muted-foreground">
