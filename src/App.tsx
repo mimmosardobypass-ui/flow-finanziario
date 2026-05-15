@@ -14,6 +14,7 @@ import Conti from "./pages/Conti";
 import Bilancio from "./pages/Bilancio";
 import Regole from "./pages/Regole";
 import RiconciliazioneIntelligente from "./pages/RiconciliazioneIntelligente";
+import FattureFornitori from "./pages/FattureFornitori";
 import ImportTransazioni from "./pages/ImportTransazioni";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -125,6 +126,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <RiconciliazioneIntelligente />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/fatture-fornitori"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <FattureFornitori />
                   </Layout>
                 </ProtectedRoute>
               }

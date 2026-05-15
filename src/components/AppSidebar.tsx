@@ -1,4 +1,4 @@
-import { LayoutDashboard, Receipt, LogOut, Wallet, Tag, CalendarClock, Landmark, Scale, Zap, GitMerge } from "lucide-react";
+import { LayoutDashboard, Receipt, LogOut, Wallet, Tag, CalendarClock, Landmark, Scale, Zap, GitMerge, FileText } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -22,6 +22,7 @@ const navItems = [
   { title: "Scadenziario", url: "/scadenziario", icon: CalendarClock },
   { title: "Regole", url: "/regole", icon: Zap },
   { title: "Riconciliazione", url: "/riconciliazione-intelligente", icon: GitMerge },
+  { title: "Fatture Fornitori", url: "/fatture-fornitori", icon: FileText },
   { title: "Bilancio", url: "/bilancio", icon: Scale },
 ];
 
