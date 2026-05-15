@@ -142,6 +142,153 @@ export type Database = {
         }
         Relationships: []
       }
+      fatture_fornitori: {
+        Row: {
+          category_id: string | null
+          condizioni_pagamento: string | null
+          created_at: string
+          data_documento: string
+          data_notifica: string | null
+          data_pagamento: string | null
+          data_scadenza: string | null
+          fornitore_id: string | null
+          id: string
+          identificativo_sdi: string | null
+          imponibile: number | null
+          importo_scadenza: number | null
+          iva: number | null
+          mittente: string
+          nome_file: string | null
+          note: string | null
+          numero_documento: string | null
+          piva_mittente: string | null
+          stato_pagamento: string
+          tipo: string
+          totale: number
+          transaction_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category_id?: string | null
+          condizioni_pagamento?: string | null
+          created_at?: string
+          data_documento: string
+          data_notifica?: string | null
+          data_pagamento?: string | null
+          data_scadenza?: string | null
+          fornitore_id?: string | null
+          id?: string
+          identificativo_sdi?: string | null
+          imponibile?: number | null
+          importo_scadenza?: number | null
+          iva?: number | null
+          mittente: string
+          nome_file?: string | null
+          note?: string | null
+          numero_documento?: string | null
+          piva_mittente?: string | null
+          stato_pagamento?: string
+          tipo?: string
+          totale: number
+          transaction_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category_id?: string | null
+          condizioni_pagamento?: string | null
+          created_at?: string
+          data_documento?: string
+          data_notifica?: string | null
+          data_pagamento?: string | null
+          data_scadenza?: string | null
+          fornitore_id?: string | null
+          id?: string
+          identificativo_sdi?: string | null
+          imponibile?: number | null
+          importo_scadenza?: number | null
+          iva?: number | null
+          mittente?: string
+          nome_file?: string | null
+          note?: string | null
+          numero_documento?: string | null
+          piva_mittente?: string | null
+          stato_pagamento?: string
+          tipo?: string
+          totale?: number
+          transaction_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fatture_fornitori_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fatture_fornitori_fornitore_id_fkey"
+            columns: ["fornitore_id"]
+            isOneToOne: false
+            referencedRelation: "fornitori"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fatture_fornitori_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fornitori: {
+        Row: {
+          category_id: string | null
+          codice_fiscale: string | null
+          created_at: string
+          id: string
+          nome: string
+          note: string | null
+          piva: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category_id?: string | null
+          codice_fiscale?: string | null
+          created_at?: string
+          id?: string
+          nome: string
+          note?: string | null
+          piva?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category_id?: string | null
+          codice_fiscale?: string | null
+          created_at?: string
+          id?: string
+          nome?: string
+          note?: string | null
+          piva?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fornitori_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reconciliation_rules: {
         Row: {
           active: boolean
@@ -471,6 +618,25 @@ export type Database = {
           source_id: string
           source_type: string
         }[]
+      }
+      import_fattura_sdi: {
+        Args: {
+          p_condizioni_pagamento: string
+          p_data_documento: string
+          p_data_notifica: string
+          p_data_scadenza: string
+          p_identificativo_sdi: string
+          p_imponibile: number
+          p_importo_scadenza: number
+          p_mittente: string
+          p_nome_file: string
+          p_numero_documento: string
+          p_piva_mittente: string
+          p_tipo: string
+          p_totale: number
+          p_user_id: string
+        }
+        Returns: Json
       }
       reconcile_sumup_batch: {
         Args: { p_pairs: Json; p_user_id: string }
