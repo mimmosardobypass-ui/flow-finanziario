@@ -131,6 +131,16 @@ const App = () => (
               }
             />
             <Route
+              path="/fatture-fornitori"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <FattureFornitori />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/import-transazioni"
               element={
                 <ProtectedRoute>
