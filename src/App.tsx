@@ -14,6 +14,7 @@ import Conti from "./pages/Conti";
 import Bilancio from "./pages/Bilancio";
 import Regole from "./pages/Regole";
 import RiconciliazioneIntelligente from "./pages/RiconciliazioneIntelligente";
+import FattureFornitori from "./pages/FattureFornitori";
 import ImportTransazioni from "./pages/ImportTransazioni";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
