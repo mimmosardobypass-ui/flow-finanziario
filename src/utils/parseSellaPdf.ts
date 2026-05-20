@@ -11,9 +11,12 @@ export interface ParsedRow {
 
 /* ── Regex ──────────────────────────────────────── */
 
-const TWO_DATES_RE = /(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})/;
+const DATE_RE = /(\d{2})\/(\d{2})\/(\d{4})/;
+const DATE_RE_G = /(\d{2})\/(\d{2})\/(\d{4})/g;
+// Amount with mandatory sign (+/-): used as anchor for new Sella format
+const SIGNED_AMOUNT_RE = /([+-])\s*(\d{1,3}(?:\.\d{3})*,\d{2})/;
+// Plain amount (legacy Addebiti/Accrediti format)
 const AMOUNT_RE = /(\d{1,3}(?:\.\d{3})*,\d{2})/;
-const AMOUNT_RE_G = /(\d{1,3}(?:\.\d{3})*,\d{2})/g;
 const CODE_RE = /\b\d{14,}\b/;
 
 /* ── Helpers ────────────────────────────────────── */
@@ -27,9 +30,7 @@ function formatDate(ddmmyyyy: string): string | null {
 }
 
 function parseItalianAmount(raw: string): number | null {
-  const m = raw.match(AMOUNT_RE);
-  if (!m) return null;
-  const num = parseFloat(m[1].replace(/\./g, "").replace(",", "."));
+  const num = parseFloat(raw.replace(/\./g, "").replace(",", "."));
   return isNaN(num) ? null : num;
 }
 
@@ -42,10 +43,10 @@ interface PdfFragment {
 interface PdfLine {
   y: number;
   fragments: PdfFragment[];
-  text: string; // joined
+  text: string;
 }
 
-/* ── PDF extraction (X-aware) ──────────────────── */
+/* ── PDF extraction (X-aware, Y-bucketed) ──────── */
 
 async function extractLines(arrayBuffer: ArrayBuffer): Promise<PdfLine[]> {
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -55,7 +56,6 @@ async function extractLines(arrayBuffer: ArrayBuffer): Promise<PdfLine[]> {
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
 
-    // Group fragments by Y (rounded) per page
     const byY = new Map<number, PdfFragment[]>();
     for (const item of content.items) {
       if (!("str" in item)) continue;
@@ -63,14 +63,13 @@ async function extractLines(arrayBuffer: ArrayBuffer): Promise<PdfLine[]> {
       if (!str.trim()) continue;
       const x = Math.round((item as any).transform[4]);
       const y = Math.round((item as any).transform[5]);
-      // Bucket Y by 2px to merge slight variations
       const key = Math.round(y / 2) * 2;
       const arr = byY.get(key) || [];
       arr.push({ x, str });
       byY.set(key, arr);
     }
 
-    const sortedYs = Array.from(byY.keys()).sort((a, b) => b - a); // top-to-bottom
+    const sortedYs = Array.from(byY.keys()).sort((a, b) => b - a);
     for (const y of sortedYs) {
       const frags = (byY.get(y) || []).sort((a, b) => a.x - b.x);
       const text = frags.map((f) => f.str).join(" ").replace(/\s{2,}/g, " ").trim();
@@ -80,162 +79,100 @@ async function extractLines(arrayBuffer: ArrayBuffer): Promise<PdfLine[]> {
   return allLines;
 }
 
-/* ── Column detection ──────────────────────────── */
-
-interface Columns {
-  xAddebiti: number;
-  xAccrediti: number;
-  xSaldo: number | null;
-}
-
-function detectColumns(lines: PdfLine[]): Columns | null {
-  for (const line of lines) {
-    let xAdd: number | null = null;
-    let xAcc: number | null = null;
-    let xSaldo: number | null = null;
-    for (const f of line.fragments) {
-      const s = f.str.toLowerCase();
-      if (s.includes("addebit")) xAdd = f.x;
-      else if (s.includes("accredit")) xAcc = f.x;
-      else if (s === "saldo" || s.includes("saldo")) xSaldo = f.x;
-    }
-    if (xAdd != null && xAcc != null) {
-      console.log("[AUTO IMPORT PDF] Header colonne rilevato:", { xAddebiti: xAdd, xAccrediti: xAcc, xSaldo });
-      return { xAddebiti: xAdd, xAccrediti: xAcc, xSaldo };
-    }
-  }
-  return null;
-}
-
-/* ── Block flushing ────────────────────────────── */
-
-interface AmountAtX {
-  x: number;
-  value: number;
-  raw: string;
-}
-
-interface Block {
-  dateStr: string;
-  lines: PdfLine[];
-}
-
-function classifyAmount(x: number, cols: Columns): "addebito" | "accredito" | "saldo" {
-  // Distances to each column anchor
-  const dAdd = Math.abs(x - cols.xAddebiti);
-  const dAcc = Math.abs(x - cols.xAccrediti);
-  const dSaldo = cols.xSaldo != null ? Math.abs(x - cols.xSaldo) : Infinity;
-
-  // Closest wins
-  if (dSaldo <= dAdd && dSaldo <= dAcc) return "saldo";
-  if (dAdd <= dAcc) return "addebito";
-  return "accredito";
-}
+/* ── Noise filter ──────────────────────────────── */
 
 function isNoiseLine(text: string): boolean {
   const t = text.trim();
   if (!t) return true;
-  if (CODE_RE.test(t) && t.length < 25) return true;
-  if (/^pagina/i.test(t)) return true;
-  if (/saldo\s+(iniziale|finale|contabile|disponibile|progressivo)/i.test(t)) return true;
+  if (/^pagina/i.test(t) || /\b\d+\/\d+\s*$/.test(t)) return false; // page number safe
+  if (/saldo\s+(iniziale|finale|contabile|disponibile|progressivo|al\b)/i.test(t)) return true;
   if (/totale\s+movimenti/i.test(t)) return true;
   if (/^estratto\s+conto/i.test(t)) return true;
-  if (/^iban|^intestat|^filiale|^conto\s+corrente|^codice\s+identificativo/i.test(t)) return true;
+  if (/saldo e lista movimenti/i.test(t)) return true;
+  if (/^codice\s+identificativo/i.test(t)) return true;
+  if (/^data\s+(operazione|valuta)/i.test(t)) return true;
+  if (/^descrizione/i.test(t)) return true;
+  if (/la stampa di questo documento/i.test(t)) return true;
+  if (/^\(\*\)/.test(t)) return true;
+  if (/non tiene conto/i.test(t)) return true;
   return false;
 }
 
-/* ── Main parsing ──────────────────────────────── */
+function stripStructural(text: string): string {
+  // Remove dates, 14+ digit codes, EUR, signed amounts; keep descriptive words
+  return text
+    .replace(/\b\d{14,}\b/g, " ")
+    .replace(DATE_RE_G, " ")
+    .replace(/\bEUR\b/gi, " ")
+    .replace(/[+-]\s*\d{1,3}(?:\.\d{3})*,\d{2}/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 
-function parseBlocks(lines: PdfLine[], cols: Columns): ParsedRow[] {
-  const results: ParsedRow[] = [];
-  let current: Block | null = null;
+/* ── New format: signed-amount anchor ──────────── */
 
-  const flush = (block: Block) => {
-    // Collect amounts (with their X) across all lines of the block
-    const amounts: AmountAtX[] = [];
-    const descParts: string[] = [];
+function parseSignedFormat(lines: PdfLine[]): ParsedRow[] {
+  const clean = lines.filter((l) => !isNoiseLine(l.text));
 
-    for (const line of block.lines) {
-      for (const f of line.fragments) {
-        const m = f.str.match(AMOUNT_RE);
-        if (m && /^\s*[\d.,+-]+\s*$/.test(f.str.replace(/\s/g, ""))) {
-          // Pure numeric fragment → amount candidate
-          const v = parseItalianAmount(f.str);
-          if (v != null) {
-            amounts.push({ x: f.x, value: v, raw: f.str });
-            continue;
-          }
-        }
-        // Otherwise, contribute to description if not date/code/EUR
-        const s = f.str;
-        if (/\d{2}\/\d{2}\/\d{4}/.test(s)) continue;
-        if (CODE_RE.test(s)) continue;
-        if (/^EUR$/i.test(s.trim())) continue;
-        if (AMOUNT_RE.test(s) && /^[\d.,\s+-]+$/.test(s)) continue;
-        descParts.push(s);
-      }
-    }
-
-    // Classify each amount by column
-    let addebito: AmountAtX | null = null;
-    let accredito: AmountAtX | null = null;
-    for (const a of amounts) {
-      const cls = classifyAmount(a.x, cols);
-      if (cls === "addebito") {
-        if (!addebito || Math.abs(a.x - cols.xAddebiti) < Math.abs(addebito.x - cols.xAddebiti)) addebito = a;
-      } else if (cls === "accredito") {
-        if (!accredito || Math.abs(a.x - cols.xAccrediti) < Math.abs(accredito.x - cols.xAccrediti)) accredito = a;
-      }
-      // saldo → ignored
-    }
-
-    const description = descParts.join(" ").replace(/\s{2,}/g, " ").trim();
-    const date = formatDate(block.dateStr);
-
-    let amount: number | null = null;
-    let type: "income" | "expense" | undefined;
-
-    if (addebito && accredito) {
-      console.error("[AUTO IMPORT PDF] - ERRORE: sia addebito che accredito valorizzati, riga ignorata.", {
-        descrizione: description,
-        addebitoLetto: addebito.raw,
-        accreditoLetto: accredito.raw,
-      });
-      return;
-    } else if (addebito) {
-      amount = -Math.abs(addebito.value);
-      type = "expense";
-    } else if (accredito) {
-      amount = Math.abs(accredito.value);
-      type = "income";
-    } else {
-      console.log("[AUTO IMPORT PDF] - SKIP: nessun importo addebito/accredito.", { descrizione: description, date });
-      return;
-    }
-
-    console.log("[AUTO IMPORT PDF]", {
-      descrizione: description,
-      addebitoLetto: addebito?.raw ?? null,
-      accreditoLetto: accredito?.raw ?? null,
-      amountFinale: amount,
-      typeFinale: type,
-    });
-
-    results.push({ date, description, amount, type });
-  };
-
-  for (const line of lines) {
-    if (isNoiseLine(line.text)) continue;
-    const dateMatch = TWO_DATES_RE.exec(line.text);
-    if (dateMatch) {
-      if (current) flush(current);
-      current = { dateStr: dateMatch[1], lines: [line] };
-    } else if (current) {
-      current.lines.push(line);
-    }
+  interface Anchor {
+    idx: number;
+    y: number;
+    date: string | null;
+    sign: string;
+    value: number;
+    inlineDesc: string;
   }
-  if (current) flush(current);
+  const anchors: Anchor[] = [];
+  clean.forEach((line, idx) => {
+    const sm = line.text.match(SIGNED_AMOUNT_RE);
+    const dm = line.text.match(DATE_RE);
+    if (!sm || !dm) return;
+    const value = parseItalianAmount(sm[2]);
+    if (value == null) return;
+    anchors.push({
+      idx,
+      y: line.y,
+      date: formatDate(dm[0]),
+      sign: sm[1],
+      value,
+      inlineDesc: stripStructural(line.text),
+    });
+  });
 
+  if (anchors.length === 0) return [];
+
+  const anchorIdxSet = new Set(anchors.map((a) => a.idx));
+  const descByAnchor = new Map<number, string[]>();
+  anchors.forEach((a) => descByAnchor.set(a.idx, a.inlineDesc ? [a.inlineDesc] : []));
+
+  clean.forEach((line, idx) => {
+    if (anchorIdxSet.has(idx)) return;
+    const cleaned = stripStructural(line.text);
+    if (!cleaned) return;
+    let bestIdx = anchors[0].idx;
+    let bestDist = Math.abs(line.y - anchors[0].y);
+    for (let i = 1; i < anchors.length; i++) {
+      const d = Math.abs(line.y - anchors[i].y);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = anchors[i].idx;
+      }
+    }
+    if (bestDist > 40) return;
+    descByAnchor.get(bestIdx)!.push(cleaned);
+  });
+
+  const results: ParsedRow[] = [];
+  for (const a of anchors) {
+    const desc = (descByAnchor.get(a.idx) || [])
+      .join(" ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    const amount = a.sign === "-" ? -Math.abs(a.value) : Math.abs(a.value);
+    const type: "income" | "expense" = a.sign === "-" ? "expense" : "income";
+    console.log("[AUTO IMPORT PDF]", { date: a.date, descrizione: desc, amount, type });
+    results.push({ date: a.date, description: desc, amount, type });
+  }
   return results;
 }
 
@@ -245,19 +182,12 @@ export async function parseSellaPdf(arrayBuffer: ArrayBuffer): Promise<ParsedRow
   const lines = await extractLines(arrayBuffer);
   console.log(`[AUTO IMPORT PDF] Linee estratte: ${lines.length}`);
 
-  const cols = detectColumns(lines);
-  if (!cols) {
-    console.error("[AUTO IMPORT PDF] Impossibile rilevare colonne 'Addebiti'/'Accrediti' nell'header.");
-    return [];
-  }
-
-  const rows = parseBlocks(lines, cols);
+  const rows = parseSignedFormat(lines);
   console.log(`[AUTO IMPORT PDF] Transazioni totali: ${rows.length}`);
   return rows;
 }
 
-// Backward-compat export (no longer used externally, kept for safety)
 export function parseSellaPdfText(_rawText: string): ParsedRow[] {
-  console.warn("[parseSellaPdfText] deprecato: il parser ora richiede coordinate X dal PDF.");
+  console.warn("[parseSellaPdfText] deprecato.");
   return [];
 }
