@@ -112,49 +112,67 @@ function stripStructural(text: string): string {
 /* ── New format: signed-amount anchor ──────────── */
 
 function parseSignedFormat(lines: PdfLine[]): ParsedRow[] {
-  const results: ParsedRow[] = [];
-  let pendingDesc: string[] = [];
+  const clean = lines.filter((l) => !isNoiseLine(l.text));
 
-  for (const line of lines) {
-    if (isNoiseLine(line.text)) {
-      continue;
-    }
-
-    const signedMatch = line.text.match(SIGNED_AMOUNT_RE);
-
-    if (signedMatch) {
-      // Anchor line: contains the signed amount
-      const sign = signedMatch[1];
-      const value = parseItalianAmount(signedMatch[2]);
-      const dateMatch = line.text.match(DATE_RE);
-
-      if (value == null || !dateMatch) {
-        pendingDesc = [];
-        continue;
-      }
-
-      const date = formatDate(dateMatch[0]);
-      const inlineDesc = stripStructural(line.text);
-
-      const fullDesc = [...pendingDesc, inlineDesc]
-        .filter(Boolean)
-        .join(" ")
-        .replace(/\s{2,}/g, " ")
-        .trim();
-
-      const amount = sign === "-" ? -Math.abs(value) : Math.abs(value);
-      const type: "income" | "expense" = sign === "-" ? "expense" : "income";
-
-      console.log("[AUTO IMPORT PDF]", { date, descrizione: fullDesc, amount, type });
-      results.push({ date, description: fullDesc, amount, type });
-      pendingDesc = [];
-    } else {
-      // Non-anchor line: could be continuation of description
-      const cleaned = stripStructural(line.text);
-      if (cleaned) pendingDesc.push(cleaned);
-    }
+  interface Anchor {
+    idx: number;
+    y: number;
+    date: string | null;
+    sign: string;
+    value: number;
+    inlineDesc: string;
   }
+  const anchors: Anchor[] = [];
+  clean.forEach((line, idx) => {
+    const sm = line.text.match(SIGNED_AMOUNT_RE);
+    const dm = line.text.match(DATE_RE);
+    if (!sm || !dm) return;
+    const value = parseItalianAmount(sm[2]);
+    if (value == null) return;
+    anchors.push({
+      idx,
+      y: line.y,
+      date: formatDate(dm[0]),
+      sign: sm[1],
+      value,
+      inlineDesc: stripStructural(line.text),
+    });
+  });
 
+  if (anchors.length === 0) return [];
+
+  const anchorIdxSet = new Set(anchors.map((a) => a.idx));
+  const descByAnchor = new Map<number, string[]>();
+  anchors.forEach((a) => descByAnchor.set(a.idx, a.inlineDesc ? [a.inlineDesc] : []));
+
+  clean.forEach((line, idx) => {
+    if (anchorIdxSet.has(idx)) return;
+    const cleaned = stripStructural(line.text);
+    if (!cleaned) return;
+    let bestIdx = anchors[0].idx;
+    let bestDist = Math.abs(line.y - anchors[0].y);
+    for (let i = 1; i < anchors.length; i++) {
+      const d = Math.abs(line.y - anchors[i].y);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = anchors[i].idx;
+      }
+    }
+    if (bestDist > 40) return;
+    descByAnchor.get(bestIdx)!.push(cleaned);
+  });
+
+  const results: ParsedRow[] = [];
+  for (const a of anchors) {
+    const desc = (descByAnchor.get(a.idx) || [])
+      .join(" ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    const amount = a.sign === "-" ? -Math.abs(a.value) : Math.abs(a.value);
+    const type: "income" | "expense" = a.sign === "-" ? "expense" : "income";
+    console.log("[AUTO IMPORT PDF]", { date: a.date, descrizione: desc, amount, type });
+    results.push({ date: a.date, description: desc, amount, type });
+  }
   return results;
 }
 
