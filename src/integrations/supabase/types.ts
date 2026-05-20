@@ -112,6 +112,48 @@ export type Database = {
           },
         ]
       }
+      clienti_unieuro: {
+        Row: {
+          codice_coupon: string
+          coupon_usato: boolean | null
+          data_registrazione: string | null
+          id: string
+          localita: string
+          nome_cognome: string
+          note: string | null
+          primo_contatto_whatsapp: boolean | null
+          promozione: string
+          telefono: string
+          usato_il: string | null
+        }
+        Insert: {
+          codice_coupon: string
+          coupon_usato?: boolean | null
+          data_registrazione?: string | null
+          id?: string
+          localita: string
+          nome_cognome: string
+          note?: string | null
+          primo_contatto_whatsapp?: boolean | null
+          promozione: string
+          telefono: string
+          usato_il?: string | null
+        }
+        Update: {
+          codice_coupon?: string
+          coupon_usato?: boolean | null
+          data_registrazione?: string | null
+          id?: string
+          localita?: string
+          nome_cognome?: string
+          note?: string | null
+          primo_contatto_whatsapp?: boolean | null
+          promozione?: string
+          telefono?: string
+          usato_il?: string | null
+        }
+        Relationships: []
+      }
       conti: {
         Row: {
           attivo: boolean
