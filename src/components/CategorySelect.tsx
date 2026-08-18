@@ -8,7 +8,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { CategoryDialog } from "@/components/CategoryDialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { useDeleteCategory } from "@/hooks/useCategoryMutations";
@@ -229,7 +228,10 @@ export function CategorySelect({
               </Button>
             )}
           </div>
-          <ScrollArea className="flex-1 min-h-0" type="always">
+          <div
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
+            onWheel={(event) => event.stopPropagation()}
+          >
             <div className="py-1">
               {showAllOption && !searchQuery && (
                 <button
@@ -310,7 +312,7 @@ export function CategorySelect({
                 </p>
               )}
             </div>
-          </ScrollArea>
+          </div>
         </PopoverContent>
       </Popover>
 
