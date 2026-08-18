@@ -199,7 +199,7 @@ export function CategorySelect({
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className="w-[--radix-popover-trigger-width] p-0 flex flex-col max-h-[min(22rem,var(--radix-popover-content-available-height))]"
+          className="w-[--radix-popover-trigger-width] p-0 flex flex-col h-[min(22rem,var(--radix-popover-content-available-height))]"
           align="start"
           side="bottom"
           sideOffset={4}
