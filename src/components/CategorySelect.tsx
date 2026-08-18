@@ -198,8 +198,15 @@ export function CategorySelect({
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-          <div className="p-2 border-b flex gap-2">
+        <PopoverContent
+          className="w-[--radix-popover-trigger-width] p-0 flex flex-col max-h-[min(22rem,var(--radix-popover-content-available-height))]"
+          align="start"
+          side="bottom"
+          sideOffset={4}
+          collisionPadding={12}
+        >
+          <div className="p-2 border-b flex gap-2 shrink-0">
+
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
