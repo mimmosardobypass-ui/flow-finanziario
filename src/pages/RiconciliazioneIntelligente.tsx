@@ -190,12 +190,15 @@ export default function RiconciliazioneIntelligente() {
       setSelected(new Set());
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+      const eur = (n: number) =>
+        `€${n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const commStr = commissioniTotal > 0
-        ? ` · Commissioni SumUp generate: €${commissioniTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        ? ` · Commissioni SumUp generate: ${eur(commissioniTotal)}`
         : "";
+      const payoutStr = payoutTotal > 0 ? ` · Payout generati: ${eur(payoutTotal)}` : "";
       toast({
         title: "Riconciliazione completata",
-        description: `${ok} coppie riconciliate${fail ? `, ${fail} errori` : ""}${commStr}`,
+        description: `${ok} coppie riconciliate${fail ? `, ${fail} errori` : ""}${commStr}${payoutStr}`,
       });
     } finally {
       setReconciling(false);
