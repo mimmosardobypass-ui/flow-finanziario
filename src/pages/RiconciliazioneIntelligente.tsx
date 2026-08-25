@@ -149,6 +149,7 @@ export default function RiconciliazioneIntelligente() {
     let ok = 0;
     let fail = 0;
     let commissioniTotal = 0;
+    let payoutTotal = 0;
     try {
       const sumupPairs = pairs.filter((p) => p.rule_name === SUMUP_RULE_NAME);
       const otherPairs = pairs.filter((p) => p.rule_name !== SUMUP_RULE_NAME);
