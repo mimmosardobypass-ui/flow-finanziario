@@ -463,8 +463,12 @@ export default function ImportTransazioni() {
 
       if (foundDuplicates.length === 0) {
         // No duplicates — proceed directly to import
-        toast({ title: "Nessun duplicato trovato", description: "Tutte le righe sono nuove." });
+        toast({
+          title: "Nessun duplicato trovato",
+          description: `Già presenti: 0 · Nel file: ${foundNew.length} · Nuove da importare: ${foundNew.length}`,
+        });
         await doImport(newExcluded);
+
       } else {
         setStep("review");
         setShowDuplicatesExpanded(true);
