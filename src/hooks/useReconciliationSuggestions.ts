@@ -17,9 +17,7 @@ function normalise(text: string): string {
 }
 
 const STRONG_KEYWORDS = new Set([
-  "sumup", "payout", "postepay", "bonifico", "giroconto", "postagiro", "compass",
-  "paypal", "stripe", "sepa", "addebito", "accredito", "trasferimento",
-  "stipendio", "affitto", "bolletta", "rid", "mav", "rav",
+  "sumup", "payout", "giroconto", "postagiro", "trasferimento", "postepay",
 ]);
 
 function extractTokens(text: string): string[] {
@@ -29,7 +27,10 @@ function extractTokens(text: string): string[] {
 /** Sequences of 8+ alphanumeric chars that could be CRO/TRN/IDs */
 function extractIds(text: string): string[] {
   const matches = normalise(text).match(/[a-z0-9]{8,}/g);
-  return matches || [];
+  if (!matches) return [];
+  // un riferimento bancario contiene sempre almeno una cifra:
+  // così cognomi e parole lunghe non vengono scambiati per codici
+  return matches.filter((m) => /\d/.test(m));
 }
 
 /* ─── scoring ─── */
@@ -54,9 +55,6 @@ interface MinimalTxn {
   reconciliation_id: string | null;
 }
 
-// POSTAGIRO debug IDs
-const POSTAGIRO_IDS = ["b13f8ccc", "3d134d53"];
-
 export interface DiscardMetrics {
   discard_same_transaction: number;
   discard_same_account: number;
@@ -64,6 +62,7 @@ export interface DiscardMetrics {
   discard_already_reconciled: number;
   discard_date_out_of_range: number;
   discard_not_opposite_type: number;
+  discard_amount_mismatch: number;
   discard_score_below_threshold: number;
   discard_top3_trimmed: number;
   candidate_pairs_evaluated: number;
@@ -78,6 +77,7 @@ function emptyMetrics(): DiscardMetrics {
     discard_already_reconciled: 0,
     discard_date_out_of_range: 0,
     discard_not_opposite_type: 0,
+    discard_amount_mismatch: 0,
     discard_score_below_threshold: 0,
     discard_top3_trimmed: 0,
     candidate_pairs_evaluated: 0,
@@ -94,31 +94,25 @@ export function computeSuggestionsForTransaction(
   const sourceDate = new Date(source.date).getTime();
   const TEN_DAYS = 10 * 86400_000;
   const results: SuggestionRow[] = [];
-  const isPostagiroSource = POSTAGIRO_IDS.some((d) => source.id.startsWith(d));
 
   const sourceTokens = source.description ? extractTokens(source.description) : [];
   const sourceIds = source.description ? extractIds(source.description) : [];
 
   for (const candidate of allTransactions) {
-    const isPostagiroPair = isPostagiroSource && POSTAGIRO_IDS.some((d) => candidate.id.startsWith(d));
-
     if (candidate.id === source.id) {
       if (metrics) metrics.discard_same_transaction++;
       continue;
     }
     if (candidate.conto_id === source.conto_id) {
       if (metrics) metrics.discard_same_account++;
-      if (isPostagiroPair) console.log(`[RIC_POSTAGIRO] source=${source.id.slice(0,8)} candidate=${candidate.id.slice(0,8)} excluded_by=same_account`);
       continue;
     }
     if (candidate.deleted_at) {
       if (metrics) metrics.discard_deleted++;
-      if (isPostagiroPair) console.log(`[RIC_POSTAGIRO] source=${source.id.slice(0,8)} candidate=${candidate.id.slice(0,8)} excluded_by=deleted`);
       continue;
     }
     if (candidate.reconciliation_status === "reconciled") {
       if (metrics) metrics.discard_already_reconciled++;
-      if (isPostagiroPair) console.log(`[RIC_POSTAGIRO] source=${source.id.slice(0,8)} candidate=${candidate.id.slice(0,8)} excluded_by=already_reconciled`);
       continue;
     }
 
@@ -126,7 +120,22 @@ export function computeSuggestionsForTransaction(
     const dateDelta = Math.abs(sourceDate - candDate);
     if (dateDelta > TEN_DAYS) {
       if (metrics) metrics.discard_date_out_of_range++;
-      if (isPostagiroPair) console.log(`[RIC_POSTAGIRO] source=${source.id.slice(0,8)} candidate=${candidate.id.slice(0,8)} excluded_by=date_out_of_range delta=${Math.round(dateDelta/86400_000)}d`);
+      continue;
+    }
+
+    // Un giroconto ha per forza due gambe di segno opposto.
+    const oppositeType = source.type !== candidate.type;
+    if (!oppositeType) {
+      if (metrics) metrics.discard_not_opposite_type++;
+      continue;
+    }
+
+    // Gli importi devono coincidere, o differire di quanto può valere una commissione.
+    const diff = Math.abs(source.amount - candidate.amount);
+    const rel = diff / Math.max(source.amount, candidate.amount, 0.01);
+    const amountCompatible = diff <= 0.01 || diff <= 1.0 || rel <= 0.025;
+    if (!amountCompatible) {
+      if (metrics) metrics.discard_amount_mismatch++;
       continue;
     }
 
@@ -136,18 +145,14 @@ export function computeSuggestionsForTransaction(
     const reasons: string[] = [];
     const dateDays = Math.round(dateDelta / 86400_000);
 
-    // Amount matching (absolute) — only score if opposite type (income vs expense)
+    // Amount matching
     const srcAmt = source.amount;
     const candAmt = candidate.amount;
-    const oppositeType = source.type !== candidate.type;
 
-    if (Math.abs(srcAmt - candAmt) < 0.01 && oppositeType) {
+    if (Math.abs(srcAmt - candAmt) < 0.01) {
       score += 50;
       reasons.push("same_amount_abs");
-    } else if (
-      oppositeType &&
-      Math.abs(srcAmt - candAmt) / Math.max(srcAmt, candAmt, 0.01) <= 0.05
-    ) {
+    } else if (Math.abs(srcAmt - candAmt) / Math.max(srcAmt, candAmt, 0.01) <= 0.05) {
       score += 30;
       reasons.push(`similar_amount(${Math.round(Math.abs(srcAmt - candAmt) * 100) / 100})`);
     }
@@ -162,15 +167,12 @@ export function computeSuggestionsForTransaction(
     }
 
     // Opposite type bonus (transfer pattern)
-    if (oppositeType) {
-      score += 10;
-      reasons.push("opposite_type");
-    }
+    score += 10;
+    reasons.push("opposite_type");
 
-    // Internal transfer bonus: same abs amount + opposite sign + transfer keyword
+    // Internal transfer bonus: same abs amount + transfer keyword
     const TRANSFER_KEYWORDS = ["giroconto", "postagiro", "trasferimento"];
     if (
-      source.type !== candidate.type &&
       Math.abs(srcAmt - candAmt) < 0.01 &&
       source.description && candidate.description
     ) {
@@ -202,10 +204,6 @@ export function computeSuggestionsForTransaction(
         score += 25;
         reasons.push(`id_match:${commonIds[0]}`);
       }
-    }
-
-    if (isPostagiroPair) {
-      console.log(`[RIC_POSTAGIRO] source=${source.id.slice(0,8)} candidate=${candidate.id.slice(0,8)} score=${score} reasons=${reasons.join("+")} oppositeType=${oppositeType} srcType=${source.type} candType=${candidate.type} ${score >= 40 ? "KEPT" : "excluded_by=score_below_threshold"}`);
     }
 
     if (score >= 40) {
@@ -289,14 +287,6 @@ async function syncReconciliationStatusForTransactions(transactionIds: string[])
   const hasActiveSuggestion = new Set<string>();
   (asSource || []).forEach((r: any) => hasActiveSuggestion.add(r.source_transaction_id));
   (asCandidate || []).forEach((r: any) => hasActiveSuggestion.add(r.candidate_transaction_id));
-
-  // Debug logging for POSTAGIRO transactions
-  const DEBUG_IDS = ["b13f8ccc", "3d134d53"];
-  for (const t of nonReconciled) {
-    if (DEBUG_IDS.some((d) => t.id.startsWith(d))) {
-      console.log(`[RIC_SYNC] id=${t.id.slice(0, 12)} current=${t.reconciliation_status} hasActive=${hasActiveSuggestion.has(t.id)} → ${hasActiveSuggestion.has(t.id) ? "suggested" : "none"}`);
-    }
-  }
 
   // Set suggested for those with active suggestions
   const toSuggest = idsToCheck.filter((id) => hasActiveSuggestion.has(id));
@@ -386,15 +376,12 @@ export async function generateSuggestionsForIds(
 
   for (const src of sourceTxns) {
     if (src.reconciliation_status === "reconciled") continue;
-    const beforeKept = metrics.suggestions_kept;
     const suggestions = computeSuggestionsForTransaction(
       src as MinimalTxn,
       allTxns as MinimalTxn[],
       userId,
       metrics,
     );
-    const kept = metrics.suggestions_kept - beforeKept;
-    console.log(`[RIC_RECALC_SRC] src=${src.id.slice(0,8)} desc="${(src.description || "").slice(0,40)}" amt=${src.amount} type=${src.type} → ${suggestions.length} suggestions${suggestions.length > 0 ? ": " + suggestions.map(s => `${s.candidate_transaction_id.slice(0,8)}(${s.score}pt:${s.reason})`).join(" | ") : " [no match]"}`);
     allSuggestions.push(...suggestions);
   }
 
@@ -459,6 +446,7 @@ export async function generateSuggestionsForIds(
     discard_already_reconciled: metrics.discard_already_reconciled,
     discard_date_out_of_range: metrics.discard_date_out_of_range,
     discard_not_opposite_type: metrics.discard_not_opposite_type,
+    discard_amount_mismatch: metrics.discard_amount_mismatch,
     discard_score_below_threshold: metrics.discard_score_below_threshold,
     discard_previously_dismissed: discard_previously_dismissed,
     discard_top3_trimmed: metrics.discard_top3_trimmed,
@@ -474,24 +462,6 @@ export async function generateSuggestionsForIds(
 
   // Use centralised sync to set correct status
   await syncReconciliationStatusForTransactions(Array.from(affectedIds));
-
-  // Log POSTAGIRO result after sync
-  for (const pid of POSTAGIRO_IDS) {
-    const match = Array.from(affectedIds).find((id) => id.startsWith(pid));
-    if (match) {
-      const { data: txn } = await supabase
-        .from("transactions")
-        .select("id, reconciliation_status")
-        .eq("id", match)
-        .single();
-      const { data: links } = await supabase
-        .from("reconciliation_suggestions" as any)
-        .select("id")
-        .or(`source_transaction_id.eq.${match},candidate_transaction_id.eq.${match}`)
-        .eq("dismissed", false);
-      console.log(`[RIC_POSTAGIRO_RESULT] id=${match.slice(0,8)} status=${txn?.reconciliation_status} active_links=${(links || []).length}`);
-    }
-  }
 
   return metrics;
 }
