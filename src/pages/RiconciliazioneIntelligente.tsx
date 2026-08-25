@@ -164,6 +164,8 @@ export default function RiconciliazioneIntelligente() {
             (s, p) => s + (Number(p.source_amount) - Number(p.dest_amount)),
             0
           );
+          payoutTotal = sumupPairs.reduce((s, p) => s + Number(p.dest_amount), 0);
+
         } catch (e) {
           console.error("[Riconciliazione SumUp] errore batch", e);
           fail += sumupPairs.length;
