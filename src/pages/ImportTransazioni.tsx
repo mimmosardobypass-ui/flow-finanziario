@@ -646,8 +646,11 @@ export default function ImportTransazioni() {
                 <div className="divide-y divide-border">
                   {duplicates.map((d) => {
                     const isExcluded = excludedRows.has(d.fileIndex);
-                    const existingAmount =
-                      d.existing.type === "expense" ? -d.existing.amount : d.existing.amount;
+                    const existingAmount = d.existing
+                      ? d.existing.type === "expense"
+                        ? -d.existing.amount
+                        : d.existing.amount
+                      : null;
 
                     return (
                       <div
@@ -662,8 +665,14 @@ export default function ImportTransazioni() {
                             className="mt-1"
                           />
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
+                            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                               <Badge variant="outline" className="text-xs px-1.5 py-0">File</Badge>
+                              <Badge
+                                variant="secondary"
+                                className="text-xs px-1.5 py-0 bg-warning/10 text-warning border-warning/20"
+                              >
+                                Riconosciuto da: {d.motivo}
+                              </Badge>
                               <span className="text-xs text-muted-foreground">
                                 {isExcluded ? "Esclusa dall'importazione" : "Sarà importata"}
                               </span>
@@ -677,19 +686,21 @@ export default function ImportTransazioni() {
                         </div>
 
                         {/* Existing row (read-only) */}
-                        <div className="flex items-start gap-3 ml-7 pl-3 border-l-2 border-muted">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <Badge variant="secondary" className="text-xs px-1.5 py-0">DB</Badge>
-                              <span className="text-xs text-muted-foreground">Movimento già esistente nel database</span>
-                            </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span className="w-[90px]">{formatDate(d.existing.date)}</span>
-                              <span className="flex-1 truncate">{d.existing.description || "—"}</span>
-                              <span className="font-medium">{formatAmount(existingAmount)}</span>
+                        {d.existing && (
+                          <div className="flex items-start gap-3 ml-7 pl-3 border-l-2 border-muted">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <Badge variant="secondary" className="text-xs px-1.5 py-0">DB</Badge>
+                                <span className="text-xs text-muted-foreground">Movimento già esistente nel database</span>
+                              </div>
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                <span className="w-[90px]">{formatDate(d.existing.date)}</span>
+                                <span className="flex-1 truncate">{d.existing.description || "—"}</span>
+                                <span className="font-medium">{formatAmount(existingAmount!)}</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     );
                   })}
