@@ -74,17 +74,34 @@ export default function RiconciliazioneIntelligente() {
   const [matches, setMatches] = useState<ReconciliationMatch[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reconciling, setReconciling] = useState(false);
+  const [autoSearching, setAutoSearching] = useState(true);
+  const autoSearchDone = useRef(false);
 
-  const handleSearch = async () => {
+  const runSearch = async (silent = false) => {
     try {
       const data = await findMut.mutateAsync();
       setMatches(data);
       setSelected(new Set());
-      toast({ title: "Ricerca completata", description: `${data.length} coppie trovate` });
+      if (!silent) {
+        toast({ title: "Ricerca completata", description: `${data.length} coppie trovate` });
+      }
     } catch (e: any) {
       toast({ title: "Errore", description: e.message, variant: "destructive" });
     }
   };
+
+  const handleSearch = () => runSearch(false);
+
+  // Ricerca automatica una sola volta all'apertura della pagina
+  useEffect(() => {
+    if (autoSearchDone.current) return;
+    autoSearchDone.current = true;
+    (async () => {
+      await runSearch(true);
+      setAutoSearching(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const groupedMatches = useMemo(() => {
     const map = new Map<string, ReconciliationMatch[]>();
@@ -113,10 +130,19 @@ export default function RiconciliazioneIntelligente() {
     () => matches.filter((m) => m.rule_name === SUMUP_RULE_NAME),
     [matches]
   );
-  const sumupCommissionTotal = useMemo(
-    () => sumupMatches.reduce((s, m) => s + (Number(m.source_amount) - Number(m.dest_amount)), 0),
+  const sumupIncassiTotal = useMemo(
+    () => sumupMatches.reduce((s, m) => s + Number(m.source_amount), 0),
     [sumupMatches]
   );
+  const sumupPayoutTotal = useMemo(
+    () => sumupMatches.reduce((s, m) => s + Number(m.dest_amount), 0),
+    [sumupMatches]
+  );
+  const sumupCommissionTotal = useMemo(
+    () => sumupIncassiTotal - sumupPayoutTotal,
+    [sumupIncassiTotal, sumupPayoutTotal]
+  );
+
 
   const reconcilePairs = async (pairs: ReconciliationMatch[]) => {
     setReconciling(true);
