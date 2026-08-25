@@ -613,7 +613,13 @@ export default function ImportTransazioni() {
 
         {/* BODY */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Riepilogo */}
+          <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm font-medium text-foreground">
+            Già presenti: {dupCount} · Nel file: {dupCount + newCount} · Nuove da importare: {newCount}
+          </div>
+
           {/* Duplicates section */}
+
           {dupCount > 0 && (
             <div className="border border-warning/30 rounded-lg overflow-hidden">
               <button
