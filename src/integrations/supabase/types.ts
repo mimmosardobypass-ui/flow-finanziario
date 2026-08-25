@@ -560,6 +560,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
+          operation_id: string | null
           rata_id: string | null
           reconciliation_id: string | null
           reconciliation_status: string
@@ -577,6 +578,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          operation_id?: string | null
           rata_id?: string | null
           reconciliation_id?: string | null
           reconciliation_status?: string
@@ -594,6 +596,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          operation_id?: string | null
           rata_id?: string | null
           reconciliation_id?: string | null
           reconciliation_status?: string
