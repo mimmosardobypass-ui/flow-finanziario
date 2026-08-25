@@ -100,7 +100,9 @@ interface ParsedRow {
   description: string;
   amount: number | null;
   type?: "income" | "expense";
+  operationId?: string | null;
 }
+
 
 function parseWorkbook(workbook: XLSX.WorkBook): ParsedRow[] | string {
   for (const name of workbook.SheetNames) {
