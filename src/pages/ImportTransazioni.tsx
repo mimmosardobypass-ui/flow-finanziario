@@ -505,6 +505,7 @@ export default function ImportTransazioni() {
           description: r.description,
           amount: r.amount!,
           type: r.type,
+          operationId: r.operationId ?? null,
         });
       }
 
