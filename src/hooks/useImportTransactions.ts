@@ -96,6 +96,7 @@ export interface ParsedTransaction {
   description: string;
   amount: number; // raw value, sign determines type if `type` is omitted
   type?: "income" | "expense"; // explicit type from parser (PDF) wins over sign
+  operationId?: string | null; // identificativo banca (es. 14 cifre Banca Sella)
 }
 
 interface ImportResult {
