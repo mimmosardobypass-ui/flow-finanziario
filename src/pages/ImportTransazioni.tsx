@@ -166,12 +166,8 @@ function parseWorkbook(workbook: XLSX.WorkBook): ParsedRow[] | string {
 
 /* ── fingerprint ────────────────────────────────────── */
 
-function normalizeDescription(desc: string): string {
-  return desc.toLowerCase().trim().replace(/\s+/g, " ");
-}
-
-function makeFingerprint(contoId: string, date: string, amount: number, description: string): string {
-  return `${contoId}|${date}|${Math.abs(amount).toFixed(2)}|${normalizeDescription(description)}`;
+function makeFingerprint(contoId: string, date: string, signedAmount: number): string {
+  return `${contoId}|${date}|${signedAmount.toFixed(2)}`;
 }
 
 /* ── types for duplicate review ─────────────────────── */
@@ -182,12 +178,14 @@ interface ExistingTransaction {
   description: string | null;
   amount: number;
   type: string;
+  operation_id: string | null;
 }
 
 interface DuplicateMatch {
   fileIndex: number;
   fileRow: ParsedRow;
-  existing: ExistingTransaction;
+  existing: ExistingTransaction | null;
+  motivo: "identificativo banca" | "stessa data e stesso importo";
 }
 
 type Step = "preview" | "review" | "importing";
