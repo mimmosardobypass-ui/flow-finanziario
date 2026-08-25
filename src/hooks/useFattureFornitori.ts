@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
+import { excelSerialToDate } from "@/utils/excelDate";
 
 export interface Fattura {
   id: string;
@@ -168,11 +169,13 @@ export function useCollegaTransazione() {
 
 function parseDate(value: any): string | null {
   if (value === null || value === undefined || value === "") return null;
+  if (value instanceof Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
   if (typeof value === "number") {
-    // Excel serial date
-    const d = XLSX.SSF.parse_date_code(value);
+    const d = excelSerialToDate(value);
     if (!d) return null;
-    return `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
   const s = String(value).trim();
   // DD/MM/YYYY or DD-MM-YYYY
@@ -189,6 +192,7 @@ function parseDate(value: any): string | null {
   return null;
 }
 
+
 export function useImportFattureExcel() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -196,7 +200,7 @@ export function useImportFattureExcel() {
     mutationFn: async (file: File) => {
       if (!user) throw new Error("Non autenticato");
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
+      const wb = XLSX.read(buf, { type: "array", cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: null });
 
