@@ -96,6 +96,7 @@ export interface ParsedTransaction {
   description: string;
   amount: number; // raw value, sign determines type if `type` is omitted
   type?: "income" | "expense"; // explicit type from parser (PDF) wins over sign
+  operationId?: string | null; // identificativo banca (es. 14 cifre Banca Sella)
 }
 
 interface ImportResult {
@@ -130,6 +131,7 @@ export function useImportTransactions() {
           type: finalType,
           category_id: finalType === "income" ? categories.incomeId : categories.expenseId,
           conto_id: contoId,
+          operation_id: t.operationId ?? null,
         };
       });
 
@@ -143,7 +145,12 @@ export function useImportTransactions() {
           .from("transactions")
           .insert(chunk)
           .select("id");
-        if (error) throw error;
+        if (error) {
+          if ((error as { code?: string }).code === "23505") {
+            throw new Error("Alcuni movimenti risultano già presenti e non sono stati reimportati.");
+          }
+          throw error;
+        }
         imported += data?.length ?? chunk.length;
         importedIds.push(...(data || []).map((t) => t.id));
       }
