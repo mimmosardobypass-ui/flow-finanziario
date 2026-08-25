@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Plus, Pencil, Trash2, GitMerge, Loader2, Search, CheckCheck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -74,17 +74,34 @@ export default function RiconciliazioneIntelligente() {
   const [matches, setMatches] = useState<ReconciliationMatch[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reconciling, setReconciling] = useState(false);
+  const [autoSearching, setAutoSearching] = useState(true);
+  const autoSearchDone = useRef(false);
 
-  const handleSearch = async () => {
+  const runSearch = async (silent = false) => {
     try {
       const data = await findMut.mutateAsync();
       setMatches(data);
       setSelected(new Set());
-      toast({ title: "Ricerca completata", description: `${data.length} coppie trovate` });
+      if (!silent) {
+        toast({ title: "Ricerca completata", description: `${data.length} coppie trovate` });
+      }
     } catch (e: any) {
       toast({ title: "Errore", description: e.message, variant: "destructive" });
     }
   };
+
+  const handleSearch = () => runSearch(false);
+
+  // Ricerca automatica una sola volta all'apertura della pagina
+  useEffect(() => {
+    if (autoSearchDone.current) return;
+    autoSearchDone.current = true;
+    (async () => {
+      await runSearch(true);
+      setAutoSearching(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const groupedMatches = useMemo(() => {
     const map = new Map<string, ReconciliationMatch[]>();
@@ -113,16 +130,26 @@ export default function RiconciliazioneIntelligente() {
     () => matches.filter((m) => m.rule_name === SUMUP_RULE_NAME),
     [matches]
   );
-  const sumupCommissionTotal = useMemo(
-    () => sumupMatches.reduce((s, m) => s + (Number(m.source_amount) - Number(m.dest_amount)), 0),
+  const sumupIncassiTotal = useMemo(
+    () => sumupMatches.reduce((s, m) => s + Number(m.source_amount), 0),
     [sumupMatches]
   );
+  const sumupPayoutTotal = useMemo(
+    () => sumupMatches.reduce((s, m) => s + Number(m.dest_amount), 0),
+    [sumupMatches]
+  );
+  const sumupCommissionTotal = useMemo(
+    () => sumupIncassiTotal - sumupPayoutTotal,
+    [sumupIncassiTotal, sumupPayoutTotal]
+  );
+
 
   const reconcilePairs = async (pairs: ReconciliationMatch[]) => {
     setReconciling(true);
     let ok = 0;
     let fail = 0;
     let commissioniTotal = 0;
+    let payoutTotal = 0;
     try {
       const sumupPairs = pairs.filter((p) => p.rule_name === SUMUP_RULE_NAME);
       const otherPairs = pairs.filter((p) => p.rule_name !== SUMUP_RULE_NAME);
@@ -137,6 +164,8 @@ export default function RiconciliazioneIntelligente() {
             (s, p) => s + (Number(p.source_amount) - Number(p.dest_amount)),
             0
           );
+          payoutTotal = sumupPairs.reduce((s, p) => s + Number(p.dest_amount), 0);
+
         } catch (e) {
           console.error("[Riconciliazione SumUp] errore batch", e);
           fail += sumupPairs.length;
@@ -161,12 +190,15 @@ export default function RiconciliazioneIntelligente() {
       setSelected(new Set());
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+      const eur = (n: number) =>
+        `€${n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const commStr = commissioniTotal > 0
-        ? ` · Commissioni SumUp generate: €${commissioniTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        ? ` · Commissioni SumUp generate: ${eur(commissioniTotal)}`
         : "";
+      const payoutStr = payoutTotal > 0 ? ` · Payout generati: ${eur(payoutTotal)}` : "";
       toast({
         title: "Riconciliazione completata",
-        description: `${ok} coppie riconciliate${fail ? `, ${fail} errori` : ""}${commStr}`,
+        description: `${ok} coppie riconciliate${fail ? `, ${fail} errori` : ""}${commStr}${payoutStr}`,
       });
     } finally {
       setReconciling(false);
@@ -237,26 +269,44 @@ export default function RiconciliazioneIntelligente() {
               <CardContent className="p-4 text-sm space-y-1">
                 <div className="font-semibold">SumUp POS → Payout Postepay: {sumupMatches.length} coppie trovate</div>
                 <div>
-                  Commissioni che verranno generate:{" "}
+                  Incassi POS che restano nei ricavi:{" "}
+                  <span className="font-semibold">
+                    €{sumupIncassiTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div>
+                  Commissioni SumUp che verranno create:{" "}
                   <span className="font-semibold">
                     €{sumupCommissionTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>{" "}
-                  totali
+                  (categoria Commissioni SumUp)
+                </div>
+                <div>
+                  Payout in uscita dal conto SumUp:{" "}
+                  <span className="font-semibold">
+                    €{sumupPayoutTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>{" "}
+                  (categoria Giroconti, esclusi dal bilancio)
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  (calcolate come differenza tra importo incassato e importo accreditato)
+                  La commissione è la differenza tra incassato e accreditato. Il payout azzera il saldo SumUp: i soldi si spostano sul conto di destinazione.
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {matches.length === 0 && !findMut.isPending && (
+          {(findMut.isPending || autoSearching) ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
+            </div>
+          ) : matches.length === 0 ? (
             <Card>
               <CardContent className="p-10 text-center text-muted-foreground">
-                Nessuna coppia trovata. Premi "Cerca corrispondenze" per avviare la ricerca con le regole attive.
+                Nessuna coppia trovata. Premi "Cerca corrispondenze" per rifare la ricerca con le regole attive.
               </CardContent>
             </Card>
-          )}
+          ) : null}
+
 
           {groupedMatches.map(([ruleName, list]) => (
             <Card key={ruleName}>
