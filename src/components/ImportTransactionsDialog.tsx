@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { parse, isValid, format } from "date-fns";
+import { excelSerialToDate } from "@/utils/excelDate";
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle } from "lucide-react";
 import {
   Dialog,
@@ -51,14 +52,17 @@ const DATE_FORMATS = [
 
 function tryParseDate(raw: unknown): string | null {
   if (raw == null) return null;
+
+  // il foglio letto con cellDates:true restituisce oggetti Date
+  if (raw instanceof Date) {
+    return isValid(raw) ? format(raw, "yyyy-MM-dd") : null;
+  }
+
   if (typeof raw === "number") {
-    try {
-      const excelDate = XLSX.SSF.parse_date_code(raw);
-      if (excelDate) {
-        const d = new Date(excelDate.y, excelDate.m - 1, excelDate.d);
-        if (isValid(d)) return format(d, "yyyy-MM-dd");
-      }
-    } catch { /* ignore */ }
+    const d = excelSerialToDate(raw);
+    if (d && isValid(d) && d.getFullYear() > 1900 && d.getFullYear() < 2100) {
+      return format(d, "yyyy-MM-dd");
+    }
     return null;
   }
   const str = String(raw).trim();
@@ -75,6 +79,7 @@ function tryParseDate(raw: unknown): string | null {
   }
   return null;
 }
+
 
 function tryParseAmount(raw: unknown): number | null {
   if (raw == null) return null;
@@ -230,7 +235,7 @@ export function ImportTransactionsDialog({ open, onOpenChange }: Props) {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
+        const workbook = XLSX.read(data, { type: "array", cellDates: true });
         if (workbook.SheetNames.length === 0) {
           toast({ title: "File vuoto", description: "Il file non contiene fogli di lavoro", variant: "destructive" });
           return;
