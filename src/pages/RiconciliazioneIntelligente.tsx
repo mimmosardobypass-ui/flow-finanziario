@@ -269,26 +269,44 @@ export default function RiconciliazioneIntelligente() {
               <CardContent className="p-4 text-sm space-y-1">
                 <div className="font-semibold">SumUp POS → Payout Postepay: {sumupMatches.length} coppie trovate</div>
                 <div>
-                  Commissioni che verranno generate:{" "}
+                  Incassi POS che restano nei ricavi:{" "}
+                  <span className="font-semibold">
+                    €{sumupIncassiTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div>
+                  Commissioni SumUp che verranno create:{" "}
                   <span className="font-semibold">
                     €{sumupCommissionTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>{" "}
-                  totali
+                  (categoria Commissioni SumUp)
+                </div>
+                <div>
+                  Payout in uscita dal conto SumUp:{" "}
+                  <span className="font-semibold">
+                    €{sumupPayoutTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>{" "}
+                  (categoria Giroconti, esclusi dal bilancio)
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  (calcolate come differenza tra importo incassato e importo accreditato)
+                  La commissione è la differenza tra incassato e accreditato. Il payout azzera il saldo SumUp: i soldi si spostano sul conto di destinazione.
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {matches.length === 0 && !findMut.isPending && (
+          {(findMut.isPending || autoSearching) ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
+            </div>
+          ) : matches.length === 0 ? (
             <Card>
               <CardContent className="p-10 text-center text-muted-foreground">
-                Nessuna coppia trovata. Premi "Cerca corrispondenze" per avviare la ricerca con le regole attive.
+                Nessuna coppia trovata. Premi "Cerca corrispondenze" per rifare la ricerca con le regole attive.
               </CardContent>
             </Card>
-          )}
+          ) : null}
+
 
           {groupedMatches.map(([ruleName, list]) => (
             <Card key={ruleName}>
