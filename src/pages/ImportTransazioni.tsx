@@ -380,58 +380,82 @@ export default function ImportTransazioni() {
       while (hasMore) {
         const { data, error } = await supabase
           .from("transactions")
-          .select("id, date, description, amount, type")
+          .select("id, date, description, amount, type, operation_id")
           .eq("user_id", user.id)
           .eq("conto_id", selectedContoId)
           .is("deleted_at", null)
           .range(from, from + PAGE_SIZE - 1);
 
         if (error) throw error;
-        allExisting.push(...(data || []));
+        allExisting.push(...((data || []) as ExistingTransaction[]));
         hasMore = (data?.length ?? 0) === PAGE_SIZE;
         from += PAGE_SIZE;
       }
 
-      // Build fingerprint set from existing transactions
-      const existingByFingerprint = new Map<string, ExistingTransaction>();
+      // dal database
+      const existingOpIds = new Map<string, ExistingTransaction>();
+      const existingCount = new Map<string, number>();
+      const existingByFp = new Map<string, ExistingTransaction[]>();
+
       for (const tx of allExisting) {
-        const fp = makeFingerprint(
-          selectedContoId,
-          tx.date,
-          tx.type === "expense" ? -tx.amount : tx.amount,
-          tx.description || ""
-        );
-        existingByFingerprint.set(fp, tx);
+        if (tx.operation_id) existingOpIds.set(tx.operation_id, tx);
+        const signed = tx.type === "expense" ? -tx.amount : tx.amount;
+        const fp = makeFingerprint(selectedContoId, tx.date, signed);
+        existingCount.set(fp, (existingCount.get(fp) || 0) + 1);
+        const list = existingByFp.get(fp) || [];
+        list.push(tx);
+        existingByFp.set(fp, list);
       }
 
-      // Check each valid file row against existing
+      // dal file, nell'ordine in cui compare
       const foundDuplicates: DuplicateMatch[] = [];
       const foundNew: number[] = [];
       const newExcluded = new Set(excludedRows);
+      const usedCount = new Map<string, number>();
+      const seenOpIds = new Set<string>();
 
       for (const r of parsedRows) {
         if (r.hasError) continue;
-        
-        const fp = makeFingerprint(
-          selectedContoId,
-          r.date!,
-          r.amount!,
-          r.description
-        );
 
-        const existing = existingByFingerprint.get(fp);
-        if (existing) {
+        const fileRow: ParsedRow = {
+          date: r.date,
+          description: r.description,
+          amount: r.amount,
+          operationId: r.operationId ?? null,
+        };
+
+        // 1) identificativo della banca: criterio più forte
+        if (r.operationId && (existingOpIds.has(r.operationId) || seenOpIds.has(r.operationId))) {
           foundDuplicates.push({
             fileIndex: r.index,
-            fileRow: { date: r.date, description: r.description, amount: r.amount },
-            existing,
+            fileRow,
+            existing: existingOpIds.get(r.operationId) ?? null,
+            motivo: "identificativo banca",
           });
-          // Auto-deselect duplicates
           newExcluded.add(r.index);
-        } else {
-          foundNew.push(r.index);
+          continue;
         }
+        if (r.operationId) seenOpIds.add(r.operationId);
+
+        // 2) conteggio per impronta
+        const fp = makeFingerprint(selectedContoId, r.date!, r.amount!);
+        const already = existingCount.get(fp) || 0;
+        const used = usedCount.get(fp) || 0;
+        if (used < already) {
+          usedCount.set(fp, used + 1);
+          foundDuplicates.push({
+            fileIndex: r.index,
+            fileRow,
+            existing: existingByFp.get(fp)?.[used] ?? null,
+            motivo: "stessa data e stesso importo",
+          });
+          newExcluded.add(r.index);
+          continue;
+        }
+        usedCount.set(fp, used + 1);
+        foundNew.push(r.index);
       }
+
 
       setDuplicates(foundDuplicates);
       setNewRowIndices(foundNew);
