@@ -396,8 +396,8 @@ export default function RiconciliazioneIntelligente() {
 
             <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <Button onClick={handleSearch} disabled={findMut.isPending}>
-                  {findMut.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                <Button onClick={handleSearch} disabled={(findMut.isPending || aggMut.isPending)}>
+                  {(findMut.isPending || aggMut.isPending) ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
                   Cerca corrispondenze
                 </Button>
                 {matches.length > 0 && (
@@ -454,7 +454,7 @@ export default function RiconciliazioneIntelligente() {
             </Card>
           )}
 
-          {(findMut.isPending || autoSearching) ? (
+          {((findMut.isPending || aggMut.isPending) || autoSearching) ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
             </div>
