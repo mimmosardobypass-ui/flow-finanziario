@@ -95,6 +95,9 @@ export default function RiconciliazioneIntelligente() {
   const findMut = useFindReconciliationMatches();
   const reconcileMut = useReconcile();
   const sumupMut = useReconcileSumupPairs();
+  const aggMut = useFindReconciliationAggregates();
+  const groupsMut = useReconcileSumupGroups();
+  const { data: commissioni = [], refetch: refetchCommissioni } = useCommissioniSumup();
 
   const [tab, setTab] = useState("matches");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -103,6 +106,9 @@ export default function RiconciliazioneIntelligente() {
   const [deletingRule, setDeletingRule] = useState<ReconciliationRule | null>(null);
 
   const [matches, setMatches] = useState<ReconciliationMatch[]>([]);
+  const [aggregates, setAggregates] = useState<ReconciliationAggregateEnriched[]>([]);
+  const [selectedAggs, setSelectedAggs] = useState<Set<string>>(new Set());
+  const [reconcilingAggs, setReconcilingAggs] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reconciling, setReconciling] = useState(false);
   const [autoSearching, setAutoSearching] = useState(true);
@@ -110,11 +116,16 @@ export default function RiconciliazioneIntelligente() {
 
   const runSearch = async (silent = false) => {
     try {
-      const data = await findMut.mutateAsync();
+      const [data, aggs] = await Promise.all([findMut.mutateAsync(), aggMut.mutateAsync()]);
       setMatches(data);
+      setAggregates(aggs);
       setSelected(new Set());
+      setSelectedAggs(new Set());
       if (!silent) {
-        toast({ title: "Ricerca completata", description: `${data.length} coppie trovate` });
+        toast({
+          title: "Ricerca completata",
+          description: `${data.length} coppie trovate${aggs.length ? ` · ${aggs.length} accorpamenti` : ""}`,
+        });
       }
     } catch (e: any) {
       toast({ title: "Errore", description: e.message, variant: "destructive" });
@@ -122,6 +133,7 @@ export default function RiconciliazioneIntelligente() {
   };
 
   const handleSearch = () => runSearch(false);
+
 
   // Ricerca automatica una sola volta all'apertura della pagina
   useEffect(() => {
