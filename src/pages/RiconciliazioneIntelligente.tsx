@@ -343,7 +343,57 @@ export default function RiconciliazioneIntelligente() {
 
         {/* TAB: COPPIE TROVATE */}
         <TabsContent value="matches" className="space-y-4">
+          {commSummary && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Controllo commissioni SumUp</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Liquidazioni</div>
+                    <div className="font-semibold">{commSummary.liquidazioni}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Totale incassato</div>
+                    <div className="font-semibold">{eur(commSummary.incassato)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Commissioni pagate</div>
+                    <div className="font-semibold text-destructive">{eur(commSummary.commTot)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Percentuale media</div>
+                    <div className="font-semibold">{pct(commSummary.pctMedia)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Minima osservata</div>
+                    <div className="font-semibold">{pct(commSummary.pctMin)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Massima osservata</div>
+                    <div className="font-semibold">{pct(commSummary.pctMax)}</div>
+                  </div>
+                </div>
+                <Separator />
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Ultimi 6 mesi</div>
+                  {commSummary.mesi.map(([mese, v]) => (
+                    <div key={mese} className="flex items-center justify-between text-xs">
+                      <span className="font-medium">{mese}</span>
+                      <span className="text-muted-foreground">
+                        Incassato {eur(v.incassato)} · Commissioni {eur(v.commissione)} ·{" "}
+                        {pct(v.incassato > 0 ? (v.commissione / v.incassato) * 100 : 0)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
+
             <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <Button onClick={handleSearch} disabled={findMut.isPending}>
