@@ -186,6 +186,73 @@ export default function RiconciliazioneIntelligente() {
     [sumupIncassiTotal, sumupPayoutTotal]
   );
 
+  /* ─── Riquadro di controllo commissioni (da v_commissioni_sumup) ─── */
+  const commSummary = useMemo(() => {
+    if (commissioni.length === 0) return null;
+    const incassato = commissioni.reduce((s, r) => s + Number(r.incassato || 0), 0);
+    const commTot = commissioni.reduce((s, r) => s + Number(r.commissione || 0), 0);
+    const perc = commissioni
+      .map((r) => Number(r.percentuale || 0))
+      .filter((p) => p > 0);
+    const byMonth = new Map<string, { incassato: number; commissione: number }>();
+    commissioni.forEach((r) => {
+      const m = r.mese ? String(r.mese).slice(0, 7) : "—";
+      const cur = byMonth.get(m) || { incassato: 0, commissione: 0 };
+      cur.incassato += Number(r.incassato || 0);
+      cur.commissione += Number(r.commissione || 0);
+      byMonth.set(m, cur);
+    });
+    const mesi = Array.from(byMonth.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .slice(0, 6);
+    return {
+      liquidazioni: commissioni.length,
+      incassato,
+      commTot,
+      pctMedia: incassato > 0 ? (commTot / incassato) * 100 : 0,
+      pctMin: perc.length ? Math.min(...perc) : 0,
+      pctMax: perc.length ? Math.max(...perc) : 0,
+      mesi,
+    };
+  }, [commissioni]);
+
+  /* ─── Accorpamenti ─── */
+  const toggleAgg = (dest_id: string) => {
+    setSelectedAggs((prev) => {
+      const next = new Set(prev);
+      if (next.has(dest_id)) next.delete(dest_id); else next.add(dest_id);
+      return next;
+    });
+  };
+
+  const reloadAll = async () => {
+    await runSearch(true);
+    await refetchCommissioni();
+    qc.invalidateQueries({ queryKey: ["transactions"] });
+  };
+
+  const handleReconcileAggregates = async () => {
+    const sel = aggregates.filter((a) => selectedAggs.has(a.dest_id));
+    if (sel.length === 0) return;
+    setReconcilingAggs(true);
+    try {
+      const res = await groupsMut.mutateAsync(
+        sel.map((a) => ({ source_ids: a.source_ids, dest_id: a.dest_id, rule_id: a.rule_id }))
+      );
+      toast({
+        title: "Accorpamenti riconciliati",
+        description: `${res?.accorpamenti ?? sel.length} accorpamenti · Commissioni: ${eur(
+          Number(res?.totale_commissioni ?? sel.reduce((s, a) => s + Number(a.commissione_euro), 0))
+        )}`,
+      });
+      await reloadAll();
+    } catch (e: any) {
+      toast({ title: "Errore", description: e.message, variant: "destructive" });
+    } finally {
+      setReconcilingAggs(false);
+    }
+  };
+
 
   const reconcilePairs = async (pairs: ReconciliationMatch[]) => {
     setReconciling(true);
