@@ -502,8 +502,9 @@ export default function RiconciliazioneIntelligente() {
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <Badge className={`border ${scoreColor(Number(m.score))}`}>Score {Number(m.score).toFixed(0)}</Badge>
-                        <span className="text-[10px] text-muted-foreground">
-                          Δ {m.giorni_distanza}g · Δ€{Number(m.differenza_euro).toFixed(2)}
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          Δ {m.giorni_distanza}g · {eur(Number(m.commissione_euro))} ·{" "}
+                          <PercentBadge percentuale={Number(m.percentuale)} fuoriNorma={!!m.fuori_norma} />
                         </span>
                       </div>
                     </div>
@@ -512,7 +513,85 @@ export default function RiconciliazioneIntelligente() {
               </CardContent>
             </Card>
           ))}
+
+          {/* ACCORPAMENTI */}
+          {aggregates.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-primary" />
+                  <Badge variant="outline">{aggregates.length}</Badge>
+                  Bonifici che liquidano più incassi
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {aggregates.map((a) => {
+                  const isSel = selectedAggs.has(a.dest_id);
+                  return (
+                    <div
+                      key={a.dest_id}
+                      className={`border rounded-lg p-3 space-y-2 transition-colors ${isSel ? "bg-primary/5 border-primary/30" : ""}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Checkbox checked={isSel} onCheckedChange={() => toggleAgg(a.dest_id)} />
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-start gap-3">
+                          <div className="min-w-0">
+                            <div className="text-xs text-muted-foreground">
+                              {a.source_conto} · {a.source_count} incassi
+                            </div>
+                            <div className="space-y-0.5 mt-1">
+                              {a.sources.map((s) => (
+                                <div key={s.id} className="flex justify-between gap-3 text-xs">
+                                  <span className="text-muted-foreground">
+                                    {format(new Date(s.date), "dd/MM/yy", { locale: it })}
+                                  </span>
+                                  <span className="font-medium">{eur(s.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-1 border-t pt-1 flex justify-between gap-3 text-xs font-semibold">
+                              <span>Totale incassi</span>
+                              <span className="text-green-600">{eur(Number(a.source_totale))}</span>
+                            </div>
+                          </div>
+                          <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden md:block" />
+                          <div className="min-w-0">
+                            <div className="text-xs text-muted-foreground">
+                              {a.dest_conto} · {format(new Date(a.dest_date), "dd/MM/yy", { locale: it })}
+                            </div>
+                            <div className="text-sm truncate font-medium">{a.dest_desc || "—"}</div>
+                            <div className="text-sm">{fmtAmount(a.dest_amount, "income")}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 border-t pt-2 text-xs text-muted-foreground">
+                        <span>Commissione {eur(Number(a.commissione_euro))}</span>
+                        <span>·</span>
+                        <PercentBadge percentuale={Number(a.percentuale)} fuoriNorma={!!a.fuori_norma} />
+                        <span>·</span>
+                        <span>Δ {a.giorni}g</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="flex justify-end pt-1">
+                  <Button
+                    onClick={handleReconcileAggregates}
+                    disabled={selectedAggs.size === 0 || reconcilingAggs}
+                  >
+                    {reconcilingAggs ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCheck className="h-4 w-4 mr-2" />
+                    )}
+                    Riconcilia accorpamenti selezionati ({selectedAggs.size})
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
+
 
         {/* TAB: REGOLE */}
         <TabsContent value="rules" className="space-y-4">
