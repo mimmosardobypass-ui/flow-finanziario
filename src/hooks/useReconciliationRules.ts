@@ -45,9 +45,48 @@ export interface ReconciliationMatch {
   score: number;
   giorni_distanza: number;
   differenza_euro: number;
+  commissione_euro: number;
+  percentuale: number;
+  fuori_norma: boolean;
+}
+
+export interface ReconciliationAggregate {
+  rule_id: string;
+  rule_name: string;
+  dest_id: string;
+  dest_desc: string | null;
+  dest_amount: number;
+  dest_date: string;
+  dest_conto: string;
+  source_ids: string[];
+  source_count: number;
+  source_totale: number;
+  source_dal: string;
+  source_al: string;
+  source_conto: string;
+  commissione_euro: number;
+  percentuale: number;
+  giorni: number;
+  fuori_norma: boolean;
+}
+
+export interface CommissioneSumupRow {
+  gruppo: string | null;
+  primo_incasso: string | null;
+  ultimo_incasso: string | null;
+  data_accredito: string | null;
+  giorni_di_attesa: number | null;
+  numero_incassi: number | null;
+  accorpato: boolean | null;
+  incassato: number | null;
+  accreditato: number | null;
+  commissione: number | null;
+  percentuale: number | null;
+  mese: string | null;
 }
 
 const QUERY_KEY = ["reconciliation_rules"];
+
 
 export function useReconciliationRules() {
   return useQuery({
