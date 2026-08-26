@@ -298,10 +298,7 @@ export default function RiconciliazioneIntelligente() {
       const reconciledKeys = new Set(pairs.map(matchKey));
       setMatches((prev) => prev.filter((m) => !reconciledKeys.has(matchKey(m))));
       setSelected(new Set());
-      qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
-      const eur = (n: number) =>
-        `€${n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const commStr = commissioniTotal > 0
         ? ` · Commissioni SumUp generate: ${eur(commissioniTotal)}`
         : "";
@@ -310,9 +307,11 @@ export default function RiconciliazioneIntelligente() {
         title: "Riconciliazione completata",
         description: `${ok} coppie riconciliate${fail ? `, ${fail} errori` : ""}${commStr}${payoutStr}`,
       });
+      await reloadAll();
     } finally {
       setReconciling(false);
     }
+
   };
 
   const handleReconcileSelected = () => {
