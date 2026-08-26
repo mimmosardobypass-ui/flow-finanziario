@@ -200,3 +200,85 @@ export function useFindReconciliationMatches() {
     },
   });
 }
+
+export interface AggregateSource {
+  id: string;
+  date: string;
+  amount: number;
+  description: string | null;
+}
+
+export interface ReconciliationAggregateEnriched extends ReconciliationAggregate {
+  sources: AggregateSource[];
+}
+
+export function useFindReconciliationAggregates() {
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Not authenticated");
+      const { data, error } = await (supabase as any).rpc("find_reconciliation_aggregates", {
+        p_user_id: user.id,
+      });
+      if (error) throw error;
+      const rows = (data || []) as ReconciliationAggregate[];
+      if (rows.length === 0) return [] as ReconciliationAggregateEnriched[];
+
+      const allIds = Array.from(new Set(rows.flatMap((r) => r.source_ids || [])));
+      const detailMap = new Map<string, AggregateSource>();
+      if (allIds.length > 0) {
+        const { data: txs, error: txErr } = await supabase
+          .from("transactions")
+          .select("id, date, amount, description")
+          .in("id", allIds);
+        if (txErr) throw txErr;
+        (txs || []).forEach((t: any) =>
+          detailMap.set(t.id, { id: t.id, date: t.date, amount: Number(t.amount), description: t.description })
+        );
+      }
+
+      return rows.map((r) => ({
+        ...r,
+        sources: (r.source_ids || [])
+          .map((id) => detailMap.get(id))
+          .filter((s): s is AggregateSource => !!s)
+          .sort((a, b) => a.date.localeCompare(b.date)),
+      })) as ReconciliationAggregateEnriched[];
+    },
+  });
+}
+
+export function useReconcileSumupGroups() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (groups: Array<{ source_ids: string[]; dest_id: string; rule_id: string }>) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await (supabase as any).rpc("reconcile_sumup_groups_batch", {
+        p_user_id: user.id,
+        p_groups: groups,
+      });
+      if (error) throw error;
+      return data as { accorpamenti: number; totale_commissioni: number; dettaglio: any };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+      queryClient.invalidateQueries({ queryKey: ["commissioni_sumup"] });
+    },
+  });
+}
+
+export function useCommissioniSumup() {
+  return useQuery({
+    queryKey: ["commissioni_sumup"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_commissioni_sumup")
+        .select("*")
+        .order("data_accredito", { ascending: false });
+      if (error) throw error;
+      return (data || []) as CommissioneSumupRow[];
+    },
+  });
+}
