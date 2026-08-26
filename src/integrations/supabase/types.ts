@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -334,6 +334,8 @@ export type Database = {
       reconciliation_rules: {
         Row: {
           active: boolean
+          commissione_auto: boolean
+          commissione_max_assoluta: number
           commissione_percent: number
           conto_dest_id: string | null
           conto_origine_id: string | null
@@ -355,6 +357,8 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          commissione_auto?: boolean
+          commissione_max_assoluta?: number
           commissione_percent?: number
           conto_dest_id?: string | null
           conto_origine_id?: string | null
@@ -376,6 +380,8 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          commissione_auto?: boolean
+          commissione_max_assoluta?: number
           commissione_percent?: number
           conto_dest_id?: string | null
           conto_origine_id?: string | null
@@ -631,7 +637,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_commissioni_sumup: {
+        Row: {
+          accorpato: boolean | null
+          accreditato: number | null
+          commissione: number | null
+          data_accredito: string | null
+          giorni_di_attesa: number | null
+          gruppo: string | null
+          incassato: number | null
+          mese: string | null
+          numero_incassi: number | null
+          percentuale: number | null
+          primo_incasso: string | null
+          ultimo_incasso: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       apply_categorization_rule: {
@@ -642,9 +665,32 @@ export type Database = {
         Args: { p_rule_id: string; p_user_id: string }
         Returns: number
       }
+      find_reconciliation_aggregates: {
+        Args: { p_user_id: string }
+        Returns: {
+          commissione_euro: number
+          dest_amount: number
+          dest_conto: string
+          dest_date: string
+          dest_desc: string
+          dest_id: string
+          fuori_norma: boolean
+          giorni: number
+          percentuale: number
+          rule_id: string
+          rule_name: string
+          source_al: string
+          source_conto: string
+          source_count: number
+          source_dal: string
+          source_ids: string[]
+          source_totale: number
+        }[]
+      }
       find_reconciliation_matches: {
         Args: { p_user_id: string }
         Returns: {
+          commissione_euro: number
           dest_amount: number
           dest_conto: string
           dest_date: string
@@ -652,7 +698,9 @@ export type Database = {
           dest_id: string
           dest_type: string
           differenza_euro: number
+          fuori_norma: boolean
           giorni_distanza: number
+          percentuale: number
           rule_id: string
           rule_name: string
           score: number
@@ -687,6 +735,19 @@ export type Database = {
         Args: { p_pairs: Json; p_user_id: string }
         Returns: Json
       }
+      reconcile_sumup_group: {
+        Args: {
+          p_dest_id: string
+          p_rule_id: string
+          p_source_ids: string[]
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      reconcile_sumup_groups_batch: {
+        Args: { p_groups: Json; p_user_id: string }
+        Returns: Json
+      }
       reconcile_sumup_pair: {
         Args: {
           p_dest_id: string
@@ -695,6 +756,16 @@ export type Database = {
           p_user_id: string
         }
         Returns: Json
+      }
+      reconciliation_osservazioni: {
+        Args: { p_rule_id: string; p_user_id: string }
+        Returns: {
+          campione: number
+          gg_med: number
+          pct_max: number
+          pct_med: number
+          pct_min: number
+        }[]
       }
       seed_user_data: { Args: { user_uuid: string }; Returns: undefined }
     }
