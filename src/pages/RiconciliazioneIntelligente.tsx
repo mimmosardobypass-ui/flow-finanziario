@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Plus, Pencil, Trash2, GitMerge, Loader2, Search, CheckCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, GitMerge, Loader2, Search, CheckCheck, AlertTriangle, Layers } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
 import { ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -21,12 +23,41 @@ import {
   useToggleReconciliationRule,
   useFindReconciliationMatches,
   useReconcileSumupPairs,
+  useFindReconciliationAggregates,
+  useReconcileSumupGroups,
+  useCommissioniSumup,
   ReconciliationRule,
   ReconciliationMatch,
+  ReconciliationAggregateEnriched,
 } from "@/hooks/useReconciliationRules";
 import { useReconcile } from "@/hooks/useReconciliation";
 import { useConti } from "@/hooks/useConti";
 import { toast } from "@/hooks/use-toast";
+
+const FUORI_NORMA_MSG =
+  "Percentuale diversa da quelle abituali: potrebbe essere una carta con tariffa diversa. Controlla prima di confermare.";
+
+const eur = (n: number) =>
+  `€${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const pct = (n: number) =>
+  `${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+
+function PercentBadge({ percentuale, fuoriNorma }: { percentuale: number; fuoriNorma: boolean }) {
+  if (!fuoriNorma) return <span>{pct(percentuale)}</span>;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">
+          <AlertTriangle className="h-3 w-3" />
+          {pct(percentuale)}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{FUORI_NORMA_MSG}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 
 function scoreColor(score: number): string {
   if (score > 90) return "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/40 dark:text-green-200";
@@ -64,6 +95,9 @@ export default function RiconciliazioneIntelligente() {
   const findMut = useFindReconciliationMatches();
   const reconcileMut = useReconcile();
   const sumupMut = useReconcileSumupPairs();
+  const aggMut = useFindReconciliationAggregates();
+  const groupsMut = useReconcileSumupGroups();
+  const { data: commissioni = [], refetch: refetchCommissioni } = useCommissioniSumup();
 
   const [tab, setTab] = useState("matches");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -72,6 +106,9 @@ export default function RiconciliazioneIntelligente() {
   const [deletingRule, setDeletingRule] = useState<ReconciliationRule | null>(null);
 
   const [matches, setMatches] = useState<ReconciliationMatch[]>([]);
+  const [aggregates, setAggregates] = useState<ReconciliationAggregateEnriched[]>([]);
+  const [selectedAggs, setSelectedAggs] = useState<Set<string>>(new Set());
+  const [reconcilingAggs, setReconcilingAggs] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reconciling, setReconciling] = useState(false);
   const [autoSearching, setAutoSearching] = useState(true);
@@ -79,11 +116,16 @@ export default function RiconciliazioneIntelligente() {
 
   const runSearch = async (silent = false) => {
     try {
-      const data = await findMut.mutateAsync();
+      const [data, aggs] = await Promise.all([findMut.mutateAsync(), aggMut.mutateAsync()]);
       setMatches(data);
+      setAggregates(aggs);
       setSelected(new Set());
+      setSelectedAggs(new Set());
       if (!silent) {
-        toast({ title: "Ricerca completata", description: `${data.length} coppie trovate` });
+        toast({
+          title: "Ricerca completata",
+          description: `${data.length} coppie trovate${aggs.length ? ` · ${aggs.length} accorpamenti` : ""}`,
+        });
       }
     } catch (e: any) {
       toast({ title: "Errore", description: e.message, variant: "destructive" });
@@ -91,6 +133,7 @@ export default function RiconciliazioneIntelligente() {
   };
 
   const handleSearch = () => runSearch(false);
+
 
   // Ricerca automatica una sola volta all'apertura della pagina
   useEffect(() => {
@@ -143,6 +186,73 @@ export default function RiconciliazioneIntelligente() {
     [sumupIncassiTotal, sumupPayoutTotal]
   );
 
+  /* ─── Riquadro di controllo commissioni (da v_commissioni_sumup) ─── */
+  const commSummary = useMemo(() => {
+    if (commissioni.length === 0) return null;
+    const incassato = commissioni.reduce((s, r) => s + Number(r.incassato || 0), 0);
+    const commTot = commissioni.reduce((s, r) => s + Number(r.commissione || 0), 0);
+    const perc = commissioni
+      .map((r) => Number(r.percentuale || 0))
+      .filter((p) => p > 0);
+    const byMonth = new Map<string, { incassato: number; commissione: number }>();
+    commissioni.forEach((r) => {
+      const m = r.mese ? String(r.mese).slice(0, 7) : "—";
+      const cur = byMonth.get(m) || { incassato: 0, commissione: 0 };
+      cur.incassato += Number(r.incassato || 0);
+      cur.commissione += Number(r.commissione || 0);
+      byMonth.set(m, cur);
+    });
+    const mesi = Array.from(byMonth.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .slice(0, 6);
+    return {
+      liquidazioni: commissioni.length,
+      incassato,
+      commTot,
+      pctMedia: incassato > 0 ? (commTot / incassato) * 100 : 0,
+      pctMin: perc.length ? Math.min(...perc) : 0,
+      pctMax: perc.length ? Math.max(...perc) : 0,
+      mesi,
+    };
+  }, [commissioni]);
+
+  /* ─── Accorpamenti ─── */
+  const toggleAgg = (dest_id: string) => {
+    setSelectedAggs((prev) => {
+      const next = new Set(prev);
+      if (next.has(dest_id)) next.delete(dest_id); else next.add(dest_id);
+      return next;
+    });
+  };
+
+  const reloadAll = async () => {
+    await runSearch(true);
+    await refetchCommissioni();
+    qc.invalidateQueries({ queryKey: ["transactions"] });
+  };
+
+  const handleReconcileAggregates = async () => {
+    const sel = aggregates.filter((a) => selectedAggs.has(a.dest_id));
+    if (sel.length === 0) return;
+    setReconcilingAggs(true);
+    try {
+      const res = await groupsMut.mutateAsync(
+        sel.map((a) => ({ source_ids: a.source_ids, dest_id: a.dest_id, rule_id: a.rule_id }))
+      );
+      toast({
+        title: "Accorpamenti riconciliati",
+        description: `${res?.accorpamenti ?? sel.length} accorpamenti · Commissioni: ${eur(
+          Number(res?.totale_commissioni ?? sel.reduce((s, a) => s + Number(a.commissione_euro), 0))
+        )}`,
+      });
+      await reloadAll();
+    } catch (e: any) {
+      toast({ title: "Errore", description: e.message, variant: "destructive" });
+    } finally {
+      setReconcilingAggs(false);
+    }
+  };
+
 
   const reconcilePairs = async (pairs: ReconciliationMatch[]) => {
     setReconciling(true);
@@ -188,10 +298,7 @@ export default function RiconciliazioneIntelligente() {
       const reconciledKeys = new Set(pairs.map(matchKey));
       setMatches((prev) => prev.filter((m) => !reconciledKeys.has(matchKey(m))));
       setSelected(new Set());
-      qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
-      const eur = (n: number) =>
-        `€${n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const commStr = commissioniTotal > 0
         ? ` · Commissioni SumUp generate: ${eur(commissioniTotal)}`
         : "";
@@ -200,9 +307,11 @@ export default function RiconciliazioneIntelligente() {
         title: "Riconciliazione completata",
         description: `${ok} coppie riconciliate${fail ? `, ${fail} errori` : ""}${commStr}${payoutStr}`,
       });
+      await reloadAll();
     } finally {
       setReconciling(false);
     }
+
   };
 
   const handleReconcileSelected = () => {
@@ -234,11 +343,61 @@ export default function RiconciliazioneIntelligente() {
 
         {/* TAB: COPPIE TROVATE */}
         <TabsContent value="matches" className="space-y-4">
+          {commSummary && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Controllo commissioni SumUp</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Liquidazioni</div>
+                    <div className="font-semibold">{commSummary.liquidazioni}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Totale incassato</div>
+                    <div className="font-semibold">{eur(commSummary.incassato)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Commissioni pagate</div>
+                    <div className="font-semibold text-destructive">{eur(commSummary.commTot)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Percentuale media</div>
+                    <div className="font-semibold">{pct(commSummary.pctMedia)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Minima osservata</div>
+                    <div className="font-semibold">{pct(commSummary.pctMin)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Massima osservata</div>
+                    <div className="font-semibold">{pct(commSummary.pctMax)}</div>
+                  </div>
+                </div>
+                <Separator />
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Ultimi 6 mesi</div>
+                  {commSummary.mesi.map(([mese, v]) => (
+                    <div key={mese} className="flex items-center justify-between text-xs">
+                      <span className="font-medium">{mese}</span>
+                      <span className="text-muted-foreground">
+                        Incassato {eur(v.incassato)} · Commissioni {eur(v.commissione)} ·{" "}
+                        {pct(v.incassato > 0 ? (v.commissione / v.incassato) * 100 : 0)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
+
             <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <Button onClick={handleSearch} disabled={findMut.isPending}>
-                  {findMut.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                <Button onClick={handleSearch} disabled={(findMut.isPending || aggMut.isPending)}>
+                  {(findMut.isPending || aggMut.isPending) ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
                   Cerca corrispondenze
                 </Button>
                 {matches.length > 0 && (
@@ -295,7 +454,7 @@ export default function RiconciliazioneIntelligente() {
             </Card>
           )}
 
-          {(findMut.isPending || autoSearching) ? (
+          {((findMut.isPending || aggMut.isPending) || autoSearching) ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
             </div>
@@ -343,8 +502,9 @@ export default function RiconciliazioneIntelligente() {
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <Badge className={`border ${scoreColor(Number(m.score))}`}>Score {Number(m.score).toFixed(0)}</Badge>
-                        <span className="text-[10px] text-muted-foreground">
-                          Δ {m.giorni_distanza}g · Δ€{Number(m.differenza_euro).toFixed(2)}
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          Δ {m.giorni_distanza}g · {eur(Number(m.commissione_euro))} ·{" "}
+                          <PercentBadge percentuale={Number(m.percentuale)} fuoriNorma={!!m.fuori_norma} />
                         </span>
                       </div>
                     </div>
@@ -353,7 +513,85 @@ export default function RiconciliazioneIntelligente() {
               </CardContent>
             </Card>
           ))}
+
+          {/* ACCORPAMENTI */}
+          {aggregates.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-primary" />
+                  <Badge variant="outline">{aggregates.length}</Badge>
+                  Bonifici che liquidano più incassi
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {aggregates.map((a) => {
+                  const isSel = selectedAggs.has(a.dest_id);
+                  return (
+                    <div
+                      key={a.dest_id}
+                      className={`border rounded-lg p-3 space-y-2 transition-colors ${isSel ? "bg-primary/5 border-primary/30" : ""}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Checkbox checked={isSel} onCheckedChange={() => toggleAgg(a.dest_id)} />
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-start gap-3">
+                          <div className="min-w-0">
+                            <div className="text-xs text-muted-foreground">
+                              {a.source_conto} · {a.source_count} incassi
+                            </div>
+                            <div className="space-y-0.5 mt-1">
+                              {a.sources.map((s) => (
+                                <div key={s.id} className="flex justify-between gap-3 text-xs">
+                                  <span className="text-muted-foreground">
+                                    {format(new Date(s.date), "dd/MM/yy", { locale: it })}
+                                  </span>
+                                  <span className="font-medium">{eur(s.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-1 border-t pt-1 flex justify-between gap-3 text-xs font-semibold">
+                              <span>Totale incassi</span>
+                              <span className="text-green-600">{eur(Number(a.source_totale))}</span>
+                            </div>
+                          </div>
+                          <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden md:block" />
+                          <div className="min-w-0">
+                            <div className="text-xs text-muted-foreground">
+                              {a.dest_conto} · {format(new Date(a.dest_date), "dd/MM/yy", { locale: it })}
+                            </div>
+                            <div className="text-sm truncate font-medium">{a.dest_desc || "—"}</div>
+                            <div className="text-sm">{fmtAmount(a.dest_amount, "income")}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 border-t pt-2 text-xs text-muted-foreground">
+                        <span>Commissione {eur(Number(a.commissione_euro))}</span>
+                        <span>·</span>
+                        <PercentBadge percentuale={Number(a.percentuale)} fuoriNorma={!!a.fuori_norma} />
+                        <span>·</span>
+                        <span>Δ {a.giorni}g</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="flex justify-end pt-1">
+                  <Button
+                    onClick={handleReconcileAggregates}
+                    disabled={selectedAggs.size === 0 || reconcilingAggs}
+                  >
+                    {reconcilingAggs ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCheck className="h-4 w-4 mr-2" />
+                    )}
+                    Riconcilia accorpamenti selezionati ({selectedAggs.size})
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
+
 
         {/* TAB: REGOLE */}
         <TabsContent value="rules" className="space-y-4">
