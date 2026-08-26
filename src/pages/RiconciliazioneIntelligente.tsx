@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Plus, Pencil, Trash2, GitMerge, Loader2, Search, CheckCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, GitMerge, Loader2, Search, CheckCheck, AlertTriangle, Layers } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
 import { ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -21,12 +23,41 @@ import {
   useToggleReconciliationRule,
   useFindReconciliationMatches,
   useReconcileSumupPairs,
+  useFindReconciliationAggregates,
+  useReconcileSumupGroups,
+  useCommissioniSumup,
   ReconciliationRule,
   ReconciliationMatch,
+  ReconciliationAggregateEnriched,
 } from "@/hooks/useReconciliationRules";
 import { useReconcile } from "@/hooks/useReconciliation";
 import { useConti } from "@/hooks/useConti";
 import { toast } from "@/hooks/use-toast";
+
+const FUORI_NORMA_MSG =
+  "Percentuale diversa da quelle abituali: potrebbe essere una carta con tariffa diversa. Controlla prima di confermare.";
+
+const eur = (n: number) =>
+  `€${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const pct = (n: number) =>
+  `${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+
+function PercentBadge({ percentuale, fuoriNorma }: { percentuale: number; fuoriNorma: boolean }) {
+  if (!fuoriNorma) return <span>{pct(percentuale)}</span>;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">
+          <AlertTriangle className="h-3 w-3" />
+          {pct(percentuale)}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{FUORI_NORMA_MSG}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 
 function scoreColor(score: number): string {
   if (score > 90) return "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/40 dark:text-green-200";
