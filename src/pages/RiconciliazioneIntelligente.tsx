@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Plus, Pencil, Trash2, GitMerge, Loader2, Search, CheckCheck, AlertTriangle, Layers } from "lucide-react";
+import { Plus, Pencil, Trash2, GitMerge, Loader2, Search, CheckCheck, AlertTriangle, Layers, ArrowLeftRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,9 +26,12 @@ import {
   useFindReconciliationAggregates,
   useReconcileSumupGroups,
   useCommissioniSumup,
+  useFindContropartiteMancanti,
+  useCreateContropartiteBatch,
   ReconciliationRule,
   ReconciliationMatch,
   ReconciliationAggregateEnriched,
+  ContropartitaMancante,
 } from "@/hooks/useReconciliationRules";
 import { useReconcile } from "@/hooks/useReconciliation";
 import { useConti } from "@/hooks/useConti";
@@ -97,6 +100,8 @@ export default function RiconciliazioneIntelligente() {
   const sumupMut = useReconcileSumupPairs();
   const aggMut = useFindReconciliationAggregates();
   const groupsMut = useReconcileSumupGroups();
+  const contropartiteMut = useFindContropartiteMancanti();
+  const creaContropartiteMut = useCreateContropartiteBatch();
   const { data: commissioni = [], refetch: refetchCommissioni } = useCommissioniSumup();
 
   const [tab, setTab] = useState("matches");
@@ -109,6 +114,9 @@ export default function RiconciliazioneIntelligente() {
   const [aggregates, setAggregates] = useState<ReconciliationAggregateEnriched[]>([]);
   const [selectedAggs, setSelectedAggs] = useState<Set<string>>(new Set());
   const [reconcilingAggs, setReconcilingAggs] = useState(false);
+  const [contropartite, setContropartite] = useState<ContropartitaMancante[]>([]);
+  const [selectedContro, setSelectedContro] = useState<Set<string>>(new Set());
+  const [creatingContro, setCreatingContro] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reconciling, setReconciling] = useState(false);
   const [autoSearching, setAutoSearching] = useState(true);
@@ -116,15 +124,23 @@ export default function RiconciliazioneIntelligente() {
 
   const runSearch = async (silent = false) => {
     try {
-      const [data, aggs] = await Promise.all([findMut.mutateAsync(), aggMut.mutateAsync()]);
+      const [data, aggs, contro] = await Promise.all([
+        findMut.mutateAsync(),
+        aggMut.mutateAsync(),
+        contropartiteMut.mutateAsync(),
+      ]);
       setMatches(data);
       setAggregates(aggs);
+      setContropartite(contro);
       setSelected(new Set());
       setSelectedAggs(new Set());
+      setSelectedContro(new Set());
       if (!silent) {
         toast({
           title: "Ricerca completata",
-          description: `${data.length} coppie trovate${aggs.length ? ` · ${aggs.length} accorpamenti` : ""}`,
+          description: `${data.length} coppie trovate${aggs.length ? ` · ${aggs.length} accorpamenti` : ""}${
+            contro.length ? ` · ${contro.length} ricariche senza uscita` : ""
+          }`,
         });
       }
     } catch (e: any) {
@@ -250,6 +266,60 @@ export default function RiconciliazioneIntelligente() {
       toast({ title: "Errore", description: e.message, variant: "destructive" });
     } finally {
       setReconcilingAggs(false);
+    }
+  };
+
+  /* ─── Contropartite mancanti (ricariche senza uscita dalla Cassa) ─── */
+  const toggleContro = (dest_id: string) => {
+    setSelectedContro((prev) => {
+      const next = new Set(prev);
+      if (next.has(dest_id)) next.delete(dest_id); else next.add(dest_id);
+      return next;
+    });
+  };
+
+  const controSafe = useMemo(
+    () => contropartite.filter((c) => !c.gia_esiste_simile),
+    [contropartite]
+  );
+  const allSafeSelected =
+    controSafe.length > 0 && controSafe.every((c) => selectedContro.has(c.dest_id));
+
+  const toggleAllContro = () => {
+    setSelectedContro((prev) => {
+      if (allSafeSelected) {
+        const next = new Set(prev);
+        controSafe.forEach((c) => next.delete(c.dest_id));
+        return next;
+      }
+      const next = new Set(prev);
+      controSafe.forEach((c) => next.add(c.dest_id));
+      return next;
+    });
+  };
+
+  const handleCreateContropartite = async () => {
+    const sel = contropartite.filter((c) => selectedContro.has(c.dest_id));
+    if (sel.length === 0) return;
+    setCreatingContro(true);
+    try {
+      const res = await creaContropartiteMut.mutateAsync(
+        sel.map((c) => ({ rule_id: c.rule_id, dest_id: c.dest_id }))
+      );
+      const n = Number(res?.create ?? sel.length);
+      const tot = Number(
+        res?.totale ?? sel.reduce((s, c) => s + Number(c.origine_importo), 0)
+      );
+      const conto = sel[0]?.origine_conto || "Cassa";
+      toast({
+        title: "Movimenti creati",
+        description: `${n} movimenti creati in ${conto} · ${eur(tot)}`,
+      });
+      await reloadAll();
+    } catch (e: any) {
+      toast({ title: "Errore", description: e.message, variant: "destructive" });
+    } finally {
+      setCreatingContro(false);
     }
   };
 
@@ -585,6 +655,95 @@ export default function RiconciliazioneIntelligente() {
                       <CheckCheck className="h-4 w-4 mr-2" />
                     )}
                     Riconcilia accorpamenti selezionati ({selectedAggs.size})
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* CONTROPARTITE MANCANTI */}
+          {contropartite.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ArrowLeftRight className="h-4 w-4 text-primary" />
+                  <Badge variant="outline">{contropartite.length}</Badge>
+                  Ricariche senza uscita dalla Cassa
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {controSafe.length > 0 && (
+                  <div className="flex items-center gap-2 pb-1 text-xs text-muted-foreground">
+                    <Checkbox checked={allSafeSelected} onCheckedChange={toggleAllContro} />
+                    <span>Seleziona tutte (escluse quelle con avviso)</span>
+                  </div>
+                )}
+                {contropartite.map((c) => {
+                  const isSel = selectedContro.has(c.dest_id);
+                  return (
+                    <div
+                      key={c.dest_id}
+                      className={`border rounded-lg p-3 space-y-2 transition-colors ${isSel ? "bg-primary/5 border-primary/30" : ""}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Checkbox checked={isSel} onCheckedChange={() => toggleContro(c.dest_id)} />
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-start gap-3">
+                          <div className="min-w-0 rounded-md border border-dashed border-primary/40 bg-muted/30 p-2">
+                            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              <Badge variant="outline" className="border-dashed text-[10px]">verrà creato</Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {c.origine_conto} · {format(new Date(c.origine_data), "dd/MM/yy", { locale: it })}
+                            </div>
+                            <div className="text-sm truncate font-medium">
+                              {c.origine_categoria || "Da classificare"}
+                            </div>
+                            <div className="text-sm">{fmtAmount(c.origine_importo, "expense")}</div>
+                          </div>
+                          <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden md:block md:mt-6" />
+                          <div className="min-w-0">
+                            <div className="text-xs text-muted-foreground">
+                              {c.dest_conto} · {format(new Date(c.dest_date), "dd/MM/yy", { locale: it })}
+                            </div>
+                            <div className="text-sm truncate font-medium">{c.dest_desc || "—"}</div>
+                            <div className="text-sm">{fmtAmount(c.dest_amount, "income")}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 border-t pt-2 text-xs text-muted-foreground">
+                        <span>{c.rule_name}</span>
+                        {c.gia_esiste_simile && (
+                          <>
+                            <span>·</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Forse già registrata
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                Sul conto di origine esiste già un movimento dello stesso importo in quei giorni.
+                                Controlla di non registrarla due volte.
+                              </TooltipContent>
+                            </Tooltip>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="flex justify-end pt-1">
+                  <Button
+                    onClick={handleCreateContropartite}
+                    disabled={selectedContro.size === 0 || creatingContro}
+                  >
+                    {creatingContro ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCheck className="h-4 w-4 mr-2" />
+                    )}
+                    Crea movimenti selezionati ({selectedContro.size})
                   </Button>
                 </div>
               </CardContent>
