@@ -282,3 +282,52 @@ export function useCommissioniSumup() {
     },
   });
 }
+
+export interface ContropartitaMancante {
+  rule_id: string;
+  rule_name: string;
+  dest_id: string;
+  dest_desc: string | null;
+  dest_amount: number;
+  dest_date: string;
+  dest_conto: string;
+  origine_conto: string;
+  origine_categoria: string | null;
+  origine_importo: number;
+  origine_data: string;
+  gia_esiste_simile: boolean;
+}
+
+export function useFindContropartiteMancanti() {
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await (supabase as any).rpc("find_contropartite_mancanti", {
+        p_user_id: user.id,
+      });
+      if (error) throw error;
+      return (data || []) as ContropartitaMancante[];
+    },
+  });
+}
+
+export function useCreateContropartiteBatch() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: Array<{ rule_id: string; dest_id: string }>) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await (supabase as any).rpc("crea_contropartite_batch", {
+        p_user_id: user.id,
+        p_items: items,
+      });
+      if (error) throw error;
+      return data as { create: number; totale: number; dettaglio: any };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+    },
+  });
+}
