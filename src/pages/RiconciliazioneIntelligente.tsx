@@ -100,6 +100,8 @@ export default function RiconciliazioneIntelligente() {
   const sumupMut = useReconcileSumupPairs();
   const aggMut = useFindReconciliationAggregates();
   const groupsMut = useReconcileSumupGroups();
+  const contropartiteMut = useFindContropartiteMancanti();
+  const creaContropartiteMut = useCreateContropartiteBatch();
   const { data: commissioni = [], refetch: refetchCommissioni } = useCommissioniSumup();
 
   const [tab, setTab] = useState("matches");
@@ -112,6 +114,9 @@ export default function RiconciliazioneIntelligente() {
   const [aggregates, setAggregates] = useState<ReconciliationAggregateEnriched[]>([]);
   const [selectedAggs, setSelectedAggs] = useState<Set<string>>(new Set());
   const [reconcilingAggs, setReconcilingAggs] = useState(false);
+  const [contropartite, setContropartite] = useState<ContropartitaMancante[]>([]);
+  const [selectedContro, setSelectedContro] = useState<Set<string>>(new Set());
+  const [creatingContro, setCreatingContro] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reconciling, setReconciling] = useState(false);
   const [autoSearching, setAutoSearching] = useState(true);
@@ -119,15 +124,23 @@ export default function RiconciliazioneIntelligente() {
 
   const runSearch = async (silent = false) => {
     try {
-      const [data, aggs] = await Promise.all([findMut.mutateAsync(), aggMut.mutateAsync()]);
+      const [data, aggs, contro] = await Promise.all([
+        findMut.mutateAsync(),
+        aggMut.mutateAsync(),
+        contropartiteMut.mutateAsync(),
+      ]);
       setMatches(data);
       setAggregates(aggs);
+      setContropartite(contro);
       setSelected(new Set());
       setSelectedAggs(new Set());
+      setSelectedContro(new Set());
       if (!silent) {
         toast({
           title: "Ricerca completata",
-          description: `${data.length} coppie trovate${aggs.length ? ` · ${aggs.length} accorpamenti` : ""}`,
+          description: `${data.length} coppie trovate${aggs.length ? ` · ${aggs.length} accorpamenti` : ""}${
+            contro.length ? ` · ${contro.length} ricariche senza uscita` : ""
+          }`,
         });
       }
     } catch (e: any) {
