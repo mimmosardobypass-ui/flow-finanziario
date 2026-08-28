@@ -660,6 +660,95 @@ export default function RiconciliazioneIntelligente() {
               </CardContent>
             </Card>
           )}
+
+          {/* CONTROPARTITE MANCANTI */}
+          {contropartite.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ArrowLeftRight className="h-4 w-4 text-primary" />
+                  <Badge variant="outline">{contropartite.length}</Badge>
+                  Ricariche senza uscita dalla Cassa
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {controSafe.length > 0 && (
+                  <div className="flex items-center gap-2 pb-1 text-xs text-muted-foreground">
+                    <Checkbox checked={allSafeSelected} onCheckedChange={toggleAllContro} />
+                    <span>Seleziona tutte (escluse quelle con avviso)</span>
+                  </div>
+                )}
+                {contropartite.map((c) => {
+                  const isSel = selectedContro.has(c.dest_id);
+                  return (
+                    <div
+                      key={c.dest_id}
+                      className={`border rounded-lg p-3 space-y-2 transition-colors ${isSel ? "bg-primary/5 border-primary/30" : ""}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Checkbox checked={isSel} onCheckedChange={() => toggleContro(c.dest_id)} />
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-start gap-3">
+                          <div className="min-w-0 rounded-md border border-dashed border-primary/40 bg-muted/30 p-2">
+                            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              <Badge variant="outline" className="border-dashed text-[10px]">verrà creato</Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {c.origine_conto} · {format(new Date(c.origine_data), "dd/MM/yy", { locale: it })}
+                            </div>
+                            <div className="text-sm truncate font-medium">
+                              {c.origine_categoria || "Da classificare"}
+                            </div>
+                            <div className="text-sm">{fmtAmount(c.origine_importo, "expense")}</div>
+                          </div>
+                          <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden md:block md:mt-6" />
+                          <div className="min-w-0">
+                            <div className="text-xs text-muted-foreground">
+                              {c.dest_conto} · {format(new Date(c.dest_date), "dd/MM/yy", { locale: it })}
+                            </div>
+                            <div className="text-sm truncate font-medium">{c.dest_desc || "—"}</div>
+                            <div className="text-sm">{fmtAmount(c.dest_amount, "income")}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 border-t pt-2 text-xs text-muted-foreground">
+                        <span>{c.rule_name}</span>
+                        {c.gia_esiste_simile && (
+                          <>
+                            <span>·</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Forse già registrata
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                Sul conto di origine esiste già un movimento dello stesso importo in quei giorni.
+                                Controlla di non registrarla due volte.
+                              </TooltipContent>
+                            </Tooltip>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="flex justify-end pt-1">
+                  <Button
+                    onClick={handleCreateContropartite}
+                    disabled={selectedContro.size === 0 || creatingContro}
+                  >
+                    {creatingContro ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCheck className="h-4 w-4 mr-2" />
+                    )}
+                    Crea movimenti selezionati ({selectedContro.size})
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
 
