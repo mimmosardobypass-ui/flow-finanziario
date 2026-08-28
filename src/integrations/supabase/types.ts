@@ -339,7 +339,10 @@ export type Database = {
           commissione_percent: number
           conto_dest_id: string | null
           conto_origine_id: string | null
+          contropartita_categoria_id: string | null
+          contropartita_dal: string | null
           created_at: string
+          genera_contropartita: boolean
           giorni_max: number
           giorni_min: number
           id: string
@@ -362,7 +365,10 @@ export type Database = {
           commissione_percent?: number
           conto_dest_id?: string | null
           conto_origine_id?: string | null
+          contropartita_categoria_id?: string | null
+          contropartita_dal?: string | null
           created_at?: string
+          genera_contropartita?: boolean
           giorni_max?: number
           giorni_min?: number
           id?: string
@@ -385,7 +391,10 @@ export type Database = {
           commissione_percent?: number
           conto_dest_id?: string | null
           conto_origine_id?: string | null
+          contropartita_categoria_id?: string | null
+          contropartita_dal?: string | null
           created_at?: string
+          genera_contropartita?: boolean
           giorni_max?: number
           giorni_min?: number
           id?: string
@@ -414,6 +423,13 @@ export type Database = {
             columns: ["conto_origine_id"]
             isOneToOne: false
             referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reconciliation_rules_contropartita_categoria_id_fkey"
+            columns: ["contropartita_categoria_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
             referencedColumns: ["id"]
           },
         ]
@@ -664,6 +680,31 @@ export type Database = {
       count_categorization_rule_matches: {
         Args: { p_rule_id: string; p_user_id: string }
         Returns: number
+      }
+      crea_contropartita: {
+        Args: { p_dest_id: string; p_rule_id: string; p_user_id: string }
+        Returns: Json
+      }
+      crea_contropartite_batch: {
+        Args: { p_items: Json; p_user_id: string }
+        Returns: Json
+      }
+      find_contropartite_mancanti: {
+        Args: { p_user_id: string }
+        Returns: {
+          dest_amount: number
+          dest_conto: string
+          dest_date: string
+          dest_desc: string
+          dest_id: string
+          gia_esiste_simile: boolean
+          origine_categoria: string
+          origine_conto: string
+          origine_data: string
+          origine_importo: number
+          rule_id: string
+          rule_name: string
+        }[]
       }
       find_reconciliation_aggregates: {
         Args: { p_user_id: string }
