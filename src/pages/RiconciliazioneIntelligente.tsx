@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Plus, Pencil, Trash2, GitMerge, Loader2, Search, CheckCheck, AlertTriangle, Layers } from "lucide-react";
+import { Plus, Pencil, Trash2, GitMerge, Loader2, Search, CheckCheck, AlertTriangle, Layers, ArrowLeftRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
