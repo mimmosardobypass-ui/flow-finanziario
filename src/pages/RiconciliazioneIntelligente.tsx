@@ -269,6 +269,60 @@ export default function RiconciliazioneIntelligente() {
     }
   };
 
+  /* ─── Contropartite mancanti (ricariche senza uscita dalla Cassa) ─── */
+  const toggleContro = (dest_id: string) => {
+    setSelectedContro((prev) => {
+      const next = new Set(prev);
+      if (next.has(dest_id)) next.delete(dest_id); else next.add(dest_id);
+      return next;
+    });
+  };
+
+  const controSafe = useMemo(
+    () => contropartite.filter((c) => !c.gia_esiste_simile),
+    [contropartite]
+  );
+  const allSafeSelected =
+    controSafe.length > 0 && controSafe.every((c) => selectedContro.has(c.dest_id));
+
+  const toggleAllContro = () => {
+    setSelectedContro((prev) => {
+      if (allSafeSelected) {
+        const next = new Set(prev);
+        controSafe.forEach((c) => next.delete(c.dest_id));
+        return next;
+      }
+      const next = new Set(prev);
+      controSafe.forEach((c) => next.add(c.dest_id));
+      return next;
+    });
+  };
+
+  const handleCreateContropartite = async () => {
+    const sel = contropartite.filter((c) => selectedContro.has(c.dest_id));
+    if (sel.length === 0) return;
+    setCreatingContro(true);
+    try {
+      const res = await creaContropartiteMut.mutateAsync(
+        sel.map((c) => ({ rule_id: c.rule_id, dest_id: c.dest_id }))
+      );
+      const n = Number(res?.create ?? sel.length);
+      const tot = Number(
+        res?.totale ?? sel.reduce((s, c) => s + Number(c.origine_importo), 0)
+      );
+      const conto = sel[0]?.origine_conto || "Cassa";
+      toast({
+        title: "Movimenti creati",
+        description: `${n} movimenti creati in ${conto} · ${eur(tot)}`,
+      });
+      await reloadAll();
+    } catch (e: any) {
+      toast({ title: "Errore", description: e.message, variant: "destructive" });
+    } finally {
+      setCreatingContro(false);
+    }
+  };
+
 
   const reconcilePairs = async (pairs: ReconciliationMatch[]) => {
     setReconciling(true);
