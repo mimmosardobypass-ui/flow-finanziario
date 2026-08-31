@@ -144,7 +144,7 @@ export function useCreateFattura() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
   });
 }
 
@@ -162,7 +162,7 @@ export function useUpdateFattura() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
   });
 }
 
@@ -173,7 +173,7 @@ export function useDeleteFattura() {
       const { error } = await supabase.from("fatture_fornitori").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
   });
 }
 
@@ -202,7 +202,7 @@ export function useCollegaTransazione() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
   });
 }
 
