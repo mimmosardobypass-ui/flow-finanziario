@@ -151,14 +151,20 @@ export default function FattureFornitori() {
   const [mese, setMese] = useState<number | "all">("all");
   const [selFattura, setSelFattura] = useState<FatturaWithRel | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [sdiFilter, setSdiFilter] = useState<"all" | "solo_sdi" | "attesa">("all");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const { data: fatture = [], isLoading } = useFattureFornitori({
+  const { data: fattureRaw = [], isLoading } = useFattureFornitori({
     stato,
     fornitore_id: fornitoreId,
     mese: mese === "all" ? undefined : mese,
     anno,
   });
+  const fatture = useMemo(() => {
+    if (sdiFilter === "solo_sdi") return fattureRaw.filter((f) => !f.sdi_mancante);
+    if (sdiFilter === "attesa") return fattureRaw.filter((f) => f.sdi_mancante);
+    return fattureRaw;
+  }, [fattureRaw, sdiFilter]);
   const stats = useFattureStats();
   const { data: fornitori = [] } = useFornitori();
   const { data: categories = [] } = useCategories();
