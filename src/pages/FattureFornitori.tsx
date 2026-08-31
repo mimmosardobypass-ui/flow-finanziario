@@ -549,6 +549,9 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
     imponibile: "",
     data_scadenza: "",
   });
+  const [origine, setOrigine] = useState("sdi");
+  const [sdiMancante, setSdiMancante] = useState(false);
+  const [identificativoSdi, setIdentificativoSdi] = useState("");
   const create = useCreateFattura();
 
   const handleSubmit = async () => {
@@ -556,10 +559,15 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
       toast.error("Mittente e totale richiesti");
       return;
     }
+    if (origine === "sdi" && !identificativoSdi.trim() && !sdiMancante) {
+      toast.error("Identificativo SdI richiesto per le fatture elettroniche");
+      return;
+    }
     const fornitore = fornitori.find((f) => f.id === form.fornitore_id);
     await create.mutateAsync({
       fornitore_id: form.fornitore_id || null,
       numero_documento: form.numero_documento || null,
+      identificativo_sdi: identificativoSdi.trim() || null,
       data_documento: form.data_documento,
       tipo: form.tipo,
       mittente: form.mittente || fornitore?.nome || "",
@@ -568,6 +576,8 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
       imponibile: form.imponibile ? Number(form.imponibile) : null,
       data_scadenza: form.data_scadenza || null,
       stato_pagamento: form.tipo === "Nota Credito" ? "nota_credito" : "da_pagare",
+      origine,
+      sdi_mancante: sdiMancante,
     });
     toast.success("Fattura creata");
     onClose();
