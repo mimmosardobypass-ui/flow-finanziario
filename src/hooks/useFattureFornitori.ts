@@ -118,17 +118,76 @@ export function useFattureFornitori(filters?: FattureFilters) {
   });
 }
 
+export interface PagamentoProposta {
+  fattura_id: string;
+  mittente: string | null;
+  numero_documento: string | null;
+  data_documento: string | null;
+  totale: number | null;
+  transaction_id: string;
+  data_pagamento: string | null;
+  importo_pagamento: number | null;
+  descrizione: string | null;
+  scarto: number | null;
+  giorni: number | null;
+  confidenza: string | null;
+  candidati: number | null;
+}
+
+export function usePagamentiFatture() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["pagamenti-fatture", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase.rpc("find_pagamenti_fatture", { p_user_id: user.id });
+      if (error) throw error;
+      const rows = (data ?? []) as unknown as PagamentoProposta[];
+      return [...rows].sort((a, b) =>
+        String(b.data_documento ?? "").localeCompare(String(a.data_documento ?? ""))
+      );
+    },
+    enabled: !!user,
+  });
+}
+
+export function useCollegaPagamentiFatture() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (pairs: { fattura_id: string; transaction_id: string }[]) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase.rpc("collega_pagamenti_fatture", {
+        p_user_id: user.id,
+        p_fattura_ids: pairs.map((p) => p.fattura_id),
+        p_transaction_ids: pairs.map((p) => p.transaction_id),
+      });
+      if (error) throw error;
+      return data as unknown as { collegate: number; saltate: number };
+    },
+    onSuccess: (r) => {
+      toast.success(`${r?.collegate ?? 0} fatture collegate · ${r?.saltate ?? 0} saltate`);
+      qc.invalidateQueries({ queryKey: ["pagamenti-fatture"] });
+      qc.invalidateQueries({ queryKey: ["fatture-fornitori"] });
+      qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+    },
+    onError: (e: any) => toast.error(`Abbinamento fallito: ${e?.message ?? e}`),
+  });
+}
+
 export function useFattureStats() {
   const { data: fatture = [] } = useFattureFornitori();
   const now = new Date();
   const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const meseFatt = fatture.filter((f) => f.data_documento.startsWith(ym));
+  const meseFatt = fatture.filter((f) => f.data_documento.startsWith(ym) && f.imponibile !== null);
   return {
     daPagare: fatture.filter((f) => f.stato_pagamento === "da_pagare").reduce((s, f) => s + Number(f.totale), 0),
     pagate: fatture.filter((f) => f.stato_pagamento === "pagata").reduce((s, f) => s + Number(f.totale), 0),
     imponibileMese: meseFatt.reduce((s, f) => s + Number(f.imponibile ?? 0), 0),
   };
 }
+
 
 export function useCreateFattura() {
   const { user } = useAuth();
