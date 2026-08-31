@@ -23,6 +23,7 @@ import {
   useFattureFornitori, useFattureStats, useDeleteFattura,
   useUpdateFattura, useCreateFattura, useImportFattureExcel,
   useCollegaTransazione, FatturaWithRel,
+  useFattureSdiMancanti, ORIGINE_LABELS,
 } from "@/hooks/useFattureFornitori";
 import {
   useFornitori, useCreateFornitore, useUpdateFornitore, useDeleteFornitore, Fornitore,
@@ -37,10 +38,109 @@ const fmtDate = (s: string | null) =>
 
 const MESI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 
+const giorniAttesa = (d: string | null) => {
+  if (!d) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
+};
+
+const LIVELLO_COLORS: Record<string, string> = {
+  "in attesa": "#12b76a",
+  "da sollecitare": "#f79009",
+  critico: "#f04438",
+};
+
 function StatoBadge({ stato }: { stato: string }) {
   if (stato === "pagata") return <Badge className="bg-green-600 hover:bg-green-600">Pagata</Badge>;
   if (stato === "nota_credito") return <Badge variant="secondary">Nota credito</Badge>;
   return <Badge className="bg-red-600 hover:bg-red-600">Da pagare</Badge>;
+}
+
+function SdiMancanteBadge({ fattura }: { fattura: FatturaWithRel }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap"
+          style={{ backgroundColor: "#fffaeb", borderColor: "#fde3a7", color: "#b54708" }}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          Manca da SdI
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        <div className="space-y-1 text-xs">
+          <div><span className="font-semibold">Origine:</span> {ORIGINE_LABELS[fattura.origine] ?? fattura.origine ?? "—"}</div>
+          <div><span className="font-semibold">In attesa da:</span> {giorniAttesa(fattura.data_documento)} giorni</div>
+          <div><span className="font-semibold">Note:</span> {fattura.note?.trim() ? fattura.note : "nessuna nota"}</div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SdiMancantiCard() {
+  const { data: rows = [] } = useFattureSdiMancanti();
+  if (rows.length === 0) return null;
+
+  const totale = rows.reduce((s, r) => s + Number(r.totale ?? 0), 0);
+  const oltre90 = rows.filter((r) => Number(r.giorni_attesa ?? 0) > 90).length;
+  const daSollecitare = rows.filter((r) => r.livello === "da sollecitare").length;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="flex flex-row items-center gap-2 py-3" style={{ backgroundColor: "#fffaeb" }}>
+        <AlertTriangle className="h-5 w-5" style={{ color: "#b54708" }} />
+        <CardTitle className="text-base" style={{ color: "#b54708" }}>
+          Documenti non pervenuti via SdI
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 space-y-4">
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Documenti</div>
+            <div className="text-2xl font-bold">{rows.length}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Totale</div>
+            <div className="text-2xl font-bold">{fmtEur(totale)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Oltre 90 giorni</div>
+            <div className="text-2xl font-bold" style={{ color: "#f04438" }}>{oltre90}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Da sollecitare</div>
+            <div className="text-2xl font-bold" style={{ color: "#f79009" }}>{daSollecitare}</div>
+          </div>
+        </div>
+
+        <div className="divide-y border-t">
+          {rows.map((r) => (
+            <div key={r.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+              <span
+                className="h-2.5 w-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: LIVELLO_COLORS[r.livello ?? ""] ?? "#98a2b3" }}
+              />
+              <span className="font-medium flex-1 min-w-[140px]">{r.mittente ?? "—"}</span>
+              <span className="text-muted-foreground">{r.numero_documento ?? "—"}</span>
+              <span className="text-muted-foreground">{fmtDate(r.data_documento)}</span>
+              <span className="font-semibold">{fmtEur(Number(r.totale ?? 0))}</span>
+              <span className="text-muted-foreground">{Number(r.giorni_attesa ?? 0)} gg</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-4 pt-1 text-xs text-muted-foreground">
+          {(["in attesa", "da sollecitare", "critico"] as const).map((l) => (
+            <span key={l} className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: LIVELLO_COLORS[l] }} />
+              {l.charAt(0).toUpperCase() + l.slice(1)}
+            </span>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function FattureFornitori() {
