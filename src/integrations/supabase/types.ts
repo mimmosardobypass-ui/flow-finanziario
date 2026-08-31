@@ -184,6 +184,75 @@ export type Database = {
         }
         Relationships: []
       }
+      documenti_pagamenti: {
+        Row: {
+          created_at: string
+          fattura_id: string
+          id: string
+          importo_imputato: number
+          note: string | null
+          origine: string
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          fattura_id: string
+          id?: string
+          importo_imputato: number
+          note?: string | null
+          origine?: string
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          fattura_id?: string
+          id?: string
+          importo_imputato?: number
+          note?: string | null
+          origine?: string
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documenti_pagamenti_fattura_id_fkey"
+            columns: ["fattura_id"]
+            isOneToOne: false
+            referencedRelation: "fatture_fornitori"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documenti_pagamenti_fattura_id_fkey"
+            columns: ["fattura_id"]
+            isOneToOne: false
+            referencedRelation: "v_documenti_saldi"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documenti_pagamenti_fattura_id_fkey"
+            columns: ["fattura_id"]
+            isOneToOne: false
+            referencedRelation: "v_fatture_sdi_mancanti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documenti_pagamenti_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documenti_pagamenti_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "v_movimenti_copertura"
+            referencedColumns: ["transaction_id"]
+          },
+        ]
+      }
       fatture_fornitori: {
         Row: {
           category_id: string | null
@@ -194,6 +263,7 @@ export type Database = {
           data_pagamento: string | null
           data_scadenza: string | null
           data_verifica_sdi: string | null
+          direzione: string
           fornitore_id: string | null
           id: string
           identificativo_sdi: string | null
@@ -223,6 +293,7 @@ export type Database = {
           data_pagamento?: string | null
           data_scadenza?: string | null
           data_verifica_sdi?: string | null
+          direzione?: string
           fornitore_id?: string | null
           id?: string
           identificativo_sdi?: string | null
@@ -252,6 +323,7 @@ export type Database = {
           data_pagamento?: string | null
           data_scadenza?: string | null
           data_verifica_sdi?: string | null
+          direzione?: string
           fornitore_id?: string | null
           id?: string
           identificativo_sdi?: string | null
@@ -294,6 +366,13 @@ export type Database = {
             referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "fatture_fornitori_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "v_movimenti_copertura"
+            referencedColumns: ["transaction_id"]
+          },
         ]
       }
       fornitori: {
@@ -306,6 +385,7 @@ export type Database = {
           nome: string
           note: string | null
           piva: string | null
+          tipo: string
           updated_at: string
           user_id: string
         }
@@ -318,6 +398,7 @@ export type Database = {
           nome: string
           note?: string | null
           piva?: string | null
+          tipo?: string
           updated_at?: string
           user_id: string
         }
@@ -330,6 +411,7 @@ export type Database = {
           nome?: string
           note?: string | null
           piva?: string | null
+          tipo?: string
           updated_at?: string
           user_id?: string
         }
@@ -486,11 +568,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "reconciliation_suggestions_candidate_transaction_id_fkey"
+            columns: ["candidate_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "v_movimenti_copertura"
+            referencedColumns: ["transaction_id"]
+          },
+          {
             foreignKeyName: "reconciliation_suggestions_source_transaction_id_fkey"
             columns: ["source_transaction_id"]
             isOneToOne: false
             referencedRelation: "transactions"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reconciliation_suggestions_source_transaction_id_fkey"
+            columns: ["source_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "v_movimenti_copertura"
+            referencedColumns: ["transaction_id"]
           },
         ]
       }
@@ -542,6 +638,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "transactions"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scadenze_rate_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "v_movimenti_copertura"
+            referencedColumns: ["transaction_id"]
           },
         ]
       }
@@ -683,6 +786,102 @@ export type Database = {
         }
         Relationships: []
       }
+      v_documenti_saldi: {
+        Row: {
+          controparte: string | null
+          data_documento: string | null
+          data_scadenza: string | null
+          direzione: string | null
+          fornitore_id: string | null
+          giorni_scaduta: number | null
+          id: string | null
+          imputato: number | null
+          numero_documento: string | null
+          origine: string | null
+          residuo: number | null
+          sdi_mancante: boolean | null
+          segno: number | null
+          stato_pagamento: string | null
+          tipo: string | null
+          totale: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fatture_fornitori_fornitore_id_fkey"
+            columns: ["fornitore_id"]
+            isOneToOne: false
+            referencedRelation: "fornitori"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_documento_pagamenti: {
+        Row: {
+          conto: string | null
+          created_at: string | null
+          data_movimento: string | null
+          descrizione_movimento: string | null
+          fattura_id: string | null
+          importo_imputato: number | null
+          importo_movimento: number | null
+          legame_id: string | null
+          origine: string | null
+          transaction_id: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documenti_pagamenti_fattura_id_fkey"
+            columns: ["fattura_id"]
+            isOneToOne: false
+            referencedRelation: "fatture_fornitori"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documenti_pagamenti_fattura_id_fkey"
+            columns: ["fattura_id"]
+            isOneToOne: false
+            referencedRelation: "v_documenti_saldi"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documenti_pagamenti_fattura_id_fkey"
+            columns: ["fattura_id"]
+            isOneToOne: false
+            referencedRelation: "v_fatture_sdi_mancanti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documenti_pagamenti_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documenti_pagamenti_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "v_movimenti_copertura"
+            referencedColumns: ["transaction_id"]
+          },
+        ]
+      }
+      v_esposizione_controparti: {
+        Row: {
+          a_scadere: number | null
+          aperto: number | null
+          controparte: string | null
+          direzione: string | null
+          documenti: number | null
+          scaduto_1_30: number | null
+          scaduto_31_90: number | null
+          scaduto_oltre_90: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       v_fatture_sdi_mancanti: {
         Row: {
           data_documento: string | null
@@ -728,11 +927,34 @@ export type Database = {
         }
         Relationships: []
       }
+      v_movimenti_copertura: {
+        Row: {
+          amount: number | null
+          coperto: number | null
+          date: string | null
+          description: string | null
+          documenti_collegati: number | null
+          residuo: number | null
+          transaction_id: string | null
+          type: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       apply_categorization_rule: {
         Args: { p_rule_id: string; p_user_id: string }
         Returns: number
+      }
+      associa_documenti_movimento: {
+        Args: {
+          p_fattura_ids: string[]
+          p_importi?: number[]
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: Json
       }
       collega_fattura_sdi: {
         Args: {
@@ -765,6 +987,27 @@ export type Database = {
         Args: { p_items: Json; p_user_id: string }
         Returns: Json
       }
+      dissocia_documento: {
+        Args: {
+          p_fattura_id: string
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      find_combinazioni_documenti: {
+        Args: {
+          p_max_documenti?: number
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: {
+          out_controparte: string
+          out_ids: string[]
+          out_numeri: string[]
+          out_somma: number
+        }[]
+      }
       find_contropartite_mancanti: {
         Args: { p_user_id: string }
         Returns: {
@@ -780,6 +1023,31 @@ export type Database = {
           origine_importo: number
           rule_id: string
           rule_name: string
+        }[]
+      }
+      find_documenti_per_movimento: {
+        Args: {
+          p_includi_associati?: boolean
+          p_query?: string
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: {
+          controparte: string
+          data_documento: string
+          data_scadenza: string
+          direzione: string
+          effetto: number
+          fattura_id: string
+          gia_associato: boolean
+          giorni_scaduta: number
+          importo_associato: number
+          numero_documento: string
+          residuo: number
+          sdi_mancante: boolean
+          suggerito: boolean
+          tipo: string
+          totale: number
         }[]
       }
       find_pagamenti_fatture: {
@@ -901,6 +1169,10 @@ export type Database = {
           pct_med: number
           pct_min: number
         }[]
+      }
+      ricalcola_stato_documento: {
+        Args: { p_fattura_id: string }
+        Returns: undefined
       }
       seed_user_data: { Args: { user_uuid: string }; Returns: undefined }
     }
