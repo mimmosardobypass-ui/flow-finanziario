@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from "react";
-import { FileText, Upload, Plus, Link2, Trash2, Pencil, Download } from "lucide-react";
+import { FileText, Upload, Plus, Link2, Trash2, Pencil, Download, AlertTriangle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
