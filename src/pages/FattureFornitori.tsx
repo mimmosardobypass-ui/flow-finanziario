@@ -443,6 +443,14 @@ function FatturaDettaglioDialog({
             <div><Label>Totale</Label><div className="font-semibold">{fmtEur(totale)}</div></div>
             <div><Label>Stato</Label><div><StatoBadge stato={fattura.stato_pagamento} /></div></div>
           </div>
+          <OrigineFields
+            origine={origine}
+            setOrigine={setOrigine}
+            sdiMancante={sdiMancante}
+            setSdiMancante={setSdiMancante}
+            identificativoSdi={identificativoSdi}
+            setIdentificativoSdi={setIdentificativoSdi}
+          />
           <div className="space-y-2">
             <Label>Categoria di costo</Label>
             <Select value={categoryId ?? "none"} onValueChange={(v) => setCategoryId(v === "none" ? null : v)}>
