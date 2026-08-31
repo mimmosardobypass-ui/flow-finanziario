@@ -320,7 +320,12 @@ export default function FattureFornitori() {
                       <TableRow key={f.id} className="cursor-pointer" onClick={() => setSelFattura(f)}>
                         <TableCell>{fmtDate(f.data_documento)}</TableCell>
                         <TableCell className="font-medium">{f.fornitore?.nome ?? f.mittente}</TableCell>
-                        <TableCell>{f.numero_documento ?? "—"}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-2">
+                            {f.numero_documento ?? "—"}
+                            {f.sdi_mancante && <SdiMancanteBadge fattura={f} />}
+                          </span>
+                        </TableCell>
                         <TableCell><span className="text-xs text-muted-foreground">{f.tipo}</span></TableCell>
                         <TableCell className="text-right">{fmtEur(Number(f.imponibile ?? 0))}</TableCell>
                         <TableCell className="text-right">{fmtEur(Number(f.iva ?? 0))}</TableCell>
