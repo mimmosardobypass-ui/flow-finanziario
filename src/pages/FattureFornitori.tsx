@@ -34,6 +34,19 @@ import {
 } from "@/hooks/useFornitori";
 import { useCategories } from "@/hooks/useCategories";
 import { useTransactions } from "@/hooks/useTransactions";
+import { RicevuteTab } from "@/components/fatture/RicevuteTab";
+import { SituazioneTab } from "@/components/fatture/SituazioneTab";
+
+function EmesseTab() {
+  return (
+    <Card>
+      <CardContent className="py-16 text-center">
+        <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
+        <p className="text-sm text-muted-foreground">Nessuna fattura emessa nel registro</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 const fmtEur = (n: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n || 0);
@@ -398,160 +411,36 @@ export default function FattureFornitori() {
         </div>
       </div>
 
-      <Tabs defaultValue="fatture" className="space-y-4">
+      <Tabs defaultValue="situazione" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="fatture">Fatture</TabsTrigger>
+          <TabsTrigger value="situazione">Situazione</TabsTrigger>
+          <TabsTrigger value="ricevute">Ricevute</TabsTrigger>
+          <TabsTrigger value="emesse">Emesse</TabsTrigger>
           <TabsTrigger value="fornitori">Fornitori</TabsTrigger>
           <TabsTrigger value="report">Report</TabsTrigger>
         </TabsList>
 
-        {/* TAB FATTURE */}
-        <TabsContent value="fatture" className="space-y-4">
+        <TabsContent value="situazione">
+          <SituazioneTab />
+        </TabsContent>
+
+        <TabsContent value="ricevute" className="space-y-4">
+          <div className="flex flex-wrap justify-end gap-2">
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
+            <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={importMut.isPending}>
+              <Upload className="h-4 w-4" /> {importMut.isPending ? "Import..." : "Importa Excel SDI"}
+            </Button>
+            <Button onClick={() => setNewOpen(true)}>
+              <Plus className="h-4 w-4" /> Nuova Fattura
+            </Button>
+          </div>
           <SdiMancantiCard />
           <PagamentiDaAbbinareCard />
+          <RicevuteTab fatture={fattureRaw} onSelect={setSelFattura} />
+        </TabsContent>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card><CardContent className="p-4">
-              <div className="text-sm text-muted-foreground">Da pagare</div>
-              <div className="text-2xl font-bold text-red-600">{fmtEur(stats.daPagare)}</div>
-            </CardContent></Card>
-            <Card><CardContent className="p-4">
-              <div className="text-sm text-muted-foreground">Pagate</div>
-              <div className="text-2xl font-bold text-green-600">{fmtEur(stats.pagate)}</div>
-            </CardContent></Card>
-            <Card><CardContent className="p-4">
-              <div className="text-sm text-muted-foreground">Imponibile mese corrente</div>
-              <div className="text-2xl font-bold">{fmtEur(stats.imponibileMese)}</div>
-            </CardContent></Card>
-          </div>
-
-          <Card>
-            <CardContent className="p-4 space-y-4">
-              <div className="flex flex-wrap gap-3 items-end justify-between">
-                <div className="flex flex-wrap gap-2">
-                  <Select value={stato} onValueChange={setStato}>
-                    <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Tutte</SelectItem>
-                      <SelectItem value="da_pagare">Da pagare</SelectItem>
-                      <SelectItem value="pagata">Pagate</SelectItem>
-                      <SelectItem value="nota_credito">Note credito</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={fornitoreId} onValueChange={setFornitoreId}>
-                    <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Tutti i fornitori</SelectItem>
-                      {fornitori.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={String(mese)} onValueChange={(v) => setMese(v === "all" ? "all" : Number(v))}>
-                    <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Tutti i mesi</SelectItem>
-                      {MESI.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={String(anno)} onValueChange={(v) => setAnno(Number(v))}>
-                    <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {[0,1,2,3,4].map((d) => {
-                        const y = now.getFullYear() - d;
-                        return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex gap-2">
-                  <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
-                  <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={importMut.isPending}>
-                    <Upload className="h-4 w-4" /> {importMut.isPending ? "Import..." : "Importa Excel SDI"}
-                  </Button>
-                  <Button onClick={() => setNewOpen(true)}>
-                    <Plus className="h-4 w-4" /> Nuova Fattura
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex rounded-md border bg-muted/40 p-1">
-                  {([
-                    { v: "all", l: "Tutte" },
-                    { v: "solo_sdi", l: "Solo da SdI" },
-                    { v: "attesa", l: "In attesa di SdI" },
-                  ] as const).map((o) => (
-                    <button
-                      key={o.v}
-                      type="button"
-                      onClick={() => setSdiFilter(o.v)}
-                      className={`px-3 py-1.5 text-sm rounded-sm transition-colors ${
-                        sdiFilter === o.v
-                          ? "bg-background shadow-sm font-medium text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {o.l}
-                    </button>
-                  ))}
-                </div>
-                <span className="text-sm text-muted-foreground">
-                  {fatture.length} {fatture.length === 1 ? "documento" : "documenti"}
-                </span>
-              </div>
-
-
-              <div className="border rounded-md overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Fornitore</TableHead>
-                      <TableHead>Numero</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead className="text-right">Imponibile</TableHead>
-                      <TableHead className="text-right">IVA</TableHead>
-                      <TableHead className="text-right">Totale</TableHead>
-                      <TableHead>Scadenza</TableHead>
-                      <TableHead>Stato</TableHead>
-                      <TableHead className="text-center">Pag.</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading && (
-                      <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">Caricamento...</TableCell></TableRow>
-                    )}
-                    {!isLoading && fatture.length === 0 && (
-                      <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">Nessuna fattura</TableCell></TableRow>
-                    )}
-                    {fatture.map((f) => (
-                      <TableRow key={f.id} className="cursor-pointer" onClick={() => setSelFattura(f)}>
-                        <TableCell>{fmtDate(f.data_documento)}</TableCell>
-                        <TableCell className="font-medium">{f.fornitore?.nome ?? f.mittente}</TableCell>
-                        <TableCell>
-                          <span className="inline-flex items-center gap-2">
-                            {f.numero_documento ?? "—"}
-                            {f.sdi_mancante && <SdiMancanteBadge fattura={f} />}
-                          </span>
-                        </TableCell>
-                        <TableCell><span className="text-xs text-muted-foreground">{f.tipo}</span></TableCell>
-                        <TableCell className="text-right">{f.imponibile === null ? "—" : fmtEur(Number(f.imponibile))}</TableCell>
-                        <TableCell className="text-right">{f.imponibile === null ? "—" : fmtEur(Number(f.iva ?? 0))}</TableCell>
-
-                        <TableCell className="text-right font-semibold">{fmtEur(Number(f.totale))}</TableCell>
-                        <TableCell>{fmtDate(f.data_scadenza)}</TableCell>
-                        <TableCell><StatoBadge stato={f.stato_pagamento} /></TableCell>
-                        <TableCell className="text-center">
-                          <Link2 className={`h-4 w-4 inline ${f.transaction_id ? "text-green-600" : "text-orange-500"}`} />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="emesse">
+          <EmesseTab />
         </TabsContent>
 
         {/* TAB FORNITORI */}
@@ -564,6 +453,7 @@ export default function FattureFornitori() {
           <ReportTab anno={anno} setAnno={setAnno} />
         </TabsContent>
       </Tabs>
+
 
       {selFattura && (
         <FatturaDettaglioDialog
