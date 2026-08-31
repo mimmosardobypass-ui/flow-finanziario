@@ -143,6 +143,50 @@ function SdiMancantiCard() {
   );
 }
 
+function OrigineFields({
+  origine, setOrigine, sdiMancante, setSdiMancante, identificativoSdi, setIdentificativoSdi,
+}: {
+  origine: string;
+  setOrigine: (v: string) => void;
+  sdiMancante: boolean;
+  setSdiMancante: (v: boolean) => void;
+  identificativoSdi: string;
+  setIdentificativoSdi: (v: string) => void;
+}) {
+  const sdiObbligatorio = origine === "sdi";
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label>Origine documento</Label>
+        <Select value={origine} onValueChange={setOrigine}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {Object.entries(ORIGINE_LABELS).map(([v, l]) => (
+              <SelectItem key={v} value={v}>{l}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>
+          Identificativo SdI{" "}
+          {!sdiObbligatorio && <span className="text-xs font-normal text-muted-foreground">(facoltativo)</span>}
+        </Label>
+        <Input
+          value={identificativoSdi}
+          onChange={(e) => setIdentificativoSdi(e.target.value)}
+          placeholder={sdiObbligatorio ? "Identificativo SdI" : "Non necessario"}
+        />
+      </div>
+      <div className="flex items-center justify-between rounded-md border p-3">
+        <Label className="cursor-pointer">Non ancora ricevuta via SdI</Label>
+        <Switch checked={sdiMancante} onCheckedChange={setSdiMancante} />
+      </div>
+    </div>
+  );
+}
+
+
 export default function FattureFornitori() {
   const [stato, setStato] = useState("all");
   const [fornitoreId, setFornitoreId] = useState("all");
