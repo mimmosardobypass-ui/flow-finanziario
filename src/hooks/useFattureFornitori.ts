@@ -357,3 +357,154 @@ export function useImportFattureExcel() {
     onError: (e: any) => toast.error(`Import fallito: ${e?.message ?? e}`),
   });
 }
+
+/* ---------- Nuove viste documenti ---------- */
+
+export interface DocumentoSaldo {
+  id: string;
+  direzione: string;
+  tipo: string;
+  controparte: string | null;
+  numero_documento: string | null;
+  data_documento: string | null;
+  data_scadenza: string | null;
+  totale: number;
+  residuo: number;
+  imputato: number;
+  stato_pagamento: string;
+  sdi_mancante: boolean;
+  origine: string | null;
+  giorni_scaduta: number | null;
+  fornitore_id: string | null;
+}
+
+export function useDocumentiSaldi(direzione: "passiva" | "attiva") {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["documenti-saldi", user?.id, direzione],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("v_documenti_saldi")
+        .select("id, direzione, tipo, controparte, numero_documento, data_documento, data_scadenza, totale, residuo, imputato, stato_pagamento, sdi_mancante, origine, giorni_scaduta, fornitore_id")
+        .eq("direzione", direzione)
+        .order("data_documento", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((r) => ({
+        id: r.id as string,
+        direzione: r.direzione ?? direzione,
+        tipo: r.tipo ?? "Fattura",
+        controparte: r.controparte,
+        numero_documento: r.numero_documento,
+        data_documento: r.data_documento,
+        data_scadenza: r.data_scadenza,
+        totale: Number(r.totale ?? 0),
+        residuo: Number(r.residuo ?? 0),
+        imputato: Number(r.imputato ?? 0),
+        stato_pagamento: r.stato_pagamento ?? "da_pagare",
+        sdi_mancante: !!r.sdi_mancante,
+        origine: r.origine,
+        giorni_scaduta: r.giorni_scaduta === null ? null : Number(r.giorni_scaduta),
+        fornitore_id: r.fornitore_id,
+      })) as DocumentoSaldo[];
+    },
+    enabled: !!user,
+  });
+}
+
+export interface DocumentoPagamento {
+  fattura_id: string;
+  transaction_id: string;
+  importo_imputato: number;
+  data_movimento: string | null;
+  importo_movimento: number;
+  descrizione_movimento: string | null;
+  conto: string | null;
+}
+
+export function useDocumentoPagamenti(fatturaId: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["documento-pagamenti", user?.id, fatturaId],
+    queryFn: async () => {
+      if (!user || !fatturaId) return [];
+      const { data, error } = await supabase
+        .from("v_documento_pagamenti")
+        .select("fattura_id, transaction_id, importo_imputato, data_movimento, importo_movimento, descrizione_movimento, conto")
+        .eq("fattura_id", fatturaId)
+        .order("data_movimento", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((r) => ({
+        fattura_id: r.fattura_id as string,
+        transaction_id: r.transaction_id as string,
+        importo_imputato: Number(r.importo_imputato ?? 0),
+        data_movimento: r.data_movimento,
+        importo_movimento: Number(r.importo_movimento ?? 0),
+        descrizione_movimento: r.descrizione_movimento,
+        conto: r.conto,
+      })) as DocumentoPagamento[];
+    },
+    enabled: !!user && !!fatturaId,
+  });
+}
+
+export interface EsposizioneControparte {
+  controparte: string;
+  documenti: number;
+  aperto: number;
+  a_scadere: number;
+  scaduto_1_30: number;
+  scaduto_31_90: number;
+  scaduto_oltre_90: number;
+}
+
+export function useEsposizioneControparti() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["esposizione-controparti", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("v_esposizione_controparti")
+        .select("controparte, documenti, aperto, a_scadere, scaduto_1_30, scaduto_31_90, scaduto_oltre_90")
+        .order("aperto", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((r) => ({
+        controparte: r.controparte ?? "—",
+        documenti: Number(r.documenti ?? 0),
+        aperto: Number(r.aperto ?? 0),
+        a_scadere: Number(r.a_scadere ?? 0),
+        scaduto_1_30: Number(r.scaduto_1_30 ?? 0),
+        scaduto_31_90: Number(r.scaduto_31_90 ?? 0),
+        scaduto_oltre_90: Number(r.scaduto_oltre_90 ?? 0),
+      })) as EsposizioneControparte[];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useDissociaDocumento() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ fattura_id, transaction_id }: { fattura_id: string; transaction_id: string }) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase.rpc("dissocia_documento", {
+        p_user_id: user.id,
+        p_fattura_id: fattura_id,
+        p_transaction_id: transaction_id,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Pagamento staccato dal documento");
+      qc.invalidateQueries({ queryKey: ["documento-pagamenti"] });
+      qc.invalidateQueries({ queryKey: ["documenti-saldi"] });
+      qc.invalidateQueries({ queryKey: ["esposizione-controparti"] });
+      qc.invalidateQueries({ queryKey: ["fatture-fornitori"] });
+      qc.invalidateQueries({ queryKey: ["pagamenti-fatture"] });
+    },
+    onError: (e: any) => toast.error(`Operazione fallita: ${e?.message ?? e}`),
+  });
+}
