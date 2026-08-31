@@ -28,8 +28,47 @@ export interface Fattura {
   category_id: string | null;
   note: string | null;
   nome_file: string | null;
+  origine: string;
+  sdi_mancante: boolean;
+  data_verifica_sdi: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export const ORIGINE_LABELS: Record<string, string> = {
+  sdi: "Fattura elettronica (SdI)",
+  portale_fornitore: "Portale fornitore",
+  manuale: "Inserimento manuale",
+  cartacea: "Documento cartaceo",
+};
+
+export interface FatturaSdiMancante {
+  id: string;
+  mittente: string | null;
+  numero_documento: string | null;
+  data_documento: string | null;
+  totale: number | null;
+  stato_pagamento: string | null;
+  origine: string | null;
+  giorni_attesa: number | null;
+  livello: string | null;
+}
+
+export function useFattureSdiMancanti() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["fatture-sdi-mancanti", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("v_fatture_sdi_mancanti")
+        .select("id, mittente, numero_documento, data_documento, totale, stato_pagamento, origine, giorni_attesa, livello")
+        .order("giorni_attesa", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as FatturaSdiMancante[];
+    },
+    enabled: !!user,
+  });
 }
 
 export interface FatturaWithRel extends Fattura {
@@ -105,7 +144,7 @@ export function useCreateFattura() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
   });
 }
 
@@ -123,7 +162,7 @@ export function useUpdateFattura() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
   });
 }
 
@@ -134,7 +173,7 @@ export function useDeleteFattura() {
       const { error } = await supabase.from("fatture_fornitori").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
   });
 }
 
@@ -163,7 +202,7 @@ export function useCollegaTransazione() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
   });
 }
 

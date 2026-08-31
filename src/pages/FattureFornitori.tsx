@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from "react";
-import { FileText, Upload, Plus, Link2, Trash2, Pencil, Download } from "lucide-react";
+import { FileText, Upload, Plus, Link2, Trash2, Pencil, Download, AlertTriangle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +23,7 @@ import {
   useFattureFornitori, useFattureStats, useDeleteFattura,
   useUpdateFattura, useCreateFattura, useImportFattureExcel,
   useCollegaTransazione, FatturaWithRel,
+  useFattureSdiMancanti, ORIGINE_LABELS,
 } from "@/hooks/useFattureFornitori";
 import {
   useFornitori, useCreateFornitore, useUpdateFornitore, useDeleteFornitore, Fornitore,
@@ -35,11 +38,154 @@ const fmtDate = (s: string | null) =>
 
 const MESI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 
+const giorniAttesa = (d: string | null) => {
+  if (!d) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
+};
+
+const LIVELLO_COLORS: Record<string, string> = {
+  "in attesa": "#12b76a",
+  "da sollecitare": "#f79009",
+  critico: "#f04438",
+};
+
 function StatoBadge({ stato }: { stato: string }) {
   if (stato === "pagata") return <Badge className="bg-green-600 hover:bg-green-600">Pagata</Badge>;
   if (stato === "nota_credito") return <Badge variant="secondary">Nota credito</Badge>;
   return <Badge className="bg-red-600 hover:bg-red-600">Da pagare</Badge>;
 }
+
+function SdiMancanteBadge({ fattura }: { fattura: FatturaWithRel }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap"
+          style={{ backgroundColor: "#fffaeb", borderColor: "#fde3a7", color: "#b54708" }}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          Manca da SdI
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        <div className="space-y-1 text-xs">
+          <div><span className="font-semibold">Origine:</span> {ORIGINE_LABELS[fattura.origine] ?? fattura.origine ?? "—"}</div>
+          <div><span className="font-semibold">In attesa da:</span> {giorniAttesa(fattura.data_documento)} giorni</div>
+          <div><span className="font-semibold">Note:</span> {fattura.note?.trim() ? fattura.note : "nessuna nota"}</div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SdiMancantiCard() {
+  const { data: rows = [] } = useFattureSdiMancanti();
+  if (rows.length === 0) return null;
+
+  const totale = rows.reduce((s, r) => s + Number(r.totale ?? 0), 0);
+  const oltre90 = rows.filter((r) => Number(r.giorni_attesa ?? 0) > 90).length;
+  const daSollecitare = rows.filter((r) => r.livello === "da sollecitare").length;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="flex flex-row items-center gap-2 py-3" style={{ backgroundColor: "#fffaeb" }}>
+        <AlertTriangle className="h-5 w-5" style={{ color: "#b54708" }} />
+        <CardTitle className="text-base" style={{ color: "#b54708" }}>
+          Documenti non pervenuti via SdI
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 space-y-4">
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Documenti</div>
+            <div className="text-2xl font-bold">{rows.length}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Totale</div>
+            <div className="text-2xl font-bold">{fmtEur(totale)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Oltre 90 giorni</div>
+            <div className="text-2xl font-bold" style={{ color: "#f04438" }}>{oltre90}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Da sollecitare</div>
+            <div className="text-2xl font-bold" style={{ color: "#f79009" }}>{daSollecitare}</div>
+          </div>
+        </div>
+
+        <div className="divide-y border-t">
+          {rows.map((r) => (
+            <div key={r.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+              <span
+                className="h-2.5 w-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: LIVELLO_COLORS[r.livello ?? ""] ?? "#98a2b3" }}
+              />
+              <span className="font-medium flex-1 min-w-[140px]">{r.mittente ?? "—"}</span>
+              <span className="text-muted-foreground">{r.numero_documento ?? "—"}</span>
+              <span className="text-muted-foreground">{fmtDate(r.data_documento)}</span>
+              <span className="font-semibold">{fmtEur(Number(r.totale ?? 0))}</span>
+              <span className="text-muted-foreground">{Number(r.giorni_attesa ?? 0)} gg</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-4 pt-1 text-xs text-muted-foreground">
+          {(["in attesa", "da sollecitare", "critico"] as const).map((l) => (
+            <span key={l} className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: LIVELLO_COLORS[l] }} />
+              {l.charAt(0).toUpperCase() + l.slice(1)}
+            </span>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OrigineFields({
+  origine, setOrigine, sdiMancante, setSdiMancante, identificativoSdi, setIdentificativoSdi,
+}: {
+  origine: string;
+  setOrigine: (v: string) => void;
+  sdiMancante: boolean;
+  setSdiMancante: (v: boolean) => void;
+  identificativoSdi: string;
+  setIdentificativoSdi: (v: string) => void;
+}) {
+  const sdiObbligatorio = origine === "sdi";
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label>Origine documento</Label>
+        <Select value={origine} onValueChange={setOrigine}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {Object.entries(ORIGINE_LABELS).map(([v, l]) => (
+              <SelectItem key={v} value={v}>{l}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>
+          Identificativo SdI{" "}
+          {!sdiObbligatorio && <span className="text-xs font-normal text-muted-foreground">(facoltativo)</span>}
+        </Label>
+        <Input
+          value={identificativoSdi}
+          onChange={(e) => setIdentificativoSdi(e.target.value)}
+          placeholder={sdiObbligatorio ? "Identificativo SdI" : "Non necessario"}
+        />
+      </div>
+      <div className="flex items-center justify-between rounded-md border p-3">
+        <Label className="cursor-pointer">Non ancora ricevuta via SdI</Label>
+        <Switch checked={sdiMancante} onCheckedChange={setSdiMancante} />
+      </div>
+    </div>
+  );
+}
+
 
 export default function FattureFornitori() {
   const [stato, setStato] = useState("all");
@@ -49,14 +195,20 @@ export default function FattureFornitori() {
   const [mese, setMese] = useState<number | "all">("all");
   const [selFattura, setSelFattura] = useState<FatturaWithRel | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [sdiFilter, setSdiFilter] = useState<"all" | "solo_sdi" | "attesa">("all");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const { data: fatture = [], isLoading } = useFattureFornitori({
+  const { data: fattureRaw = [], isLoading } = useFattureFornitori({
     stato,
     fornitore_id: fornitoreId,
     mese: mese === "all" ? undefined : mese,
     anno,
   });
+  const fatture = useMemo(() => {
+    if (sdiFilter === "solo_sdi") return fattureRaw.filter((f) => !f.sdi_mancante);
+    if (sdiFilter === "attesa") return fattureRaw.filter((f) => f.sdi_mancante);
+    return fattureRaw;
+  }, [fattureRaw, sdiFilter]);
   const stats = useFattureStats();
   const { data: fornitori = [] } = useFornitori();
   const { data: categories = [] } = useCategories();
@@ -92,6 +244,7 @@ export default function FattureFornitori() {
 
         {/* TAB FATTURE */}
         <TabsContent value="fatture" className="space-y-4">
+          <SdiMancantiCard />
           <div className="grid gap-4 md:grid-cols-3">
             <Card><CardContent className="p-4">
               <div className="text-sm text-muted-foreground">Da pagare</div>
@@ -157,6 +310,33 @@ export default function FattureFornitori() {
                 </div>
               </div>
 
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex rounded-md border bg-muted/40 p-1">
+                  {([
+                    { v: "all", l: "Tutte" },
+                    { v: "solo_sdi", l: "Solo da SdI" },
+                    { v: "attesa", l: "In attesa di SdI" },
+                  ] as const).map((o) => (
+                    <button
+                      key={o.v}
+                      type="button"
+                      onClick={() => setSdiFilter(o.v)}
+                      className={`px-3 py-1.5 text-sm rounded-sm transition-colors ${
+                        sdiFilter === o.v
+                          ? "bg-background shadow-sm font-medium text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {o.l}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {fatture.length} {fatture.length === 1 ? "documento" : "documenti"}
+                </span>
+              </div>
+
+
               <div className="border rounded-md overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -184,7 +364,12 @@ export default function FattureFornitori() {
                       <TableRow key={f.id} className="cursor-pointer" onClick={() => setSelFattura(f)}>
                         <TableCell>{fmtDate(f.data_documento)}</TableCell>
                         <TableCell className="font-medium">{f.fornitore?.nome ?? f.mittente}</TableCell>
-                        <TableCell>{f.numero_documento ?? "—"}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-2">
+                            {f.numero_documento ?? "—"}
+                            {f.sdi_mancante && <SdiMancanteBadge fattura={f} />}
+                          </span>
+                        </TableCell>
                         <TableCell><span className="text-xs text-muted-foreground">{f.tipo}</span></TableCell>
                         <TableCell className="text-right">{fmtEur(Number(f.imponibile ?? 0))}</TableCell>
                         <TableCell className="text-right">{fmtEur(Number(f.iva ?? 0))}</TableCell>
@@ -247,6 +432,9 @@ function FatturaDettaglioDialog({
   const [categoryId, setCategoryId] = useState<string | null>(fattura.category_id);
   const [note, setNote] = useState(fattura.note ?? "");
   const [transactionId, setTransactionId] = useState<string | null>(fattura.transaction_id);
+  const [origine, setOrigine] = useState<string>(fattura.origine ?? "sdi");
+  const [sdiMancante, setSdiMancante] = useState<boolean>(!!fattura.sdi_mancante);
+  const [identificativoSdi, setIdentificativoSdi] = useState(fattura.identificativo_sdi ?? "");
   const upd = useUpdateFattura();
   const link = useCollegaTransazione();
 
@@ -260,7 +448,14 @@ function FatturaDettaglioDialog({
   const expCats = categories.filter((c) => c.type === "expense");
 
   const handleSave = async () => {
-    await upd.mutateAsync({ id: fattura.id, category_id: categoryId, note });
+    await upd.mutateAsync({
+      id: fattura.id,
+      category_id: categoryId,
+      note,
+      origine,
+      sdi_mancante: sdiMancante,
+      identificativo_sdi: identificativoSdi.trim() || null,
+    });
     if (transactionId && transactionId !== fattura.transaction_id) {
       const tx = transactions.find((t: any) => t.id === transactionId);
       await link.mutateAsync({
@@ -292,6 +487,14 @@ function FatturaDettaglioDialog({
             <div><Label>Totale</Label><div className="font-semibold">{fmtEur(totale)}</div></div>
             <div><Label>Stato</Label><div><StatoBadge stato={fattura.stato_pagamento} /></div></div>
           </div>
+          <OrigineFields
+            origine={origine}
+            setOrigine={setOrigine}
+            sdiMancante={sdiMancante}
+            setSdiMancante={setSdiMancante}
+            identificativoSdi={identificativoSdi}
+            setIdentificativoSdi={setIdentificativoSdi}
+          />
           <div className="space-y-2">
             <Label>Categoria di costo</Label>
             <Select value={categoryId ?? "none"} onValueChange={(v) => setCategoryId(v === "none" ? null : v)}>
@@ -346,6 +549,9 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
     imponibile: "",
     data_scadenza: "",
   });
+  const [origine, setOrigine] = useState("sdi");
+  const [sdiMancante, setSdiMancante] = useState(false);
+  const [identificativoSdi, setIdentificativoSdi] = useState("");
   const create = useCreateFattura();
 
   const handleSubmit = async () => {
@@ -353,10 +559,15 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
       toast.error("Mittente e totale richiesti");
       return;
     }
+    if (origine === "sdi" && !identificativoSdi.trim() && !sdiMancante) {
+      toast.error("Identificativo SdI richiesto per le fatture elettroniche");
+      return;
+    }
     const fornitore = fornitori.find((f) => f.id === form.fornitore_id);
     await create.mutateAsync({
       fornitore_id: form.fornitore_id || null,
       numero_documento: form.numero_documento || null,
+      identificativo_sdi: identificativoSdi.trim() || null,
       data_documento: form.data_documento,
       tipo: form.tipo,
       mittente: form.mittente || fornitore?.nome || "",
@@ -365,6 +576,8 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
       imponibile: form.imponibile ? Number(form.imponibile) : null,
       data_scadenza: form.data_scadenza || null,
       stato_pagamento: form.tipo === "Nota Credito" ? "nota_credito" : "da_pagare",
+      origine,
+      sdi_mancante: sdiMancante,
     });
     toast.success("Fattura creata");
     onClose();
@@ -372,7 +585,7 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Nuova fattura</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="space-y-2">
@@ -411,6 +624,14 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
             <div className="space-y-2"><Label>Totale</Label>
               <Input type="number" step="0.01" value={form.totale} onChange={(e) => setForm({ ...form, totale: e.target.value })} /></div>
           </div>
+          <OrigineFields
+            origine={origine}
+            setOrigine={setOrigine}
+            sdiMancante={sdiMancante}
+            setSdiMancante={setSdiMancante}
+            identificativoSdi={identificativoSdi}
+            setIdentificativoSdi={setIdentificativoSdi}
+          />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Annulla</Button>
