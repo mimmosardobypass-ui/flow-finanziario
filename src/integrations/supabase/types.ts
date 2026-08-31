@@ -302,6 +302,7 @@ export type Database = {
           codice_fiscale: string | null
           created_at: string
           id: string
+          match_keyword: string | null
           nome: string
           note: string | null
           piva: string | null
@@ -313,6 +314,7 @@ export type Database = {
           codice_fiscale?: string | null
           created_at?: string
           id?: string
+          match_keyword?: string | null
           nome: string
           note?: string | null
           piva?: string | null
@@ -324,6 +326,7 @@ export type Database = {
           codice_fiscale?: string | null
           created_at?: string
           id?: string
+          match_keyword?: string | null
           nome?: string
           note?: string | null
           piva?: string | null
@@ -742,6 +745,14 @@ export type Database = {
         }
         Returns: Json
       }
+      collega_pagamenti_fatture: {
+        Args: {
+          p_fattura_ids: string[]
+          p_transaction_ids: string[]
+          p_user_id: string
+        }
+        Returns: Json
+      }
       count_categorization_rule_matches: {
         Args: { p_rule_id: string; p_user_id: string }
         Returns: number
@@ -769,6 +780,24 @@ export type Database = {
           origine_importo: number
           rule_id: string
           rule_name: string
+        }[]
+      }
+      find_pagamenti_fatture: {
+        Args: { p_user_id: string }
+        Returns: {
+          candidati: number
+          confidenza: string
+          data_documento: string
+          data_pagamento: string
+          descrizione: string
+          fattura_id: string
+          giorni: number
+          importo_pagamento: number
+          mittente: string
+          numero_documento: string
+          scarto: number
+          totale: number
+          transaction_id: string
         }[]
       }
       find_reconciliation_aggregates: {
