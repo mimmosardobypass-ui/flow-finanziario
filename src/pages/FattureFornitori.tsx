@@ -371,8 +371,9 @@ export default function FattureFornitori() {
                           </span>
                         </TableCell>
                         <TableCell><span className="text-xs text-muted-foreground">{f.tipo}</span></TableCell>
-                        <TableCell className="text-right">{fmtEur(Number(f.imponibile ?? 0))}</TableCell>
-                        <TableCell className="text-right">{fmtEur(Number(f.iva ?? 0))}</TableCell>
+                        <TableCell className="text-right">{f.imponibile === null ? "—" : fmtEur(Number(f.imponibile))}</TableCell>
+                        <TableCell className="text-right">{f.imponibile === null ? "—" : fmtEur(Number(f.iva ?? 0))}</TableCell>
+
                         <TableCell className="text-right font-semibold">{fmtEur(Number(f.totale))}</TableCell>
                         <TableCell>{fmtDate(f.data_scadenza)}</TableCell>
                         <TableCell><StatoBadge stato={f.stato_pagamento} /></TableCell>
