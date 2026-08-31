@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -193,6 +193,7 @@ export type Database = {
           data_notifica: string | null
           data_pagamento: string | null
           data_scadenza: string | null
+          data_verifica_sdi: string | null
           fornitore_id: string | null
           id: string
           identificativo_sdi: string | null
@@ -203,7 +204,9 @@ export type Database = {
           nome_file: string | null
           note: string | null
           numero_documento: string | null
+          origine: string
           piva_mittente: string | null
+          sdi_mancante: boolean
           stato_pagamento: string
           tipo: string
           totale: number
@@ -219,6 +222,7 @@ export type Database = {
           data_notifica?: string | null
           data_pagamento?: string | null
           data_scadenza?: string | null
+          data_verifica_sdi?: string | null
           fornitore_id?: string | null
           id?: string
           identificativo_sdi?: string | null
@@ -229,7 +233,9 @@ export type Database = {
           nome_file?: string | null
           note?: string | null
           numero_documento?: string | null
+          origine?: string
           piva_mittente?: string | null
+          sdi_mancante?: boolean
           stato_pagamento?: string
           tipo?: string
           totale: number
@@ -245,6 +251,7 @@ export type Database = {
           data_notifica?: string | null
           data_pagamento?: string | null
           data_scadenza?: string | null
+          data_verifica_sdi?: string | null
           fornitore_id?: string | null
           id?: string
           identificativo_sdi?: string | null
@@ -255,7 +262,9 @@ export type Database = {
           nome_file?: string | null
           note?: string | null
           numero_documento?: string | null
+          origine?: string
           piva_mittente?: string | null
+          sdi_mancante?: boolean
           stato_pagamento?: string
           tipo?: string
           totale?: number
@@ -671,11 +680,67 @@ export type Database = {
         }
         Relationships: []
       }
+      v_fatture_sdi_mancanti: {
+        Row: {
+          data_documento: string | null
+          data_pagamento: string | null
+          data_verifica_sdi: string | null
+          giorni_attesa: number | null
+          id: string | null
+          livello: string | null
+          mittente: string | null
+          numero_documento: string | null
+          origine: string | null
+          stato_pagamento: string | null
+          totale: number | null
+          user_id: string | null
+        }
+        Insert: {
+          data_documento?: string | null
+          data_pagamento?: string | null
+          data_verifica_sdi?: string | null
+          giorni_attesa?: never
+          id?: string | null
+          livello?: never
+          mittente?: string | null
+          numero_documento?: string | null
+          origine?: string | null
+          stato_pagamento?: string | null
+          totale?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          data_documento?: string | null
+          data_pagamento?: string | null
+          data_verifica_sdi?: string | null
+          giorni_attesa?: never
+          id?: string | null
+          livello?: never
+          mittente?: string | null
+          numero_documento?: string | null
+          origine?: string | null
+          stato_pagamento?: string | null
+          totale?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       apply_categorization_rule: {
         Args: { p_rule_id: string; p_user_id: string }
         Returns: number
+      }
+      collega_fattura_sdi: {
+        Args: {
+          p_data_notifica?: string
+          p_mittente: string
+          p_numero: string
+          p_piva?: string
+          p_sdi: string
+          p_user_id: string
+        }
+        Returns: Json
       }
       count_categorization_rule_matches: {
         Args: { p_rule_id: string; p_user_id: string }
