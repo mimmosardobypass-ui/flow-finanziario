@@ -26,6 +26,8 @@ import {
   useUpdateFattura, useCreateFattura, useImportFattureExcel,
   useCollegaTransazione, FatturaWithRel,
   useFattureSdiMancanti, ORIGINE_LABELS,
+  usePagamentiFatture, useCollegaPagamentiFatture, PagamentoProposta,
+
 } from "@/hooks/useFattureFornitori";
 import {
   useFornitori, useCreateFornitore, useUpdateFornitore, useDeleteFornitore, Fornitore,
