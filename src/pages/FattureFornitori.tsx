@@ -483,8 +483,9 @@ function FatturaDettaglioDialog({
             <div><Label>Tipo</Label><div>{fattura.tipo}</div></div>
             <div><Label>Data documento</Label><div>{fmtDate(fattura.data_documento)}</div></div>
             <div><Label>Scadenza</Label><div>{fmtDate(fattura.data_scadenza)}</div></div>
-            <div><Label>Imponibile</Label><div>{fmtEur(Number(fattura.imponibile ?? 0))}</div></div>
-            <div><Label>IVA</Label><div>{fmtEur(Number(fattura.iva ?? 0))}</div></div>
+            <div><Label>Imponibile</Label><div>{fattura.imponibile === null ? "—" : fmtEur(Number(fattura.imponibile))}</div></div>
+            <div><Label>IVA</Label><div>{fattura.imponibile === null ? "—" : fmtEur(Number(fattura.iva ?? 0))}</div></div>
+
             <div><Label>Totale</Label><div className="font-semibold">{fmtEur(totale)}</div></div>
             <div><Label>Stato</Label><div><StatoBadge stato={fattura.stato_pagamento} /></div></div>
           </div>
