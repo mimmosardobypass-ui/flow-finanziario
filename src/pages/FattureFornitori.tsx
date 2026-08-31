@@ -266,6 +266,33 @@ export default function FattureFornitori() {
                 </div>
               </div>
 
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex rounded-md border bg-muted/40 p-1">
+                  {([
+                    { v: "all", l: "Tutte" },
+                    { v: "solo_sdi", l: "Solo da SdI" },
+                    { v: "attesa", l: "In attesa di SdI" },
+                  ] as const).map((o) => (
+                    <button
+                      key={o.v}
+                      type="button"
+                      onClick={() => setSdiFilter(o.v)}
+                      className={`px-3 py-1.5 text-sm rounded-sm transition-colors ${
+                        sdiFilter === o.v
+                          ? "bg-background shadow-sm font-medium text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {o.l}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {fatture.length} {fatture.length === 1 ? "documento" : "documenti"}
+                </span>
+              </div>
+
+
               <div className="border rounded-md overflow-x-auto">
                 <Table>
                   <TableHeader>
