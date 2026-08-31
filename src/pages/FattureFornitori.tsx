@@ -34,6 +34,19 @@ import {
 } from "@/hooks/useFornitori";
 import { useCategories } from "@/hooks/useCategories";
 import { useTransactions } from "@/hooks/useTransactions";
+import { RicevuteTab } from "@/components/fatture/RicevuteTab";
+import { SituazioneTab } from "@/components/fatture/SituazioneTab";
+
+function EmesseTab() {
+  return (
+    <Card>
+      <CardContent className="py-16 text-center">
+        <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
+        <p className="text-sm text-muted-foreground">Nessuna fattura emessa nel registro</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 const fmtEur = (n: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n || 0);
