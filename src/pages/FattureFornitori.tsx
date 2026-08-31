@@ -388,6 +388,9 @@ function FatturaDettaglioDialog({
   const [categoryId, setCategoryId] = useState<string | null>(fattura.category_id);
   const [note, setNote] = useState(fattura.note ?? "");
   const [transactionId, setTransactionId] = useState<string | null>(fattura.transaction_id);
+  const [origine, setOrigine] = useState<string>(fattura.origine ?? "sdi");
+  const [sdiMancante, setSdiMancante] = useState<boolean>(!!fattura.sdi_mancante);
+  const [identificativoSdi, setIdentificativoSdi] = useState(fattura.identificativo_sdi ?? "");
   const upd = useUpdateFattura();
   const link = useCollegaTransazione();
 
@@ -401,7 +404,14 @@ function FatturaDettaglioDialog({
   const expCats = categories.filter((c) => c.type === "expense");
 
   const handleSave = async () => {
-    await upd.mutateAsync({ id: fattura.id, category_id: categoryId, note });
+    await upd.mutateAsync({
+      id: fattura.id,
+      category_id: categoryId,
+      note,
+      origine,
+      sdi_mancante: sdiMancante,
+      identificativo_sdi: identificativoSdi.trim() || null,
+    });
     if (transactionId && transactionId !== fattura.transaction_id) {
       const tx = transactions.find((t: any) => t.id === transactionId);
       await link.mutateAsync({
