@@ -200,6 +200,7 @@ export default function FattureFornitori() {
 
         {/* TAB FATTURE */}
         <TabsContent value="fatture" className="space-y-4">
+          <SdiMancantiCard />
           <div className="grid gap-4 md:grid-cols-3">
             <Card><CardContent className="p-4">
               <div className="text-sm text-muted-foreground">Da pagare</div>
