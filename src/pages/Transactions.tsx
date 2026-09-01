@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, Check, RefreshCw, Copy, Paperclip, type LucideIcon } from "lucide-react";
 import { useMovimentiCopertura } from "@/hooks/useDocumentiMovimento";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
