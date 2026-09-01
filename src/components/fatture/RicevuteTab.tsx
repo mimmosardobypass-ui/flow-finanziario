@@ -593,6 +593,7 @@ export function RicevuteTab({
 function PagamentiCollegati({ doc }: { doc: DocumentoSaldo }) {
   const { data: pagamenti = [], isLoading } = useDocumentoPagamenti(doc.id);
   const dissocia = useDissociaDocumento();
+  const annulla = useAnnullaCompensazione();
 
   return (
     <div className="space-y-2 px-4 py-3">
@@ -602,7 +603,10 @@ function PagamentiCollegati({ doc }: { doc: DocumentoSaldo }) {
         <div className="text-sm text-muted-foreground">Nessun movimento collegato a questo documento</div>
       )}
       {pagamenti.map((p) => (
-        <div key={p.transaction_id} className="flex flex-wrap items-center gap-3 border-b py-1.5 text-sm last:border-b-0">
+        <div
+          key={p.legame_id ?? p.compensazione_id ?? p.transaction_id ?? Math.random()}
+          className="flex flex-wrap items-center gap-3 border-b py-1.5 text-sm last:border-b-0"
+        >
           <span className="whitespace-nowrap">{fmtDate(p.data_movimento)}</span>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -612,17 +616,30 @@ function PagamentiCollegati({ doc }: { doc: DocumentoSaldo }) {
             </TooltipTrigger>
             <TooltipContent className="max-w-sm">{p.descrizione_movimento ?? "—"}</TooltipContent>
           </Tooltip>
-          <span className="text-xs text-muted-foreground">{p.conto ?? "—"}</span>
+          {p.compensazione_id ? (
+            <span
+              className="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium"
+              style={{ backgroundColor: "#f5f3ff", color: "#7c3aed" }}
+            >
+              Compensazione
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">{p.conto ?? "—"}</span>
+          )}
           <span className="font-semibold">{fmtEur(p.importo_imputato)}</span>
           <button
             type="button"
             className="text-xs text-primary underline disabled:opacity-50"
-            disabled={dissocia.isPending}
-            onClick={() => dissocia.mutate({ fattura_id: doc.id, transaction_id: p.transaction_id })}
+            disabled={dissocia.isPending || annulla.isPending}
+            onClick={() => {
+              if (p.compensazione_id) annulla.mutate(p.compensazione_id);
+              else if (p.transaction_id) dissocia.mutate({ fattura_id: doc.id, transaction_id: p.transaction_id });
+            }}
           >
             stacca
           </button>
         </div>
+
       ))}
       {doc.residuo > 0.005 && (
         <div className="flex items-center justify-between pt-1 text-sm">
