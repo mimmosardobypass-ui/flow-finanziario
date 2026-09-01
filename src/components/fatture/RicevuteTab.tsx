@@ -576,6 +576,15 @@ export function RicevuteTab({
             onClose={() => { setPagaDocs(null); setSel(new Set()); }}
           />
         )}
+
+        {compensa && (
+          <CompensaDialog
+            fattura={compensa.doc}
+            note={compensa.note}
+            onClose={() => setCompensa(null)}
+          />
+        )}
+
       </CardContent>
     </Card>
   );
