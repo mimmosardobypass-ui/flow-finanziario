@@ -423,14 +423,15 @@ export function RicevuteTab({
                 <TableHead className="text-right">Residuo</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead>Categoria</TableHead>
+                <TableHead className="w-[44px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && (
-                <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">Caricamento…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="py-8 text-center text-muted-foreground">Caricamento…</TableCell></TableRow>
               )}
               {!isLoading && filtrati.length === 0 && (
-                <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">Nessun documento con i filtri attivi</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="py-8 text-center text-muted-foreground">Nessun documento con i filtri attivi</TableCell></TableRow>
               )}
               {filtrati.map((d) => {
                 const f = byId.get(d.id);
