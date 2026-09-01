@@ -513,25 +513,10 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
               />
             </Badge>
           )}
-          {(filters.dateFrom || filters.dateTo) && (
+          {dateLabel && (
             <Badge variant="secondary" className="gap-1">
-              {filters.dateFrom
-                ? format(new Date(filters.dateFrom), "dd/MM/yyyy", { locale: it })
-                : "..."}{" "}
-              -{" "}
-              {filters.dateTo
-                ? format(new Date(filters.dateTo), "dd/MM/yyyy", { locale: it })
-                : "..."}
-              <X
-                className="h-3 w-3 cursor-pointer"
-                onClick={() =>
-                  onFiltersChange({
-                    ...filters,
-                    dateFrom: undefined,
-                    dateTo: undefined,
-                  })
-                }
-              />
+              {dateLabel}
+              <X className="h-3 w-3 cursor-pointer" onClick={clearDates} />
             </Badge>
           )}
           {(filters.amountMin || filters.amountMax) && (
