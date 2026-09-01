@@ -401,6 +401,7 @@ export default function FattureFornitori() {
   const [newOpen, setNewOpen] = useState(false);
   const [sdiFilter, setSdiFilter] = useState<"all" | "solo_sdi" | "attesa">("all");
   const [search, setSearch] = useState("");
+  const [tab, setTab] = useState("situazione");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: docsPassivi = [] } = useDocumentiSaldi("passiva");
