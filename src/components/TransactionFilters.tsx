@@ -24,6 +24,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
 import { useCategories, Category, useCategoryTree } from "@/hooks/useCategories";
 import { useContiAttivi } from "@/hooks/useConti";
+import { useTransactionMonths } from "@/hooks/useTransactionMonths";
 import { TransactionFilters as FiltersType } from "@/hooks/useFilteredTransactions";
 
 interface Props {
@@ -31,9 +32,34 @@ interface Props {
   onFiltersChange: (filters: FiltersType) => void;
 }
 
+type DateMode = "range" | "month" | "year";
+
+const MESI_ABBR = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+const MESI_FULL = [
+  "Gennaio",
+  "Febbraio",
+  "Marzo",
+  "Aprile",
+  "Maggio",
+  "Giugno",
+  "Luglio",
+  "Agosto",
+  "Settembre",
+  "Ottobre",
+  "Novembre",
+  "Dicembre",
+];
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const monthStart = (y: number, m: number) => `${y}-${pad(m + 1)}-01`;
+const monthEnd = (y: number, m: number) => `${y}-${pad(m + 1)}-${pad(new Date(y, m + 1, 0).getDate())}`;
+const fmtIt = (iso: string) => format(new Date(iso), "dd/MM/yyyy", { locale: it });
+
 export function TransactionFilters({ filters, onFiltersChange }: Props) {
   const [searchInput, setSearchInput] = useState(filters.searchText || "");
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [dateMode, setDateMode] = useState<DateMode>("range");
+  const [monthYear, setMonthYear] = useState(new Date().getFullYear());
   const [amountPopoverOpen, setAmountPopoverOpen] = useState(false);
   const [amountMinInput, setAmountMinInput] = useState(filters.amountMin?.toString() || "");
   const [amountMaxInput, setAmountMaxInput] = useState(filters.amountMax?.toString() || "");
