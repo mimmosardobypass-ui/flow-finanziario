@@ -95,8 +95,14 @@ function SdiMancanteBadge({ fattura }: { fattura: FatturaWithRel }) {
   );
 }
 
-function SdiMancantiCard() {
-  const { data: rows = [] } = useFattureSdiMancanti();
+function SdiMancantiCard({ search = "" }: { search?: string }) {
+  const { data: allRows = [] } = useFattureSdiMancanti();
+  const q = search.trim().toLowerCase();
+  const rows = q
+    ? allRows.filter((r) =>
+        `${r.mittente ?? ""} ${r.numero_documento ?? ""}`.toLowerCase().includes(q)
+      )
+    : allRows;
   if (rows.length === 0) return null;
 
   const totale = rows.reduce((s, r) => s + Number(r.totale ?? 0), 0);
