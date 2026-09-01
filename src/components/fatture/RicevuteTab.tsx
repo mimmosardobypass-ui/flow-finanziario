@@ -177,6 +177,10 @@ export function RicevuteTab({
     .filter((d) => d.tipo !== "Nota Credito")
     .reduce((s, d) => s + Math.max(0, d.residuo), 0);
 
+  const pagabile = (d: DocumentoSaldo) => d.tipo !== "Nota Credito" && d.residuo > 0.005;
+  const pagabiliSelezionati = filtrati.filter((d) => sel.has(d.id) && pagabile(d));
+
+
   const azzeraTutti = () => {
     setSearch(""); setPeriodo(PERIODO_VUOTO); setPeriodoDraft(PERIODO_VUOTO); setAnno("all");
     setStati([]); setTipi([]); setImportoDa(""); setImportoA("");
