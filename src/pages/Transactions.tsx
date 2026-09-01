@@ -482,7 +482,14 @@ export default function Transactions() {
                           "-"
                         )}
                       </TableCell>
-                      <TableCell>{transaction.description || "-"}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {(coperturaMap?.get(transaction.id)?.documenti_collegati ?? 0) > 0 && (
+                            <Paperclip className="h-3.5 w-3.5 text-primary shrink-0" />
+                          )}
+                          <span>{transaction.description || "-"}</span>
+                        </div>
+                      </TableCell>
                       <TableCell
                         className={`text-right font-semibold ${
                           transaction.type === "income"
