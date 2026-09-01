@@ -749,7 +749,11 @@ export default function RiconciliazioneIntelligente() {
               </CardContent>
             </Card>
           )}
+
+          {/* PIANI A RATE PAYPAL */}
+          <PianiRateCard />
         </TabsContent>
+
 
 
         {/* TAB: REGOLE */}
