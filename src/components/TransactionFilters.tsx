@@ -307,56 +307,128 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
               }`}
             >
               <Calendar className="h-4 w-4" />
-              {filters.dateFrom || filters.dateTo ? (
-                <span className="text-sm">
-                  {filters.dateFrom
-                    ? format(new Date(filters.dateFrom), "dd/MM", { locale: it })
-                    : "..."}
-                  {" - "}
-                  {filters.dateTo
-                    ? format(new Date(filters.dateTo), "dd/MM", { locale: it })
-                    : "..."}
-                </span>
-              ) : (
-                "Data"
-              )}
+              {dateLabel ? <span className="text-sm">{dateLabel}</span> : "Data"}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-4 bg-popover border-border" align="start">
             <div className="space-y-4">
-              <div>
-                <Label className="text-sm text-muted-foreground">Da</Label>
-                <CalendarComponent
-                  mode="single"
-                  selected={filters.dateFrom ? new Date(filters.dateFrom) : undefined}
-                  onSelect={handleDateFromSelect}
-                  locale={it}
-                  className="rounded-md border border-border"
-                />
+              {/* Selettore modalità */}
+              <div className="grid grid-cols-3 gap-1 rounded-md bg-secondary p-1">
+                {([
+                  { key: "range", label: "Intervallo" },
+                  { key: "month", label: "Mese" },
+                  { key: "year", label: "Anno" },
+                ] as { key: DateMode; label: string }[]).map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setDateMode(m.key)}
+                    className={`rounded px-3 py-1.5 text-sm transition-colors ${
+                      dateMode === m.key
+                        ? "bg-background text-foreground shadow-sm font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
               </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">A</Label>
-                <CalendarComponent
-                  mode="single"
-                  selected={filters.dateTo ? new Date(filters.dateTo) : undefined}
-                  onSelect={handleDateToSelect}
-                  locale={it}
-                  className="rounded-md border border-border"
-                />
+
+              {/* Scorciatoie */}
+              <div className="flex flex-wrap gap-1.5">
+                {shortcuts().map((s) => (
+                  <Button
+                    key={s.label}
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs bg-secondary border-border"
+                    onClick={s.run}
+                  >
+                    {s.label}
+                  </Button>
+                ))}
               </div>
+
+              {dateMode === "range" && (
+                <>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Da</Label>
+                    <CalendarComponent
+                      mode="single"
+                      selected={filters.dateFrom ? new Date(filters.dateFrom) : undefined}
+                      onSelect={handleDateFromSelect}
+                      locale={it}
+                      className="rounded-md border border-border pointer-events-auto"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">A</Label>
+                    <CalendarComponent
+                      mode="single"
+                      selected={filters.dateTo ? new Date(filters.dateTo) : undefined}
+                      onSelect={handleDateToSelect}
+                      locale={it}
+                      className="rounded-md border border-border pointer-events-auto"
+                    />
+                  </div>
+                </>
+              )}
+
+              {dateMode === "month" && (
+                <div className="w-[280px] space-y-3">
+                  <Select value={String(monthYear)} onValueChange={(v) => setMonthYear(Number(v))}>
+                    <SelectTrigger className="bg-secondary border-border">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      {anniDisponibili.map((y) => (
+                        <SelectItem key={y} value={String(y)}>
+                          {y}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="grid grid-cols-4 gap-2">
+                    {MESI_ABBR.map((label, idx) => {
+                      const key = `${monthYear}-${pad(idx + 1)}`;
+                      const hasData = !mesiConDati || mesiConDati.has(key);
+                      const selected = selectedMonthKey === key;
+                      return (
+                        <Button
+                          key={key}
+                          variant={selected ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => selectMonth(monthYear, idx)}
+                          className={`${selected ? "" : "bg-secondary border-border"} ${
+                            !selected && !hasData ? "text-muted-foreground/50" : ""
+                          }`}
+                        >
+                          {label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {dateMode === "year" && (
+                <div className="grid w-[280px] grid-cols-3 gap-2">
+                  {anniDisponibili.map((y) => (
+                    <Button
+                      key={y}
+                      variant={selectedYearValue === y ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => selectYear(y)}
+                      className={selectedYearValue === y ? "" : "bg-secondary border-border"}
+                    >
+                      {y}
+                    </Button>
+                  ))}
+                </div>
+              )}
+
               {(filters.dateFrom || filters.dateTo) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    onFiltersChange({
-                      ...filters,
-                      dateFrom: undefined,
-                      dateTo: undefined,
-                    });
-                  }}
-                  className="w-full"
-                >
+                <Button variant="ghost" size="sm" onClick={clearDates} className="w-full">
                   <X className="h-4 w-4 mr-2" />
                   Pulisci date
                 </Button>
