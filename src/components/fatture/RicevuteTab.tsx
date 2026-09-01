@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -101,9 +102,16 @@ interface Periodo {
 }
 const PERIODO_VUOTO: Periodo = { campo: "documento", dal: "", al: "" };
 
+const ANNI = [2026, 2025, 2024, 2023, 2022];
+
 export function RicevuteTab({
-  fatture, onSelect,
-}: { fatture: FatturaWithRel[]; onSelect: (f: FatturaWithRel) => void }) {
+  fatture, onSelect, anno, setAnno,
+}: {
+  fatture: FatturaWithRel[];
+  onSelect: (f: FatturaWithRel) => void;
+  anno: number | "all";
+  setAnno: (v: number | "all") => void;
+}) {
   const { data: docs = [], isLoading } = useDocumentiSaldi("passiva");
   const byId = useMemo(() => new Map(fatture.map((f) => [f.id, f])), [fatture]);
 
@@ -141,6 +149,9 @@ export function RicevuteTab({
         const hay = `${d.controparte ?? ""} ${d.numero_documento ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
+      if (anno !== "all") {
+        if (!d.data_documento || Number(d.data_documento.slice(0, 4)) !== anno) return false;
+      }
       if (periodoAttivo) {
         const val = periodo.campo === "documento" ? d.data_documento : d.data_scadenza;
         if (!val) return false;
@@ -153,7 +164,7 @@ export function RicevuteTab({
       if (a !== null && d.totale > a) return false;
       return true;
     });
-  }, [docs, search, periodo, periodoAttivo, stati, tipi, importoDa, importoA]);
+  }, [docs, search, anno, periodo, periodoAttivo, stati, tipi, importoDa, importoA]);
 
   const totale = filtrati.reduce((s, d) => s + d.totale, 0);
   const residuo = filtrati
@@ -161,7 +172,7 @@ export function RicevuteTab({
     .reduce((s, d) => s + Math.max(0, d.residuo), 0);
 
   const azzeraTutti = () => {
-    setSearch(""); setPeriodo(PERIODO_VUOTO); setPeriodoDraft(PERIODO_VUOTO);
+    setSearch(""); setPeriodo(PERIODO_VUOTO); setPeriodoDraft(PERIODO_VUOTO); setAnno("all");
     setStati([]); setTipi([]); setImportoDa(""); setImportoA("");
   };
 
@@ -195,6 +206,7 @@ export function RicevuteTab({
 
   const chips: { text: string; clear: () => void }[] = [];
   if (search.trim()) chips.push({ text: `Ricerca: "${search.trim()}"`, clear: () => setSearch("") });
+  if (anno !== "all") chips.push({ text: `Anno: ${anno}`, clear: () => setAnno("all") });
   if (periodoAttivo)
     chips.push({
       text: `${periodo.campo === "documento" ? "Data documento" : "Data scadenza"}: ${
@@ -228,6 +240,17 @@ export function RicevuteTab({
             placeholder="Cerca fornitore o numero documento"
             className="h-9 w-[260px]"
           />
+
+          <Select
+            value={anno === "all" ? "all" : String(anno)}
+            onValueChange={(v) => setAnno(v === "all" ? "all" : Number(v))}
+          >
+            <SelectTrigger className="h-9 w-[150px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tutti gli anni</SelectItem>
+              {ANNI.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
 
           <FilterButton label="Periodo" active={periodoAttivo}>
             <div className="inline-flex w-full rounded-md border bg-muted/40 p-1">
@@ -275,7 +298,10 @@ export function RicevuteTab({
                 onClick={() => { setPeriodoDraft(PERIODO_VUOTO); setPeriodo(PERIODO_VUOTO); }}>
                 Azzera
               </Button>
-              <Button size="sm" className="flex-1" onClick={() => setPeriodo(periodoDraft)}>Applica</Button>
+              <Button size="sm" className="flex-1" onClick={() => {
+                setPeriodo(periodoDraft);
+                if (periodoDraft.dal || periodoDraft.al) setAnno("all");
+              }}>Applica</Button>
             </div>
           </FilterButton>
 
