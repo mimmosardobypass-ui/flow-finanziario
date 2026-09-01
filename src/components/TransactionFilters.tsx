@@ -67,6 +67,71 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
   const { data: categories = [] } = useCategories();
   const categoryTree = useCategoryTree();
   const { data: contiAttivi = [] } = useContiAttivi();
+  const { data: mesiConDati } = useTransactionMonths();
+
+  const anniDisponibili = useMemo(() => {
+    const y = new Date().getFullYear();
+    return Array.from({ length: 6 }, (_, i) => y - i);
+  }, []);
+
+  const applyRange = (from?: string, to?: string, mode: DateMode = "range") => {
+    setDateMode(mode);
+    onFiltersChange({ ...filters, dateFrom: from, dateTo: to });
+    setDatePopoverOpen(false);
+  };
+
+  const selectMonth = (y: number, m: number) => applyRange(monthStart(y, m), monthEnd(y, m), "month");
+  const selectYear = (y: number) => applyRange(`${y}-01-01`, `${y}-12-31`, "year");
+
+  const shortcuts = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    return [
+      { label: "Questo mese", run: () => { setMonthYear(y); selectMonth(y, m); } },
+      {
+        label: "Mese scorso",
+        run: () => {
+          const d = new Date(y, m - 1, 1);
+          setMonthYear(d.getFullYear());
+          selectMonth(d.getFullYear(), d.getMonth());
+        },
+      },
+      {
+        label: "Ultimi 3 mesi",
+        run: () => {
+          const start = new Date(y, m - 2, 1);
+          applyRange(monthStart(start.getFullYear(), start.getMonth()), monthEnd(y, m), "range");
+        },
+      },
+      { label: "Quest'anno", run: () => selectYear(y) },
+      { label: "Anno scorso", run: () => selectYear(y - 1) },
+    ];
+  };
+
+  const dateLabel = useMemo(() => {
+    if (!filters.dateFrom && !filters.dateTo) return null;
+    if (dateMode === "month" && filters.dateFrom) {
+      const d = new Date(filters.dateFrom);
+      return `${MESI_FULL[d.getMonth()]} ${d.getFullYear()}`;
+    }
+    if (dateMode === "year" && filters.dateFrom) {
+      return String(new Date(filters.dateFrom).getFullYear());
+    }
+    if (filters.dateFrom && filters.dateTo) return `${fmtIt(filters.dateFrom)} → ${fmtIt(filters.dateTo)}`;
+    if (filters.dateFrom) return `dal ${fmtIt(filters.dateFrom)}`;
+    return `fino al ${fmtIt(filters.dateTo!)}`;
+  }, [filters.dateFrom, filters.dateTo, dateMode]);
+
+  const clearDates = () => {
+    setDateMode("range");
+    onFiltersChange({ ...filters, dateFrom: undefined, dateTo: undefined });
+  };
+
+  const selectedMonthKey =
+    dateMode === "month" && filters.dateFrom ? filters.dateFrom.slice(0, 7) : null;
+  const selectedYearValue =
+    dateMode === "year" && filters.dateFrom ? Number(filters.dateFrom.slice(0, 4)) : null;
 
   // Filtra l'albero categorie in base al tipo selezionato
   const filteredTree = useMemo(() => {
