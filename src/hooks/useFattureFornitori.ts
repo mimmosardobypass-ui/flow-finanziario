@@ -63,7 +63,8 @@ export function useFattureSdiMancanti() {
       const { data, error } = await supabase
         .from("v_fatture_sdi_mancanti")
         .select("id, mittente, numero_documento, data_documento, totale, stato_pagamento, origine, giorni_attesa, livello")
-        .order("giorni_attesa", { ascending: false });
+        .order("giorni_attesa", { ascending: false })
+        .limit(5000);
       if (error) throw error;
       return (data ?? []) as FatturaSdiMancante[];
     },
@@ -96,7 +97,8 @@ export function useFattureFornitori(filters?: FattureFilters) {
           fornitore:fornitori (id, nome, piva),
           category:categories (id, name)
         `)
-        .order("data_documento", { ascending: false });
+        .order("data_documento", { ascending: false })
+        .limit(5000);
 
       if (filters?.stato && filters.stato !== "all") q = q.eq("stato_pagamento", filters.stato);
       if (filters?.fornitore_id && filters.fornitore_id !== "all") q = q.eq("fornitore_id", filters.fornitore_id);
@@ -388,7 +390,8 @@ export function useDocumentiSaldi(direzione: "passiva" | "attiva") {
         .from("v_documenti_saldi")
         .select("id, direzione, tipo, controparte, numero_documento, data_documento, data_scadenza, totale, residuo, imputato, stato_pagamento, sdi_mancante, origine, giorni_scaduta, fornitore_id")
         .eq("direzione", direzione)
-        .order("data_documento", { ascending: false });
+        .order("data_documento", { ascending: false })
+        .limit(5000);
       if (error) throw error;
       return (data ?? []).map((r) => ({
         id: r.id as string,
@@ -432,7 +435,8 @@ export function useDocumentoPagamenti(fatturaId: string | null) {
         .from("v_documento_pagamenti")
         .select("fattura_id, transaction_id, importo_imputato, data_movimento, importo_movimento, descrizione_movimento, conto")
         .eq("fattura_id", fatturaId)
-        .order("data_movimento", { ascending: true });
+        .order("data_movimento", { ascending: true })
+        .limit(1000);
       if (error) throw error;
       return (data ?? []).map((r) => ({
         fattura_id: r.fattura_id as string,
@@ -467,7 +471,8 @@ export function useEsposizioneControparti() {
       const { data, error } = await supabase
         .from("v_esposizione_controparti")
         .select("controparte, documenti, aperto, a_scadere, scaduto_1_30, scaduto_31_90, scaduto_oltre_90")
-        .order("aperto", { ascending: false });
+        .order("aperto", { ascending: false })
+        .limit(2000);
       if (error) throw error;
       return (data ?? []).map((r) => ({
         controparte: r.controparte ?? "—",
