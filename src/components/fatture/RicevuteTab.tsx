@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
-import { AlertTriangle, Banknote, ChevronDown, ChevronRight, MoreHorizontal, X } from "lucide-react";
+import { AlertTriangle, Banknote, ChevronDown, ChevronRight, MoreHorizontal, Scale, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,19 +14,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PagaContantiDialog } from "@/components/fatture/PagaContantiDialog";
+import { CompensaDialog } from "@/components/fatture/CompensaDialog";
 import {
   DocumentoSaldo,
   FatturaWithRel,
+  NotaCreditoCompensabile,
+  useAnnullaCompensazione,
   useDocumentiSaldi,
   useDocumentoPagamenti,
   useDissociaDocumento,
+  useFindNoteCreditoCompensabili,
 } from "@/hooks/useFattureFornitori";
 
 const fmtEur = (n: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n || 0);
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("it-IT") : "—");
 
-type StatoKey = "da_pagare" | "scaduta" | "parziale" | "pagata" | "compensare";
+type StatoKey = "da_pagare" | "scaduta" | "parziale" | "pagata" | "compensare" | "compensata";
 
 const STATI: { key: StatoKey; label: string; color: string }[] = [
   { key: "da_pagare", label: "Da pagare", color: "#98a2b3" },
@@ -33,6 +38,7 @@ const STATI: { key: StatoKey; label: string; color: string }[] = [
   { key: "parziale", label: "Parziale", color: "#2563eb" },
   { key: "pagata", label: "Pagata", color: "#12b76a" },
   { key: "compensare", label: "Da compensare", color: "#7c3aed" },
+  { key: "compensata", label: "Compensata", color: "#7c3aed" },
 ];
 
 const TIPI = ["Fattura", "Nota Credito", "Ricevuta"] as const;
@@ -43,12 +49,14 @@ const TIPO_LABEL: Record<string, string> = {
 };
 
 function statoOf(d: DocumentoSaldo): StatoKey {
-  if (d.stato_pagamento === "nota_credito" || d.stato_pagamento === "compensata") return "compensare";
+  if (d.stato_pagamento === "compensata") return "compensata";
+  if (d.stato_pagamento === "nota_credito") return "compensare";
   if (d.residuo <= 0.005) return "pagata";
   if (d.stato_pagamento === "parziale" || d.imputato > 0.005) return "parziale";
   if ((d.giorni_scaduta ?? 0) > 0) return "scaduta";
   return "da_pagare";
 }
+
 
 function StatoBadge({ k }: { k: StatoKey }) {
   const s = STATI.find((x) => x.key === k)!;
@@ -130,12 +138,28 @@ export function RicevuteTab({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [pagaDocs, setPagaDocs] = useState<DocumentoSaldo[] | null>(null);
+  const [compensa, setCompensa] = useState<{ doc: DocumentoSaldo; note: NotaCreditoCompensabile[] } | null>(null);
+  const findNote = useFindNoteCreditoCompensabili();
+
+  const apriCompensa = async (d: DocumentoSaldo) => {
+    try {
+      const note = await findNote.mutateAsync(d.id);
+      if (!note.length) {
+        toast.info("Nessuna nota di credito aperta per questo fornitore");
+        return;
+      }
+      setCompensa({ doc: d, note });
+    } catch (e: any) {
+      toast.error(`${e?.message ?? e}`);
+    }
+  };
+
 
   const periodoAttivo = !!(periodo.dal || periodo.al);
   const importoAttivo = !!(importoDa || importoA);
 
   const conteggiStato = useMemo(() => {
-    const m: Record<StatoKey, number> = { da_pagare: 0, scaduta: 0, parziale: 0, pagata: 0, compensare: 0 };
+    const m: Record<StatoKey, number> = { da_pagare: 0, scaduta: 0, parziale: 0, pagata: 0, compensare: 0, compensata: 0 };
     docs.forEach((d) => { m[statoOf(d)]++; });
     return m;
   }, [docs]);
@@ -519,6 +543,15 @@ export function RicevuteTab({
                                 <Banknote className="h-4 w-4" /> Registra pagamento in contanti
                               </DropdownMenuItem>
                             )}
+                            {pagabile(d) && (
+                              <DropdownMenuItem
+                                onClick={() => apriCompensa(d)}
+                                disabled={findNote.isPending}
+                              >
+                                <Scale className="h-4 w-4" /> Compensa con nota di credito
+                              </DropdownMenuItem>
+                            )}
+
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -543,6 +576,15 @@ export function RicevuteTab({
             onClose={() => { setPagaDocs(null); setSel(new Set()); }}
           />
         )}
+
+        {compensa && (
+          <CompensaDialog
+            fattura={compensa.doc}
+            note={compensa.note}
+            onClose={() => setCompensa(null)}
+          />
+        )}
+
       </CardContent>
     </Card>
   );
@@ -551,6 +593,7 @@ export function RicevuteTab({
 function PagamentiCollegati({ doc }: { doc: DocumentoSaldo }) {
   const { data: pagamenti = [], isLoading } = useDocumentoPagamenti(doc.id);
   const dissocia = useDissociaDocumento();
+  const annulla = useAnnullaCompensazione();
 
   return (
     <div className="space-y-2 px-4 py-3">
@@ -560,7 +603,10 @@ function PagamentiCollegati({ doc }: { doc: DocumentoSaldo }) {
         <div className="text-sm text-muted-foreground">Nessun movimento collegato a questo documento</div>
       )}
       {pagamenti.map((p) => (
-        <div key={p.transaction_id} className="flex flex-wrap items-center gap-3 border-b py-1.5 text-sm last:border-b-0">
+        <div
+          key={p.legame_id ?? p.compensazione_id ?? p.transaction_id ?? Math.random()}
+          className="flex flex-wrap items-center gap-3 border-b py-1.5 text-sm last:border-b-0"
+        >
           <span className="whitespace-nowrap">{fmtDate(p.data_movimento)}</span>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -570,17 +616,30 @@ function PagamentiCollegati({ doc }: { doc: DocumentoSaldo }) {
             </TooltipTrigger>
             <TooltipContent className="max-w-sm">{p.descrizione_movimento ?? "—"}</TooltipContent>
           </Tooltip>
-          <span className="text-xs text-muted-foreground">{p.conto ?? "—"}</span>
+          {p.compensazione_id ? (
+            <span
+              className="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium"
+              style={{ backgroundColor: "#f5f3ff", color: "#7c3aed" }}
+            >
+              Compensazione
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">{p.conto ?? "—"}</span>
+          )}
           <span className="font-semibold">{fmtEur(p.importo_imputato)}</span>
           <button
             type="button"
             className="text-xs text-primary underline disabled:opacity-50"
-            disabled={dissocia.isPending}
-            onClick={() => dissocia.mutate({ fattura_id: doc.id, transaction_id: p.transaction_id })}
+            disabled={dissocia.isPending || annulla.isPending}
+            onClick={() => {
+              if (p.compensazione_id) annulla.mutate(p.compensazione_id);
+              else if (p.transaction_id) dissocia.mutate({ fattura_id: doc.id, transaction_id: p.transaction_id });
+            }}
           >
             stacca
           </button>
         </div>
+
       ))}
       {doc.residuo > 0.005 && (
         <div className="flex items-center justify-between pt-1 text-sm">

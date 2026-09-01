@@ -148,8 +148,17 @@ function SdiMancantiCard({ search = "" }: { search?: string }) {
               <span className="font-medium flex-1 min-w-[140px]">{r.mittente ?? "—"}</span>
               <span className="text-muted-foreground">{r.numero_documento ?? "—"}</span>
               <span className="text-muted-foreground">{fmtDate(r.data_documento)}</span>
+              {r.stato_pagamento === "compensata" && (
+                <span
+                  className="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  style={{ backgroundColor: "#f5f3ff", color: "#7c3aed" }}
+                >
+                  Compensata
+                </span>
+              )}
               <span className="font-semibold">{fmtEur(Number(r.totale ?? 0))}</span>
               <span className="text-muted-foreground">{Number(r.giorni_attesa ?? 0)} gg</span>
+
             </div>
           ))}
         </div>
