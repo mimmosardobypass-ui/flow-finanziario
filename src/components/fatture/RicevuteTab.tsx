@@ -543,6 +543,15 @@ export function RicevuteTab({
                                 <Banknote className="h-4 w-4" /> Registra pagamento in contanti
                               </DropdownMenuItem>
                             )}
+                            {pagabile(d) && (
+                              <DropdownMenuItem
+                                onClick={() => apriCompensa(d)}
+                                disabled={findNote.isPending}
+                              >
+                                <Scale className="h-4 w-4" /> Compensa con nota di credito
+                              </DropdownMenuItem>
+                            )}
+
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
