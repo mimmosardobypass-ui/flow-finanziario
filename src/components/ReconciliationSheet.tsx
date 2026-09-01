@@ -59,6 +59,23 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
 
   const isReconciled = reconciliationStatus === "reconciled";
 
+  const [tab, setTab] = useState("movimenti");
+  const { data: documentiPreview = [] } = useDocumentiPerMovimento(
+    open ? (transaction?.id ?? null) : null,
+    "",
+    false,
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    if (documentiPreview.some((d) => d.suggerito)) setTab("documenti");
+  }, [open, documentiPreview]);
+
+  useEffect(() => {
+    if (open) setTab("movimenti");
+  }, [open, transaction?.id]);
+
+
   const otherGroupMembers = useMemo(
     () => groupTxns.filter((t) => t.id !== transaction?.id),
     [groupTxns, transaction?.id],
