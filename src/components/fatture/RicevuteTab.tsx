@@ -1,14 +1,18 @@
 import { Fragment, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, X } from "lucide-react";
+import { AlertTriangle, Banknote, ChevronDown, ChevronRight, MoreHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PagaContantiDialog } from "@/components/fatture/PagaContantiDialog";
 import {
   DocumentoSaldo,
   FatturaWithRel,
