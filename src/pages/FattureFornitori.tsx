@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Upload, Plus, Link2, Trash2, Pencil, Download, AlertTriangle, ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1157,9 +1157,8 @@ function ReportTab({
                 const tot = arr.reduce((a, b) => a + b, 0);
                 const aperta = openKey === k;
                 return (
-                  <>
+                  <Fragment key={k}>
                     <TableRow
-                      key={k}
                       onClick={() => setOpenKey(aperta ? null : k)}
                       className={`cursor-pointer ${aperta ? "bg-primary/5" : ""}`}
                     >
@@ -1177,7 +1176,7 @@ function ReportTab({
                       <TableCell className="text-right font-semibold">{fmtEur(tot)}</TableCell>
                     </TableRow>
                     {aperta && (
-                      <TableRow key={`${k}-det`} className="bg-primary/5 hover:bg-primary/5">
+                      <TableRow className="bg-primary/5 hover:bg-primary/5">
                         <TableCell colSpan={14} className="p-3">
                           <DettaglioFornitore
                             docs={docsPerFornitore.get(k) ?? []}
@@ -1187,7 +1186,7 @@ function ReportTab({
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
               {righe.length > 0 && (
