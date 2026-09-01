@@ -1,4 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { DocumentiMovimentoTab } from "@/components/riconciliazione/DocumentiMovimentoTab";
+import { useDocumentiPerMovimento } from "@/hooks/useDocumentiMovimento";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Link2, Unlink, Loader2, Search, Check, X } from "lucide-react";
