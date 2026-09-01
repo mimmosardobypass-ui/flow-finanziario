@@ -1,4 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { DocumentiMovimentoTab } from "@/components/riconciliazione/DocumentiMovimentoTab";
+import { useDocumentiPerMovimento } from "@/hooks/useDocumentiMovimento";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Link2, Unlink, Loader2, Search, Check, X } from "lucide-react";
@@ -55,6 +58,23 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
   const generateMutation = useGenerateSuggestionsForTransaction();
 
   const isReconciled = reconciliationStatus === "reconciled";
+
+  const [tab, setTab] = useState("movimenti");
+  const { data: documentiPreview = [] } = useDocumentiPerMovimento(
+    open ? (transaction?.id ?? null) : null,
+    "",
+    false,
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    if (documentiPreview.some((d) => d.suggerito)) setTab("documenti");
+  }, [open, documentiPreview]);
+
+  useEffect(() => {
+    if (open) setTab("movimenti");
+  }, [open, transaction?.id]);
+
 
   const otherGroupMembers = useMemo(
     () => groupTxns.filter((t) => t.id !== transaction?.id),
@@ -126,15 +146,26 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-hidden">
+      <SheetContent className="w-full sm:max-w-2xl overflow-hidden flex flex-col">
         <SheetHeader>
           <SheetTitle>Riconciliazione</SheetTitle>
           <SheetDescription>
-            Collega movimenti di conti diversi per riconciliarli.
+            Collega il movimento ad altri movimenti oppure ai documenti.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6">
+        <Tabs value={tab} onValueChange={setTab} className="mt-4 flex-1 flex flex-col overflow-hidden">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="movimenti">Movimenti</TabsTrigger>
+            <TabsTrigger value="documenti">Documenti</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="documenti" className="flex-1 overflow-hidden mt-4 data-[state=inactive]:hidden">
+            <DocumentiMovimentoTab transaction={transaction} />
+          </TabsContent>
+
+          <TabsContent value="movimenti" className="flex-1 overflow-y-auto mt-4">
+        <div className="space-y-6">
           {/* Selected transaction details */}
           <div className="rounded-lg border border-border p-4 space-y-2">
             <p className="text-sm text-muted-foreground">Movimento selezionato</p>
@@ -304,6 +335,8 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
             </div>
           )}
         </div>
+          </TabsContent>
+        </Tabs>
       </SheetContent>
     </Sheet>
   );

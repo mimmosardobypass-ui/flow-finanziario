@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, Check, RefreshCw, Copy, type LucideIcon } from "lucide-react";
+import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, Check, RefreshCw, Copy, Paperclip, type LucideIcon } from "lucide-react";
+import { useMovimentiCopertura } from "@/hooks/useDocumentiMovimento";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -113,6 +114,7 @@ export default function Transactions() {
     isFetchingNextPage,
   } = useFilteredTransactions(filters);
   const transactions = allTransactions;
+  const { data: coperturaMap } = useMovimentiCopertura();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -482,7 +484,14 @@ export default function Transactions() {
                           "-"
                         )}
                       </TableCell>
-                      <TableCell>{transaction.description || "-"}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {(coperturaMap?.get(transaction.id)?.documenti_collegati ?? 0) > 0 && (
+                            <Paperclip className="h-3.5 w-3.5 text-primary shrink-0" />
+                          )}
+                          <span>{transaction.description || "-"}</span>
+                        </div>
+                      </TableCell>
                       <TableCell
                         className={`text-right font-semibold ${
                           transaction.type === "income"

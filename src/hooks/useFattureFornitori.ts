@@ -500,6 +500,9 @@ export function useDissociaDocumento() {
     onSuccess: () => {
       toast.success("Pagamento staccato dal documento");
       qc.invalidateQueries({ queryKey: ["documento-pagamenti"] });
+      qc.invalidateQueries({ queryKey: ["documenti-per-movimento"] });
+      qc.invalidateQueries({ queryKey: ["combinazioni-documenti"] });
+      qc.invalidateQueries({ queryKey: ["movimenti-copertura"] });
       qc.invalidateQueries({ queryKey: ["documenti-saldi"] });
       qc.invalidateQueries({ queryKey: ["esposizione-controparti"] });
       qc.invalidateQueries({ queryKey: ["fatture-fornitori"] });
