@@ -35,21 +35,58 @@ import { useCategories } from "@/hooks/useCategories";
 import { useRecalculateAllSuggestions } from "@/hooks/useReconciliationSuggestions";
 import { toast } from "@/hooks/use-toast";
 
-/* ─── deterministic Ric. indicator (single source of truth) ─── */
-type ReconciliationStatus = "none" | "suggested" | "reconciled";
+/* ─── indicatore colonna "Ric." a quattro stati ─── */
+const eur = (n: number) =>
+  `${n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
-function getRicIndicator(status: string): { Icon: LucideIcon; className: string; fill?: boolean } {
-  switch (status) {
-    case "reconciled":
-      return { Icon: Check, className: "text-success" };
-    case "suggested":
-      return { Icon: Circle, className: "text-destructive", fill: true };
-    case "none":
-      return { Icon: Circle, className: "text-muted-foreground" };
-    default:
-      console.warn(`[RIC_RENDER] Unexpected reconciliation_status: "${status}"`);
-      return { Icon: Circle, className: "text-muted-foreground" };
+function RicIndicator({
+  status,
+  copertura,
+}: {
+  status: string;
+  copertura?: { coperto: number; residuo: number; documenti_collegati: number };
+}) {
+  const docs = copertura?.documenti_collegati ?? 0;
+  const residuo = copertura?.residuo ?? 0;
+  const coperto = copertura?.coperto ?? 0;
+
+  let dot: JSX.Element;
+  let tooltip: string;
+
+  if (status === "reconciled") {
+    dot = <span className="block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: "#12b76a" }} />;
+    tooltip =
+      docs > 0
+        ? `Riconciliato con un altro movimento · ${docs} ${docs === 1 ? "documento collegato" : "documenti collegati"}`
+        : "Riconciliato con un altro movimento";
+  } else if (docs > 0 && residuo <= 0.005) {
+    dot = <span className="block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: "#2563eb" }} />;
+    tooltip = `Coperto da ${docs} ${docs === 1 ? "documento" : "documenti"}`;
+  } else if (docs > 0) {
+    dot = (
+      <span
+        className="block h-3.5 w-3.5 rounded-full border-2 overflow-hidden"
+        style={{ borderColor: "#2563eb" }}
+      >
+        <span className="block h-full w-full" style={{ background: "linear-gradient(to top, #2563eb 50%, transparent 50%)" }} />
+      </span>
+    );
+    tooltip = `Coperto per ${eur(coperto)} su ${eur(coperto + residuo)}, restano ${eur(residuo)}`;
+  } else {
+    dot = <span className="block h-3.5 w-3.5 rounded-full border-2 border-muted-foreground" />;
+    tooltip = "Non riconciliato";
   }
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">{dot}</span>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 export default function Transactions() {
