@@ -114,6 +114,7 @@ export default function Transactions() {
     isFetchingNextPage,
   } = useFilteredTransactions(filters);
   const transactions = allTransactions;
+  const { data: coperturaMap } = useMovimentiCopertura();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
