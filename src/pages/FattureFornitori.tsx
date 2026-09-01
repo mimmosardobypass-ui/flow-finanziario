@@ -241,11 +241,22 @@ function motivoProposta(p: PagamentoProposta): string | null {
 
 const keyOf = (p: PagamentoProposta) => `${p.fattura_id}|${p.transaction_id}`;
 
-function PagamentiDaAbbinareCard() {
-  const { data: proposte = [] } = usePagamentiFatture();
+function PagamentiDaAbbinareCard({ search = "" }: { search?: string }) {
+  const { data: allProposte = [] } = usePagamentiFatture();
   const collegaMut = useCollegaPagamentiFatture();
   const [open, setOpen] = useState(true);
   const [sel, setSel] = useState<Set<string>>(new Set());
+
+  const q = search.trim().toLowerCase();
+  const proposte = useMemo(
+    () =>
+      q
+        ? allProposte.filter((p) =>
+            `${p.mittente ?? ""} ${p.numero_documento ?? ""}`.toLowerCase().includes(q)
+          )
+        : allProposte,
+    [allProposte, q]
+  );
 
   useEffect(() => {
     setSel(new Set(proposte.filter((p) => p.confidenza === "alta").map(keyOf)));
