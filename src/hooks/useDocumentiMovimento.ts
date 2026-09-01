@@ -132,7 +132,10 @@ export function useMovimentiCopertura() {
       if (!user) return new Map<string, MovimentoCopertura>();
       const { data, error } = await supabase
         .from("v_movimenti_copertura")
-        .select("transaction_id, coperto, residuo, documenti_collegati");
+        .select("transaction_id, coperto, residuo, documenti_collegati")
+        .gt("documenti_collegati", 0)
+        .limit(5000);
+
       if (error) throw error;
       const map = new Map<string, MovimentoCopertura>();
       for (const r of data ?? []) {
