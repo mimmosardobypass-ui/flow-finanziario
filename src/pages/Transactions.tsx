@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, Check, RefreshCw, Copy, Paperclip, type LucideIcon } from "lucide-react";
 import { useMovimentiCopertura } from "@/hooks/useDocumentiMovimento";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -35,21 +36,58 @@ import { useCategories } from "@/hooks/useCategories";
 import { useRecalculateAllSuggestions } from "@/hooks/useReconciliationSuggestions";
 import { toast } from "@/hooks/use-toast";
 
-/* ─── deterministic Ric. indicator (single source of truth) ─── */
-type ReconciliationStatus = "none" | "suggested" | "reconciled";
+/* ─── indicatore colonna "Ric." a quattro stati ─── */
+const eur = (n: number) =>
+  `${n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
-function getRicIndicator(status: string): { Icon: LucideIcon; className: string; fill?: boolean } {
-  switch (status) {
-    case "reconciled":
-      return { Icon: Check, className: "text-success" };
-    case "suggested":
-      return { Icon: Circle, className: "text-destructive", fill: true };
-    case "none":
-      return { Icon: Circle, className: "text-muted-foreground" };
-    default:
-      console.warn(`[RIC_RENDER] Unexpected reconciliation_status: "${status}"`);
-      return { Icon: Circle, className: "text-muted-foreground" };
+function RicIndicator({
+  status,
+  copertura,
+}: {
+  status: string;
+  copertura?: { coperto: number; residuo: number; documenti_collegati: number };
+}) {
+  const docs = copertura?.documenti_collegati ?? 0;
+  const residuo = copertura?.residuo ?? 0;
+  const coperto = copertura?.coperto ?? 0;
+
+  let dot: JSX.Element;
+  let tooltip: string;
+
+  if (status === "reconciled") {
+    dot = <span className="block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: "#12b76a" }} />;
+    tooltip =
+      docs > 0
+        ? `Riconciliato con un altro movimento · ${docs} ${docs === 1 ? "documento collegato" : "documenti collegati"}`
+        : "Riconciliato con un altro movimento";
+  } else if (docs > 0 && residuo <= 0.005) {
+    dot = <span className="block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: "#2563eb" }} />;
+    tooltip = `Coperto da ${docs} ${docs === 1 ? "documento" : "documenti"}`;
+  } else if (docs > 0) {
+    dot = (
+      <span
+        className="block h-3.5 w-3.5 rounded-full border-2 overflow-hidden"
+        style={{ borderColor: "#2563eb" }}
+      >
+        <span className="block h-full w-full" style={{ background: "linear-gradient(to top, #2563eb 50%, transparent 50%)" }} />
+      </span>
+    );
+    tooltip = `Coperto per ${eur(coperto)} su ${eur(coperto + residuo)}, restano ${eur(residuo)}`;
+  } else {
+    dot = <span className="block h-3.5 w-3.5 rounded-full border-2 border-muted-foreground" />;
+    tooltip = "Non riconciliato";
   }
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">{dot}</span>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 export default function Transactions() {
@@ -157,14 +195,27 @@ export default function Transactions() {
       return true;
     });
 
-    if (!normalizedSearchText) {
-      return uniqueTransactions;
+    let result = uniqueTransactions;
+
+    if (normalizedSearchText) {
+      result = result.filter((transaction) =>
+        (transaction.description || "").toLowerCase().includes(normalizedSearchText)
+      );
     }
 
-    return uniqueTransactions.filter((transaction) =>
-      (transaction.description || "").toLowerCase().includes(normalizedSearchText)
-    );
-  }, [transactions, normalizedSearchText]);
+    if (filters.reconciliation === "with_documents") {
+      result = result.filter(
+        (t) => (coperturaMap?.get(t.id)?.documenti_collegati ?? 0) > 0
+      );
+    } else if (filters.reconciliation === "partially_covered") {
+      result = result.filter((t) => {
+        const c = coperturaMap?.get(t.id);
+        return (c?.documenti_collegati ?? 0) > 0 && (c?.residuo ?? 0) > 0.005;
+      });
+    }
+
+    return result;
+  }, [transactions, normalizedSearchText, filters.reconciliation, coperturaMap]);
   const searchDebug = useMemo(() => {
     if (!normalizedSearchText) return null;
 
@@ -515,13 +566,10 @@ export default function Transactions() {
                         </div>
                       </TableCell>
                       <TableCell className="print:hidden">
-                        {(() => {
-                          const status = (transaction as any).reconciliation_status || "none";
-                          const { Icon, className, fill } = getRicIndicator(status);
-                          return (
-                            <Icon className={`h-4 w-4 ${className}`} fill={fill ? "currentColor" : "none"} />
-                          );
-                        })()}
+                        <RicIndicator
+                          status={(transaction as any).reconciliation_status || "none"}
+                          copertura={coperturaMap?.get(transaction.id)}
+                        />
                       </TableCell>
                       <TableCell className="print:hidden">
                         <div className="flex gap-1">

@@ -14,7 +14,14 @@ export interface TransactionFilters {
   dateTo?: string;
   amountMin?: number;
   amountMax?: number;
-  reconciliation?: "all" | "none" | "suggested" | "reconciled" | "not_reconciled";
+  reconciliation?:
+    | "all"
+    | "none"
+    | "suggested"
+    | "reconciled"
+    | "not_reconciled"
+    | "with_documents"
+    | "partially_covered";
 }
 
 const PAGE_SIZE = 50;
@@ -86,7 +93,14 @@ export function useFilteredTransactions(filters: TransactionFilters) {
       if (filters.amountMin !== undefined && filters.amountMin > 0) q = q.gte("amount", filters.amountMin);
       if (filters.amountMax !== undefined && filters.amountMax > 0) q = q.lte("amount", filters.amountMax);
 
-      if (filters.reconciliation && filters.reconciliation !== "all") {
+      // "with_documents" e "partially_covered" dipendono dalla vista di copertura
+      // documentale e vengono applicati lato client nella pagina Transazioni.
+      if (
+        filters.reconciliation &&
+        filters.reconciliation !== "all" &&
+        filters.reconciliation !== "with_documents" &&
+        filters.reconciliation !== "partially_covered"
+      ) {
         if (filters.reconciliation === "not_reconciled") {
           q = q.in("reconciliation_status", ["none", "suggested"]);
         } else {
