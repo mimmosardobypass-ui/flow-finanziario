@@ -389,6 +389,14 @@ export function RicevuteTab({
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Button size="sm" variant="secondary">Assegna categoria</Button>
               <Button size="sm" variant="secondary">Associa a un pagamento</Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={pagabiliSelezionati.length === 0}
+                onClick={() => setPagaDocs(pagabiliSelezionati)}
+              >
+                <Banknote className="h-4 w-4" /> Paga in contanti
+              </Button>
               <Button size="sm" variant="secondary" onClick={esportaSelezione}>Esporta selezione</Button>
               <button type="button" onClick={() => setSel(new Set())} className="text-slate-300 hover:text-white">
                 <X className="h-4 w-4" />
