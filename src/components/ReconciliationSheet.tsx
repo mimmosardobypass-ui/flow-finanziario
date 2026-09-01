@@ -315,6 +315,8 @@ export function ReconciliationSheet({ open, onOpenChange, transaction }: Props) 
             </div>
           )}
         </div>
+          </TabsContent>
+        </Tabs>
       </SheetContent>
     </Sheet>
   );
