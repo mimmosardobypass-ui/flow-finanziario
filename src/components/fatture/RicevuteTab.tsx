@@ -501,10 +501,31 @@ export function RicevuteTab({
                       <TableCell className="align-top text-sm text-muted-foreground">
                         {f?.category?.name ?? "—"}
                       </TableCell>
+                      <TableCell className="align-top">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {f && (
+                              <DropdownMenuItem onClick={() => onSelect(f)}>
+                                Apri dettaglio documento
+                              </DropdownMenuItem>
+                            )}
+                            {pagabile(d) && (
+                              <DropdownMenuItem onClick={() => setPagaDocs([d])}>
+                                <Banknote className="h-4 w-4" /> Registra pagamento in contanti
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
                     </TableRow>
                     {expanded === d.id && (
                       <TableRow className="hover:bg-transparent">
-                        <TableCell colSpan={10} className="bg-muted/30 p-0">
+                        <TableCell colSpan={11} className="bg-muted/30 p-0">
                           <PagamentiCollegati doc={d} />
                         </TableCell>
                       </TableRow>
@@ -515,6 +536,13 @@ export function RicevuteTab({
             </TableBody>
           </Table>
         </div>
+
+        {pagaDocs && pagaDocs.length > 0 && (
+          <PagaContantiDialog
+            docs={pagaDocs}
+            onClose={() => { setPagaDocs(null); setSel(new Set()); }}
+          />
+        )}
       </CardContent>
     </Card>
   );
