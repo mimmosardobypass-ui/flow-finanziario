@@ -457,6 +457,36 @@ export function useDocumentoPagamenti(fatturaId: string | null) {
   });
 }
 
+/** Ultima data di pagamento per un insieme di documenti (per il Report). */
+export function useDatePagamentoDocumenti(fatturaIds: string[]) {
+  const { user } = useAuth();
+  const key = [...fatturaIds].sort().join(",");
+  return useQuery({
+    queryKey: ["date-pagamento-documenti", user?.id, key],
+    queryFn: async () => {
+      const map: Record<string, string> = {};
+      if (!user || fatturaIds.length === 0) return map;
+      const chunk = 200;
+      for (let i = 0; i < fatturaIds.length; i += chunk) {
+        const { data, error } = await supabase
+          .from("v_documento_pagamenti")
+          .select("fattura_id, data_movimento")
+          .in("fattura_id", fatturaIds.slice(i, i + chunk))
+          .limit(5000);
+        if (error) throw error;
+        (data ?? []).forEach((r) => {
+          const id = r.fattura_id as string;
+          const d = r.data_movimento as string | null;
+          if (!id || !d) return;
+          if (!map[id] || d > map[id]) map[id] = d;
+        });
+      }
+      return map;
+    },
+    enabled: !!user && fatturaIds.length > 0,
+  });
+}
+
 /* ---------- Compensazione fattura ↔ nota di credito ---------- */
 
 export interface NotaCreditoCompensabile {
