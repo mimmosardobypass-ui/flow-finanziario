@@ -15,6 +15,8 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { ReconciliationRuleDialog } from "@/components/ReconciliationRuleDialog";
+import { PianiRateCard } from "@/components/riconciliazione/PianiRateCard";
+
 import {
   useReconciliationRules,
   useCreateReconciliationRule,
