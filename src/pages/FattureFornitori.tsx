@@ -449,7 +449,7 @@ export default function FattureFornitori() {
         </div>
       </div>
 
-      <Tabs defaultValue="situazione" className="space-y-4">
+      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="situazione">Situazione</TabsTrigger>
           <TabsTrigger value="ricevute">Ricevute</TabsTrigger>
