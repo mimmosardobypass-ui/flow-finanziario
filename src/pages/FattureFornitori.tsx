@@ -367,7 +367,8 @@ export default function FattureFornitori() {
   const [stato, setStato] = useState("all");
   const [fornitoreId, setFornitoreId] = useState("all");
   const now = new Date();
-  const [anno, setAnno] = useState<number>(now.getFullYear());
+  const [anno, setAnno] = useState<number | "all">("all");
+  const [annoReport, setAnnoReport] = useState<number>(now.getFullYear());
   const [mese, setMese] = useState<number | "all">("all");
   const [selFattura, setSelFattura] = useState<FatturaWithRel | null>(null);
   const [newOpen, setNewOpen] = useState(false);
@@ -378,7 +379,7 @@ export default function FattureFornitori() {
     stato,
     fornitore_id: fornitoreId,
     mese: mese === "all" ? undefined : mese,
-    anno,
+    anno: anno === "all" ? undefined : anno,
   });
   const fatture = useMemo(() => {
     if (sdiFilter === "solo_sdi") return fattureRaw.filter((f) => !f.sdi_mancante);
@@ -436,7 +437,7 @@ export default function FattureFornitori() {
           </div>
           <SdiMancantiCard />
           <PagamentiDaAbbinareCard />
-          <RicevuteTab fatture={fattureRaw} onSelect={setSelFattura} />
+          <RicevuteTab fatture={fattureRaw} onSelect={setSelFattura} anno={anno} setAnno={setAnno} />
         </TabsContent>
 
         <TabsContent value="emesse">
@@ -450,7 +451,7 @@ export default function FattureFornitori() {
 
         {/* TAB REPORT */}
         <TabsContent value="report">
-          <ReportTab anno={anno} setAnno={setAnno} />
+          <ReportTab anno={annoReport} setAnno={setAnnoReport} />
         </TabsContent>
       </Tabs>
 
