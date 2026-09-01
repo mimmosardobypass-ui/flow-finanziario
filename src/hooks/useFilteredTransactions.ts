@@ -14,7 +14,14 @@ export interface TransactionFilters {
   dateTo?: string;
   amountMin?: number;
   amountMax?: number;
-  reconciliation?: "all" | "none" | "suggested" | "reconciled" | "not_reconciled";
+  reconciliation?:
+    | "all"
+    | "none"
+    | "suggested"
+    | "reconciled"
+    | "not_reconciled"
+    | "with_documents"
+    | "partially_covered";
 }
 
 const PAGE_SIZE = 50;
