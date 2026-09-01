@@ -347,19 +347,20 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
           onValueChange={(v) =>
             onFiltersChange({
               ...filters,
-              reconciliation: v as "all" | "none" | "suggested" | "reconciled" | "not_reconciled",
+              reconciliation: v as FiltersType["reconciliation"],
             })
           }
         >
-          <SelectTrigger className="w-[170px] bg-secondary border-border">
+          <SelectTrigger className="w-[230px] bg-secondary border-border">
             <Link2 className="h-4 w-4 mr-2" />
             <SelectValue placeholder="Riconciliazione" />
           </SelectTrigger>
           <SelectContent className="bg-popover border-border">
             <SelectItem value="all">Tutti</SelectItem>
-            <SelectItem value="suggested">Con proposte</SelectItem>
+            <SelectItem value="reconciled">Riconciliati con un movimento</SelectItem>
+            <SelectItem value="with_documents">Con documenti collegati</SelectItem>
+            <SelectItem value="partially_covered">Parzialmente coperti</SelectItem>
             <SelectItem value="not_reconciled">Non riconciliati</SelectItem>
-            <SelectItem value="reconciled">Riconciliati</SelectItem>
           </SelectContent>
         </Select>
 
