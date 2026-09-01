@@ -436,14 +436,16 @@ export function useDocumentoPagamenti(fatturaId: string | null) {
       if (!user || !fatturaId) return [];
       const { data, error } = await supabase
         .from("v_documento_pagamenti")
-        .select("fattura_id, transaction_id, importo_imputato, data_movimento, importo_movimento, descrizione_movimento, conto")
+        .select("fattura_id, transaction_id, compensazione_id, legame_id, importo_imputato, data_movimento, importo_movimento, descrizione_movimento, conto")
         .eq("fattura_id", fatturaId)
         .order("data_movimento", { ascending: true })
         .limit(1000);
       if (error) throw error;
       return (data ?? []).map((r) => ({
         fattura_id: r.fattura_id as string,
-        transaction_id: r.transaction_id as string,
+        transaction_id: r.transaction_id,
+        compensazione_id: r.compensazione_id,
+        legame_id: r.legame_id,
         importo_imputato: Number(r.importo_imputato ?? 0),
         data_movimento: r.data_movimento,
         importo_movimento: Number(r.importo_movimento ?? 0),
@@ -454,6 +456,93 @@ export function useDocumentoPagamenti(fatturaId: string | null) {
     enabled: !!user && !!fatturaId,
   });
 }
+
+/* ---------- Compensazione fattura ↔ nota di credito ---------- */
+
+export interface NotaCreditoCompensabile {
+  nota_id: string;
+  numero_documento: string | null;
+  data_documento: string | null;
+  totale: number;
+  residuo: number;
+  compensabile: number;
+}
+
+/** Carica (on demand) le note di credito compensabili con una fattura. */
+export function useFindNoteCreditoCompensabili() {
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (fatturaId: string) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase.rpc("find_note_credito_compensabili", {
+        p_user_id: user.id,
+        p_fattura_id: fatturaId,
+      });
+      if (error) throw error;
+      return (data ?? []).map((r) => ({
+        nota_id: r.nota_id,
+        numero_documento: r.numero_documento,
+        data_documento: r.data_documento,
+        totale: Number(r.totale ?? 0),
+        residuo: Number(r.residuo ?? 0),
+        compensabile: Number(r.compensabile ?? 0),
+      })) as NotaCreditoCompensabile[];
+    },
+  });
+}
+
+function invalidaDocumenti(qc: ReturnType<typeof useQueryClient>) {
+  [
+    "fatture-fornitori", "fatture-sdi-mancanti", "documenti-saldi", "documento-pagamenti",
+    "esposizione-controparti", "pagamenti-fatture", "documenti-per-movimento",
+    "combinazioni-documenti", "movimenti-copertura",
+  ].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+}
+
+export function useCompensaDocumenti() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { fattura_id: string; nota_id: string; importo?: number | null; data?: string | null }) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase.rpc("compensa_documenti", {
+        p_user_id: user.id,
+        p_fattura_id: input.fattura_id,
+        p_nota_id: input.nota_id,
+        p_importo: input.importo ?? undefined,
+        p_data: input.data ?? undefined,
+      });
+      if (error) throw error;
+      return data as unknown as {
+        compensazione_id: string; importo: number; fattura: string; nota: string;
+        residuo_fattura: number; residuo_nota: number;
+      };
+    },
+    onSuccess: () => invalidaDocumenti(qc),
+  });
+}
+
+export function useAnnullaCompensazione() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (compensazioneId: string) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase.rpc("annulla_compensazione", {
+        p_user_id: user.id,
+        p_compensazione_id: compensazioneId,
+      });
+      if (error) throw error;
+      return data as unknown as { righe_rimosse: number };
+    },
+    onSuccess: () => {
+      toast.success("Compensazione annullata");
+      invalidaDocumenti(qc);
+    },
+    onError: (e: any) => toast.error(`${e?.message ?? e}`),
+  });
+}
+
 
 export interface EsposizioneControparte {
   controparte: string;
