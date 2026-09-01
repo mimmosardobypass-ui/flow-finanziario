@@ -917,10 +917,130 @@ function FornitoreDialog({
 }
 
 /* ----- Tab Report ----- */
-function ReportTab({ anno, setAnno }: { anno: number; setAnno: (n: number) => void }) {
+type CampoReport = "totale" | "netto";
+
+function StatoDocBadge({ stato, tipo }: { stato: string; tipo: string }) {
+  const isNota = /nota/i.test(tipo || "");
+  if (isNota && stato !== "pagata")
+    return <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">Da compensare</Badge>;
+  if (stato === "pagata" || stato === "compensata")
+    return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Pagata</Badge>;
+  if (stato === "parziale")
+    return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Parziale</Badge>;
+  return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Da pagare</Badge>;
+}
+
+function DettaglioFornitore({
+  docs,
+  nome,
+  onApriRicevute,
+}: {
+  docs: DocumentoSaldo[];
+  nome: string;
+  onApriRicevute: (nome: string) => void;
+}) {
+  const ids = useMemo(() => docs.map((d) => d.id), [docs]);
+  const { data: datePag = {} } = useDatePagamentoDocumenti(ids);
+
+  const isNota = (t: string) => /nota/i.test(t || "");
+  const totale = docs.reduce((s, d) => s + (isNota(d.tipo) ? -d.totale : d.totale), 0);
+  const residuo = docs.reduce((s, d) => s + (isNota(d.tipo) ? 0 : d.residuo), 0);
+  const pagato = totale - residuo;
+
+  return (
+    <div className="space-y-4 rounded-md border bg-muted/20 p-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {[
+          { l: "Documenti", v: String(docs.length), c: "" },
+          { l: "Totale", v: fmtEur(totale), c: "" },
+          { l: "Pagato", v: fmtEur(pagato), c: "" },
+          {
+            l: "Ancora da pagare",
+            v: fmtEur(residuo),
+            c: residuo > 0 ? "text-red-600" : "text-muted-foreground",
+          },
+        ].map((s) => (
+          <div key={s.l} className="rounded-md border bg-background p-3">
+            <p className="text-xs text-muted-foreground">{s.l}</p>
+            <p className={`text-lg font-semibold tabular-nums ${s.c}`}>{s.v}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-md border bg-background">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="min-w-[160px]">Documento</TableHead>
+              <TableHead>Data</TableHead>
+              <TableHead className="text-right">Importo</TableHead>
+              <TableHead>Stato</TableHead>
+              <TableHead className="text-right">Pagamento</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {docs.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="py-4 text-center text-muted-foreground">
+                  Nessun documento
+                </TableCell>
+              </TableRow>
+            )}
+            {docs.map((d) => (
+              <TableRow key={d.id}>
+                <TableCell>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{d.numero_documento ?? "—"}</span>
+                    {d.sdi_mancante && (
+                      <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">manca da SdI</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{d.tipo}</p>
+                </TableCell>
+                <TableCell className="whitespace-nowrap">{fmtDate(d.data_documento)}</TableCell>
+                <TableCell className="text-right tabular-nums">{fmtEur(d.totale)}</TableCell>
+                <TableCell><StatoDocBadge stato={d.stato_pagamento} tipo={d.tipo} /></TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground whitespace-nowrap">
+                  {datePag[d.id]
+                    ? `pagata il ${fmtDate(datePag[d.id])}`
+                    : `residuo ${fmtEur(d.residuo)}`}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onApriRicevute(nome)}
+        className="text-sm font-medium text-primary hover:underline"
+      >
+        Apri tutte le fatture di {nome} nella scheda Ricevute →
+      </button>
+    </div>
+  );
+}
+
+function ReportTab({
+  anno,
+  setAnno,
+  search,
+  onApriRicevute,
+}: {
+  anno: number;
+  setAnno: (n: number) => void;
+  search: string;
+  onApriRicevute: (nome: string) => void;
+}) {
   const { data: fatture = [] } = useFattureFornitori({ anno });
   const { data: fornitori = [] } = useFornitori();
-  const { data: categories = [] } = useCategories();
+  const { data: docsPassivi = [] } = useDocumentiSaldi("passiva");
+  const [campo, setCampo] = useState<CampoReport>("totale");
+  const [openKey, setOpenKey] = useState<string | null>(null);
+
+  const labelFornitore = (id: string) =>
+    id === "altri" ? "(senza fornitore)" : fornitori.find((f) => f.id === id)?.nome ?? "—";
 
   const matrixFornitori = useMemo(() => {
     const map = new Map<string, number[]>();
@@ -928,43 +1048,42 @@ function ReportTab({ anno, setAnno }: { anno: number; setAnno: (n: number) => vo
       const key = f.fornitore_id ?? "altri";
       if (!map.has(key)) map.set(key, Array(12).fill(0));
       const m = new Date(f.data_documento).getMonth();
-      map.get(key)![m] += Number(f.imponibile ?? f.totale ?? 0);
+      const val = campo === "totale" ? Number(f.totale ?? 0) : Number(f.imponibile ?? f.totale ?? 0);
+      map.get(key)![m] += val;
     });
     return map;
-  }, [fatture]);
+  }, [fatture, campo]);
 
-  const matrixCategorie = useMemo(() => {
-    const map = new Map<string, number[]>();
-    fatture.forEach((f) => {
-      const key = f.category_id ?? "altri";
-      if (!map.has(key)) map.set(key, Array(12).fill(0));
-      const m = new Date(f.data_documento).getMonth();
-      map.get(key)![m] += Number(f.imponibile ?? f.totale ?? 0);
+  const righe = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return Array.from(matrixFornitori.entries()).filter(([k]) =>
+      !q || labelFornitore(k).toLowerCase().includes(q)
+    );
+  }, [matrixFornitori, search, fornitori]);
+
+  const docsPerFornitore = useMemo(() => {
+    const map = new Map<string, DocumentoSaldo[]>();
+    docsPassivi.forEach((d) => {
+      if (!d.data_documento || Number(d.data_documento.slice(0, 4)) !== anno) return;
+      const key = d.fornitore_id ?? "altri";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(d);
     });
     return map;
-  }, [fatture]);
+  }, [docsPassivi, anno]);
 
-  const labelFornitore = (id: string) =>
-    id === "altri" ? "(senza fornitore)" : fornitori.find((f) => f.id === id)?.nome ?? "—";
-  const labelCategoria = (id: string) =>
-    id === "altri" ? "(senza categoria)" : categories.find((c) => c.id === id)?.name ?? "—";
+  const totColonne = Array(12).fill(0);
+  righe.forEach(([, arr]) => arr.forEach((v, i) => (totColonne[i] += v)));
+  const totGen = totColonne.reduce((a, b) => a + b, 0);
 
   const exportCsv = () => {
     const rows: string[] = [];
-    rows.push(`Report Fatture Fornitori ${anno}`);
+    rows.push(`Report Fatture Fornitori ${anno} (${campo === "totale" ? "Totale documento" : "Netto"})`);
     rows.push("");
-    rows.push("FORNITORI");
     rows.push(["Fornitore", ...MESI, "Totale"].join(";"));
-    matrixFornitori.forEach((arr, k) => {
+    righe.forEach(([k, arr]) => {
       const tot = arr.reduce((a, b) => a + b, 0);
       rows.push([labelFornitore(k), ...arr.map((n) => n.toFixed(2)), tot.toFixed(2)].join(";"));
-    });
-    rows.push("");
-    rows.push("CATEGORIE");
-    rows.push(["Categoria", ...MESI, "Totale"].join(";"));
-    matrixCategorie.forEach((arr, k) => {
-      const tot = arr.reduce((a, b) => a + b, 0);
-      rows.push([labelCategoria(k), ...arr.map((n) => n.toFixed(2)), tot.toFixed(2)].join(";"));
     });
     const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -973,43 +1092,96 @@ function ReportTab({ anno, setAnno }: { anno: number; setAnno: (n: number) => vo
     URL.revokeObjectURL(url);
   };
 
-  const renderMatrix = (
-    title: string,
-    matrix: Map<string, number[]>,
-    label: (k: string) => string
-  ) => {
-    const totColonne = Array(12).fill(0);
-    matrix.forEach((arr) => arr.forEach((v, i) => (totColonne[i] += v)));
-    const totGen = totColonne.reduce((a, b) => a + b, 0);
-    return (
+  const now = new Date().getFullYear();
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={String(anno)} onValueChange={(v) => setAnno(Number(v))}>
+            <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {[0, 1, 2, 3, 4].map((d) => {
+                const y = now - d;
+                return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
+              })}
+            </SelectContent>
+          </Select>
+          <div className="inline-flex rounded-md border p-0.5">
+            {([
+              { v: "totale", l: "Totale documento" },
+              { v: "netto", l: "Netto" },
+            ] as { v: CampoReport; l: string }[]).map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                onClick={() => setCampo(o.v)}
+                className={`rounded px-3 py-1.5 text-sm transition-colors ${
+                  campo === o.v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {o.l}
+              </button>
+            ))}
+          </div>
+        </div>
+        <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4" /> Esporta CSV</Button>
+      </div>
+
       <Card>
-        <CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Fornitori</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="min-w-[180px]">{title}</TableHead>
+                <TableHead className="min-w-[220px]">Fornitore</TableHead>
                 {MESI.map((m) => <TableHead key={m} className="text-right">{m}</TableHead>)}
                 <TableHead className="text-right">Totale</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {matrix.size === 0 && (
-                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground py-4">Nessun dato</TableCell></TableRow>
+              {righe.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={14} className="py-4 text-center text-muted-foreground">Nessun dato</TableCell>
+                </TableRow>
               )}
-              {Array.from(matrix.entries()).map(([k, arr]) => {
+              {righe.map(([k, arr]) => {
                 const tot = arr.reduce((a, b) => a + b, 0);
+                const aperta = openKey === k;
                 return (
-                  <TableRow key={k}>
-                    <TableCell className="font-medium">{label(k)}</TableCell>
-                    {arr.map((v, i) => (
-                      <TableCell key={i} className="text-right tabular-nums">{v ? fmtEur(v) : "—"}</TableCell>
-                    ))}
-                    <TableCell className="text-right font-semibold">{fmtEur(tot)}</TableCell>
-                  </TableRow>
+                  <>
+                    <TableRow
+                      key={k}
+                      onClick={() => setOpenKey(aperta ? null : k)}
+                      className={`cursor-pointer ${aperta ? "bg-primary/5" : ""}`}
+                    >
+                      <TableCell className="font-medium">
+                        <span className="flex items-center gap-2">
+                          <ChevronRight
+                            className={`h-4 w-4 text-muted-foreground transition-transform ${aperta ? "rotate-90" : ""}`}
+                          />
+                          {labelFornitore(k)}
+                        </span>
+                      </TableCell>
+                      {arr.map((v, i) => (
+                        <TableCell key={i} className="text-right tabular-nums">{v ? fmtEur(v) : "—"}</TableCell>
+                      ))}
+                      <TableCell className="text-right font-semibold">{fmtEur(tot)}</TableCell>
+                    </TableRow>
+                    {aperta && (
+                      <TableRow key={`${k}-det`} className="bg-primary/5 hover:bg-primary/5">
+                        <TableCell colSpan={14} className="p-3">
+                          <DettaglioFornitore
+                            docs={docsPerFornitore.get(k) ?? []}
+                            nome={labelFornitore(k)}
+                            onApriRicevute={onApriRicevute}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
                 );
               })}
-              {matrix.size > 0 && (
+              {righe.length > 0 && (
                 <TableRow className="bg-muted/40">
                   <TableCell className="font-bold">Totale</TableCell>
                   {totColonne.map((v, i) => (
@@ -1022,26 +1194,6 @@ function ReportTab({ anno, setAnno }: { anno: number; setAnno: (n: number) => vo
           </Table>
         </CardContent>
       </Card>
-    );
-  };
-
-  const now = new Date().getFullYear();
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Select value={String(anno)} onValueChange={(v) => setAnno(Number(v))}>
-          <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {[0,1,2,3,4].map((d) => {
-              const y = now - d;
-              return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
-            })}
-          </SelectContent>
-        </Select>
-        <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4" /> Esporta CSV</Button>
-      </div>
-      {renderMatrix("Fornitori", matrixFornitori, labelFornitore)}
-      {renderMatrix("Categorie", matrixCategorie, labelCategoria)}
     </div>
   );
 }
