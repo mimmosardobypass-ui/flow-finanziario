@@ -143,7 +143,7 @@ export function RicevuteTab({
   const importoAttivo = !!(importoDa || importoA);
 
   const conteggiStato = useMemo(() => {
-    const m: Record<StatoKey, number> = { da_pagare: 0, scaduta: 0, parziale: 0, pagata: 0, compensare: 0 };
+    const m: Record<StatoKey, number> = { da_pagare: 0, scaduta: 0, parziale: 0, pagata: 0, compensare: 0, compensata: 0 };
     docs.forEach((d) => { m[statoOf(d)]++; });
     return m;
   }, [docs]);
