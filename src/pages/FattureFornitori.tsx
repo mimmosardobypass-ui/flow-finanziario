@@ -449,6 +449,31 @@ export default function FattureFornitori() {
           <TabsTrigger value="report">Report</TabsTrigger>
         </TabsList>
 
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[280px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cerca fornitore o numero documento"
+              className="h-10 pl-9 pr-9"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Azzera ricerca"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <span className="text-sm text-muted-foreground">
+            {trovati} document{trovati === 1 ? "o" : "i"} trovat{trovati === 1 ? "o" : "i"}
+          </span>
+        </div>
+
         <TabsContent value="situazione">
           <SituazioneTab />
         </TabsContent>
@@ -463,9 +488,16 @@ export default function FattureFornitori() {
               <Plus className="h-4 w-4" /> Nuova Fattura
             </Button>
           </div>
-          <SdiMancantiCard />
-          <PagamentiDaAbbinareCard />
-          <RicevuteTab fatture={fattureRaw} onSelect={setSelFattura} anno={anno} setAnno={setAnno} />
+          <SdiMancantiCard search={search} />
+          <PagamentiDaAbbinareCard search={search} />
+          <RicevuteTab
+            fatture={fattureRaw}
+            onSelect={setSelFattura}
+            anno={anno}
+            setAnno={setAnno}
+            search={search}
+            setSearch={setSearch}
+          />
         </TabsContent>
 
         <TabsContent value="emesse">
