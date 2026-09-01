@@ -195,14 +195,27 @@ export default function Transactions() {
       return true;
     });
 
-    if (!normalizedSearchText) {
-      return uniqueTransactions;
+    let result = uniqueTransactions;
+
+    if (normalizedSearchText) {
+      result = result.filter((transaction) =>
+        (transaction.description || "").toLowerCase().includes(normalizedSearchText)
+      );
     }
 
-    return uniqueTransactions.filter((transaction) =>
-      (transaction.description || "").toLowerCase().includes(normalizedSearchText)
-    );
-  }, [transactions, normalizedSearchText]);
+    if (filters.reconciliation === "with_documents") {
+      result = result.filter(
+        (t) => (coperturaMap?.get(t.id)?.documenti_collegati ?? 0) > 0
+      );
+    } else if (filters.reconciliation === "partially_covered") {
+      result = result.filter((t) => {
+        const c = coperturaMap?.get(t.id);
+        return (c?.documenti_collegati ?? 0) > 0 && (c?.residuo ?? 0) > 0.005;
+      });
+    }
+
+    return result;
+  }, [transactions, normalizedSearchText, filters.reconciliation, coperturaMap]);
   const searchDebug = useMemo(() => {
     if (!normalizedSearchText) return null;
 
