@@ -521,7 +521,15 @@ export default function FattureFornitori() {
 
         {/* TAB REPORT */}
         <TabsContent value="report">
-          <ReportTab anno={annoReport} setAnno={setAnnoReport} />
+          <ReportTab
+            anno={annoReport}
+            setAnno={setAnnoReport}
+            search={search}
+            onApriRicevute={(nome) => {
+              setSearch(nome);
+              setTab("ricevute");
+            }}
+          />
         </TabsContent>
       </Tabs>
 
