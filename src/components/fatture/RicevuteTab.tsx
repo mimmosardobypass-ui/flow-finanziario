@@ -109,17 +109,18 @@ const PERIODO_VUOTO: Periodo = { campo: "documento", dal: "", al: "" };
 const ANNI = [2026, 2025, 2024, 2023, 2022];
 
 export function RicevuteTab({
-  fatture, onSelect, anno, setAnno,
+  fatture, onSelect, anno, setAnno, search, setSearch,
 }: {
   fatture: FatturaWithRel[];
   onSelect: (f: FatturaWithRel) => void;
   anno: number | "all";
   setAnno: (v: number | "all") => void;
+  search: string;
+  setSearch: (v: string) => void;
 }) {
   const { data: docs = [], isLoading } = useDocumentiSaldi("passiva");
   const byId = useMemo(() => new Map(fatture.map((f) => [f.id, f])), [fatture]);
 
-  const [search, setSearch] = useState("");
   const [periodo, setPeriodo] = useState<Periodo>(PERIODO_VUOTO);
   const [periodoDraft, setPeriodoDraft] = useState<Periodo>(PERIODO_VUOTO);
   const [stati, setStati] = useState<StatoKey[]>([]);
@@ -128,6 +129,7 @@ export function RicevuteTab({
   const [importoA, setImportoA] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sel, setSel] = useState<Set<string>>(new Set());
+  const [pagaDocs, setPagaDocs] = useState<DocumentoSaldo[] | null>(null);
 
   const periodoAttivo = !!(periodo.dal || periodo.al);
   const importoAttivo = !!(importoDa || importoA);
