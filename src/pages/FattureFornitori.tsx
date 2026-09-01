@@ -390,7 +390,17 @@ export default function FattureFornitori() {
   const [selFattura, setSelFattura] = useState<FatturaWithRel | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [sdiFilter, setSdiFilter] = useState<"all" | "solo_sdi" | "attesa">("all");
+  const [search, setSearch] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const { data: docsPassivi = [] } = useDocumentiSaldi("passiva");
+  const trovati = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return docsPassivi.length;
+    return docsPassivi.filter((d) =>
+      `${d.controparte ?? ""} ${d.numero_documento ?? ""}`.toLowerCase().includes(q)
+    ).length;
+  }, [docsPassivi, search]);
 
   const { data: fattureRaw = [], isLoading } = useFattureFornitori({
     stato,
