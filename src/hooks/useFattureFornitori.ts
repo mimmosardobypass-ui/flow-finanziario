@@ -516,3 +516,87 @@ export function useDissociaDocumento() {
     onError: (e: any) => toast.error(`Operazione fallita: ${e?.message ?? e}`),
   });
 }
+
+/* ---------- Pagamento in contanti ---------- */
+
+export interface PagaContantiInput {
+  fattura_ids: string[];
+  data: string;
+  conto_id: string | null;
+  importi?: number[] | null;
+  nota?: string | null;
+}
+
+export interface PagaContantiResult {
+  documenti: number;
+  totale: number;
+  conto_id: string;
+  data: string;
+}
+
+export function usePagaDocumentiContanti() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: PagaContantiInput) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase.rpc("paga_documenti_contanti", {
+        p_user_id: user.id,
+        p_fattura_ids: input.fattura_ids,
+        p_data: input.data,
+        p_conto_id: input.conto_id,
+        p_importi: input.importi ?? null,
+        p_nota: input.nota ?? null,
+      });
+      if (error) throw error;
+      return data as unknown as PagaContantiResult;
+    },
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["fatture-fornitori"] });
+      qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] });
+      qc.invalidateQueries({ queryKey: ["documenti-saldi"] });
+      qc.invalidateQueries({ queryKey: ["documento-pagamenti"] });
+      qc.invalidateQueries({ queryKey: ["esposizione-controparti"] });
+      qc.invalidateQueries({ queryKey: ["pagamenti-fatture"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["movimenti-copertura"] });
+      qc.invalidateQueries({ queryKey: ["saldo-conto"] });
+    },
+  });
+}
+
+/** Saldo corrente di un conto: saldo iniziale + entrate − uscite. */
+export function useSaldoConto(contoId: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["saldo-conto", user?.id, contoId],
+    queryFn: async () => {
+      if (!user || !contoId) return 0;
+      const { data: conto, error: e1 } = await supabase
+        .from("conti")
+        .select("saldo_iniziale")
+        .eq("id", contoId)
+        .maybeSingle();
+      if (e1) throw e1;
+      let saldo = Number(conto?.saldo_iniziale ?? 0);
+      const chunk = 1000;
+      for (let from = 0; ; from += chunk) {
+        const { data, error } = await supabase
+          .from("transactions")
+          .select("amount, type")
+          .eq("conto_id", contoId)
+          .is("deleted_at", null)
+          .range(from, from + chunk - 1);
+        if (error) throw error;
+        const rows = data ?? [];
+        rows.forEach((t) => {
+          const a = Number(t.amount ?? 0);
+          saldo += t.type === "income" ? a : -a;
+        });
+        if (rows.length < chunk) break;
+      }
+      return saldo;
+    },
+    enabled: !!user && !!contoId,
+  });
+}

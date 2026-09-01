@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Upload, Plus, Link2, Trash2, Pencil, Download, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { FileText, Upload, Plus, Link2, Trash2, Pencil, Download, AlertTriangle, ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -27,6 +27,7 @@ import {
   useCollegaTransazione, FatturaWithRel,
   useFattureSdiMancanti, ORIGINE_LABELS,
   usePagamentiFatture, useCollegaPagamentiFatture, PagamentoProposta,
+  useDocumentiSaldi,
 
 } from "@/hooks/useFattureFornitori";
 import {
@@ -95,8 +96,14 @@ function SdiMancanteBadge({ fattura }: { fattura: FatturaWithRel }) {
   );
 }
 
-function SdiMancantiCard() {
-  const { data: rows = [] } = useFattureSdiMancanti();
+function SdiMancantiCard({ search = "" }: { search?: string }) {
+  const { data: allRows = [] } = useFattureSdiMancanti();
+  const q = search.trim().toLowerCase();
+  const rows = q
+    ? allRows.filter((r) =>
+        `${r.mittente ?? ""} ${r.numero_documento ?? ""}`.toLowerCase().includes(q)
+      )
+    : allRows;
   if (rows.length === 0) return null;
 
   const totale = rows.reduce((s, r) => s + Number(r.totale ?? 0), 0);
@@ -235,11 +242,22 @@ function motivoProposta(p: PagamentoProposta): string | null {
 
 const keyOf = (p: PagamentoProposta) => `${p.fattura_id}|${p.transaction_id}`;
 
-function PagamentiDaAbbinareCard() {
-  const { data: proposte = [] } = usePagamentiFatture();
+function PagamentiDaAbbinareCard({ search = "" }: { search?: string }) {
+  const { data: allProposte = [] } = usePagamentiFatture();
   const collegaMut = useCollegaPagamentiFatture();
   const [open, setOpen] = useState(true);
   const [sel, setSel] = useState<Set<string>>(new Set());
+
+  const q = search.trim().toLowerCase();
+  const proposte = useMemo(
+    () =>
+      q
+        ? allProposte.filter((p) =>
+            `${p.mittente ?? ""} ${p.numero_documento ?? ""}`.toLowerCase().includes(q)
+          )
+        : allProposte,
+    [allProposte, q]
+  );
 
   useEffect(() => {
     setSel(new Set(proposte.filter((p) => p.confidenza === "alta").map(keyOf)));
@@ -373,7 +391,17 @@ export default function FattureFornitori() {
   const [selFattura, setSelFattura] = useState<FatturaWithRel | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [sdiFilter, setSdiFilter] = useState<"all" | "solo_sdi" | "attesa">("all");
+  const [search, setSearch] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const { data: docsPassivi = [] } = useDocumentiSaldi("passiva");
+  const trovati = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return docsPassivi.length;
+    return docsPassivi.filter((d) =>
+      `${d.controparte ?? ""} ${d.numero_documento ?? ""}`.toLowerCase().includes(q)
+    ).length;
+  }, [docsPassivi, search]);
 
   const { data: fattureRaw = [], isLoading } = useFattureFornitori({
     stato,
@@ -421,6 +449,31 @@ export default function FattureFornitori() {
           <TabsTrigger value="report">Report</TabsTrigger>
         </TabsList>
 
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[280px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cerca fornitore o numero documento"
+              className="h-10 pl-9 pr-9"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Azzera ricerca"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <span className="text-sm text-muted-foreground">
+            {trovati} document{trovati === 1 ? "o" : "i"} trovat{trovati === 1 ? "o" : "i"}
+          </span>
+        </div>
+
         <TabsContent value="situazione">
           <SituazioneTab />
         </TabsContent>
@@ -435,9 +488,16 @@ export default function FattureFornitori() {
               <Plus className="h-4 w-4" /> Nuova Fattura
             </Button>
           </div>
-          <SdiMancantiCard />
-          <PagamentiDaAbbinareCard />
-          <RicevuteTab fatture={fattureRaw} onSelect={setSelFattura} anno={anno} setAnno={setAnno} />
+          <SdiMancantiCard search={search} />
+          <PagamentiDaAbbinareCard search={search} />
+          <RicevuteTab
+            fatture={fattureRaw}
+            onSelect={setSelFattura}
+            anno={anno}
+            setAnno={setAnno}
+            search={search}
+            setSearch={setSearch}
+          />
         </TabsContent>
 
         <TabsContent value="emesse">

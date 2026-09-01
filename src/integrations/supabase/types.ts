@@ -1134,6 +1134,17 @@ export type Database = {
         }
         Returns: Json
       }
+      paga_documenti_contanti: {
+        Args: {
+          p_conto_id?: string
+          p_data: string
+          p_fattura_ids: string[]
+          p_importi?: number[]
+          p_nota?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       reconcile_sumup_batch: {
         Args: { p_pairs: Json; p_user_id: string }
         Returns: Json

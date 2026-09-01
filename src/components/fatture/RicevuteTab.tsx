@@ -1,14 +1,18 @@
 import { Fragment, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, X } from "lucide-react";
+import { AlertTriangle, Banknote, ChevronDown, ChevronRight, MoreHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PagaContantiDialog } from "@/components/fatture/PagaContantiDialog";
 import {
   DocumentoSaldo,
   FatturaWithRel,
@@ -105,17 +109,18 @@ const PERIODO_VUOTO: Periodo = { campo: "documento", dal: "", al: "" };
 const ANNI = [2026, 2025, 2024, 2023, 2022];
 
 export function RicevuteTab({
-  fatture, onSelect, anno, setAnno,
+  fatture, onSelect, anno, setAnno, search, setSearch,
 }: {
   fatture: FatturaWithRel[];
   onSelect: (f: FatturaWithRel) => void;
   anno: number | "all";
   setAnno: (v: number | "all") => void;
+  search: string;
+  setSearch: (v: string) => void;
 }) {
   const { data: docs = [], isLoading } = useDocumentiSaldi("passiva");
   const byId = useMemo(() => new Map(fatture.map((f) => [f.id, f])), [fatture]);
 
-  const [search, setSearch] = useState("");
   const [periodo, setPeriodo] = useState<Periodo>(PERIODO_VUOTO);
   const [periodoDraft, setPeriodoDraft] = useState<Periodo>(PERIODO_VUOTO);
   const [stati, setStati] = useState<StatoKey[]>([]);
@@ -124,6 +129,7 @@ export function RicevuteTab({
   const [importoA, setImportoA] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sel, setSel] = useState<Set<string>>(new Set());
+  const [pagaDocs, setPagaDocs] = useState<DocumentoSaldo[] | null>(null);
 
   const periodoAttivo = !!(periodo.dal || periodo.al);
   const importoAttivo = !!(importoDa || importoA);
@@ -170,6 +176,10 @@ export function RicevuteTab({
   const residuo = filtrati
     .filter((d) => d.tipo !== "Nota Credito")
     .reduce((s, d) => s + Math.max(0, d.residuo), 0);
+
+  const pagabile = (d: DocumentoSaldo) => d.tipo !== "Nota Credito" && d.residuo > 0.005;
+  const pagabiliSelezionati = filtrati.filter((d) => sel.has(d.id) && pagabile(d));
+
 
   const azzeraTutti = () => {
     setSearch(""); setPeriodo(PERIODO_VUOTO); setPeriodoDraft(PERIODO_VUOTO); setAnno("all");
@@ -383,6 +393,14 @@ export function RicevuteTab({
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Button size="sm" variant="secondary">Assegna categoria</Button>
               <Button size="sm" variant="secondary">Associa a un pagamento</Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={pagabiliSelezionati.length === 0}
+                onClick={() => setPagaDocs(pagabiliSelezionati)}
+              >
+                <Banknote className="h-4 w-4" /> Paga in contanti
+              </Button>
               <Button size="sm" variant="secondary" onClick={esportaSelezione}>Esporta selezione</Button>
               <button type="button" onClick={() => setSel(new Set())} className="text-slate-300 hover:text-white">
                 <X className="h-4 w-4" />
@@ -405,14 +423,15 @@ export function RicevuteTab({
                 <TableHead className="text-right">Residuo</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead>Categoria</TableHead>
+                <TableHead className="w-[44px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && (
-                <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">Caricamento…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="py-8 text-center text-muted-foreground">Caricamento…</TableCell></TableRow>
               )}
               {!isLoading && filtrati.length === 0 && (
-                <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">Nessun documento con i filtri attivi</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="py-8 text-center text-muted-foreground">Nessun documento con i filtri attivi</TableCell></TableRow>
               )}
               {filtrati.map((d) => {
                 const f = byId.get(d.id);
@@ -482,10 +501,31 @@ export function RicevuteTab({
                       <TableCell className="align-top text-sm text-muted-foreground">
                         {f?.category?.name ?? "—"}
                       </TableCell>
+                      <TableCell className="align-top">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {f && (
+                              <DropdownMenuItem onClick={() => onSelect(f)}>
+                                Apri dettaglio documento
+                              </DropdownMenuItem>
+                            )}
+                            {pagabile(d) && (
+                              <DropdownMenuItem onClick={() => setPagaDocs([d])}>
+                                <Banknote className="h-4 w-4" /> Registra pagamento in contanti
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
                     </TableRow>
                     {expanded === d.id && (
                       <TableRow className="hover:bg-transparent">
-                        <TableCell colSpan={10} className="bg-muted/30 p-0">
+                        <TableCell colSpan={11} className="bg-muted/30 p-0">
                           <PagamentiCollegati doc={d} />
                         </TableCell>
                       </TableRow>
@@ -496,6 +536,13 @@ export function RicevuteTab({
             </TableBody>
           </Table>
         </div>
+
+        {pagaDocs && pagaDocs.length > 0 && (
+          <PagaContantiDialog
+            docs={pagaDocs}
+            onClose={() => { setPagaDocs(null); setSel(new Set()); }}
+          />
+        )}
       </CardContent>
     </Card>
   );
