@@ -27,7 +27,7 @@ import {
   useCollegaTransazione, FatturaWithRel,
   useFattureSdiMancanti, ORIGINE_LABELS,
   usePagamentiFatture, useCollegaPagamentiFatture, PagamentoProposta,
-  useDocumentiSaldi,
+  useDocumentiSaldi, DocumentoSaldo, useDatePagamentoDocumenti,
 
 } from "@/hooks/useFattureFornitori";
 import {
