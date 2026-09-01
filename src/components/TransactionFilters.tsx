@@ -209,6 +209,7 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
     setSearchInput("");
     setAmountMinInput("");
     setAmountMaxInput("");
+    setDateMode("range");
     onFiltersChange({
       searchText: "",
       categoryId: undefined,
