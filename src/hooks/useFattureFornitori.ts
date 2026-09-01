@@ -417,13 +417,16 @@ export function useDocumentiSaldi(direzione: "passiva" | "attiva") {
 
 export interface DocumentoPagamento {
   fattura_id: string;
-  transaction_id: string;
+  transaction_id: string | null;
+  compensazione_id: string | null;
   importo_imputato: number;
   data_movimento: string | null;
   importo_movimento: number;
   descrizione_movimento: string | null;
   conto: string | null;
+  legame_id: string | null;
 }
+
 
 export function useDocumentoPagamenti(fatturaId: string | null) {
   const { user } = useAuth();
