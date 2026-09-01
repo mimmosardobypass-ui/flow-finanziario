@@ -186,33 +186,39 @@ export type Database = {
       }
       documenti_pagamenti: {
         Row: {
+          compensazione_id: string | null
           created_at: string
+          data_imputazione: string | null
           fattura_id: string
           id: string
           importo_imputato: number
           note: string | null
           origine: string
-          transaction_id: string
+          transaction_id: string | null
           user_id: string
         }
         Insert: {
+          compensazione_id?: string | null
           created_at?: string
+          data_imputazione?: string | null
           fattura_id: string
           id?: string
           importo_imputato: number
           note?: string | null
           origine?: string
-          transaction_id: string
+          transaction_id?: string | null
           user_id: string
         }
         Update: {
+          compensazione_id?: string | null
           created_at?: string
+          data_imputazione?: string | null
           fattura_id?: string
           id?: string
           importo_imputato?: number
           note?: string | null
           origine?: string
-          transaction_id?: string
+          transaction_id?: string | null
           user_id?: string
         }
         Relationships: [
@@ -818,6 +824,7 @@ export type Database = {
       }
       v_documento_pagamenti: {
         Row: {
+          compensazione_id: string | null
           conto: string | null
           created_at: string | null
           data_movimento: string | null
@@ -943,6 +950,10 @@ export type Database = {
       }
     }
     Functions: {
+      annulla_compensazione: {
+        Args: { p_compensazione_id: string; p_user_id: string }
+        Returns: Json
+      }
       apply_categorization_rule: {
         Args: { p_rule_id: string; p_user_id: string }
         Returns: number
@@ -971,6 +982,16 @@ export type Database = {
         Args: {
           p_fattura_ids: string[]
           p_transaction_ids: string[]
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      compensa_documenti: {
+        Args: {
+          p_data?: string
+          p_fattura_id: string
+          p_importo?: number
+          p_nota_id: string
           p_user_id: string
         }
         Returns: Json
@@ -1047,6 +1068,17 @@ export type Database = {
           sdi_mancante: boolean
           suggerito: boolean
           tipo: string
+          totale: number
+        }[]
+      }
+      find_note_credito_compensabili: {
+        Args: { p_fattura_id: string; p_user_id: string }
+        Returns: {
+          compensabile: number
+          data_documento: string
+          nota_id: string
+          numero_documento: string
+          residuo: number
           totale: number
         }[]
       }
