@@ -467,7 +467,11 @@ export function TransactionFilters({ filters, onFiltersChange }: Props) {
                 : filters.reconciliation === "not_reconciled"
                 ? "Non riconciliati"
                 : filters.reconciliation === "reconciled"
-                ? "Riconciliati"
+                ? "Riconciliati con un movimento"
+                : filters.reconciliation === "with_documents"
+                ? "Con documenti collegati"
+                : filters.reconciliation === "partially_covered"
+                ? "Parzialmente coperti"
                 : filters.reconciliation}
               <X
                 className="h-3 w-3 cursor-pointer"
