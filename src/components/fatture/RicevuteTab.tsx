@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
-import { AlertTriangle, Banknote, ChevronDown, ChevronRight, MoreHorizontal, X } from "lucide-react";
+import { AlertTriangle, Banknote, ChevronDown, ChevronRight, MoreHorizontal, Scale, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,19 +14,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PagaContantiDialog } from "@/components/fatture/PagaContantiDialog";
+import { CompensaDialog } from "@/components/fatture/CompensaDialog";
 import {
   DocumentoSaldo,
   FatturaWithRel,
+  NotaCreditoCompensabile,
+  useAnnullaCompensazione,
   useDocumentiSaldi,
   useDocumentoPagamenti,
   useDissociaDocumento,
+  useFindNoteCreditoCompensabili,
 } from "@/hooks/useFattureFornitori";
 
 const fmtEur = (n: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n || 0);
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("it-IT") : "—");
 
-type StatoKey = "da_pagare" | "scaduta" | "parziale" | "pagata" | "compensare";
+type StatoKey = "da_pagare" | "scaduta" | "parziale" | "pagata" | "compensare" | "compensata";
 
 const STATI: { key: StatoKey; label: string; color: string }[] = [
   { key: "da_pagare", label: "Da pagare", color: "#98a2b3" },
@@ -33,6 +38,7 @@ const STATI: { key: StatoKey; label: string; color: string }[] = [
   { key: "parziale", label: "Parziale", color: "#2563eb" },
   { key: "pagata", label: "Pagata", color: "#12b76a" },
   { key: "compensare", label: "Da compensare", color: "#7c3aed" },
+  { key: "compensata", label: "Compensata", color: "#7c3aed" },
 ];
 
 const TIPI = ["Fattura", "Nota Credito", "Ricevuta"] as const;
@@ -43,12 +49,14 @@ const TIPO_LABEL: Record<string, string> = {
 };
 
 function statoOf(d: DocumentoSaldo): StatoKey {
-  if (d.stato_pagamento === "nota_credito" || d.stato_pagamento === "compensata") return "compensare";
+  if (d.stato_pagamento === "compensata") return "compensata";
+  if (d.stato_pagamento === "nota_credito") return "compensare";
   if (d.residuo <= 0.005) return "pagata";
   if (d.stato_pagamento === "parziale" || d.imputato > 0.005) return "parziale";
   if ((d.giorni_scaduta ?? 0) > 0) return "scaduta";
   return "da_pagare";
 }
+
 
 function StatoBadge({ k }: { k: StatoKey }) {
   const s = STATI.find((x) => x.key === k)!;
