@@ -596,6 +596,48 @@ export type Database = {
           },
         ]
       }
+      regole_rate: {
+        Row: {
+          attiva: boolean
+          created_at: string
+          giorni_max: number
+          giorni_min: number
+          id: string
+          marcatore: string
+          nome: string
+          numero_rate: number
+          tolleranza_rata: number
+          tolleranza_totale: number
+          user_id: string
+        }
+        Insert: {
+          attiva?: boolean
+          created_at?: string
+          giorni_max?: number
+          giorni_min?: number
+          id?: string
+          marcatore: string
+          nome: string
+          numero_rate?: number
+          tolleranza_rata?: number
+          tolleranza_totale?: number
+          user_id: string
+        }
+        Update: {
+          attiva?: boolean
+          created_at?: string
+          giorni_max?: number
+          giorni_min?: number
+          id?: string
+          marcatore?: string
+          nome?: string
+          numero_rate?: number
+          tolleranza_rata?: number
+          tolleranza_totale?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       scadenze_rate: {
         Row: {
           created_at: string
@@ -986,6 +1028,14 @@ export type Database = {
         }
         Returns: Json
       }
+      collega_piano_rate: {
+        Args: {
+          p_fattura_id: string
+          p_transaction_ids: string[]
+          p_user_id: string
+        }
+        Returns: Json
+      }
       compensa_documenti: {
         Args: {
           p_data?: string
@@ -1098,6 +1148,26 @@ export type Database = {
           scarto: number
           totale: number
           transaction_id: string
+        }[]
+      }
+      find_piani_rate: {
+        Args: { p_user_id: string }
+        Returns: {
+          confidenza: string
+          controparte: string
+          data_documento: string
+          date_rate: string[]
+          fattura_id: string
+          importi_rate: number[]
+          importo_trovato: number
+          numero_documento: string
+          prossima_rata_attesa: string
+          rate_previste: number
+          rate_trovate: number
+          residuo_fattura: number
+          stato: string
+          totale_fattura: number
+          transaction_ids: string[]
         }[]
       }
       find_reconciliation_aggregates: {
