@@ -552,13 +552,10 @@ export default function Transactions() {
                         </div>
                       </TableCell>
                       <TableCell className="print:hidden">
-                        {(() => {
-                          const status = (transaction as any).reconciliation_status || "none";
-                          const { Icon, className, fill } = getRicIndicator(status);
-                          return (
-                            <Icon className={`h-4 w-4 ${className}`} fill={fill ? "currentColor" : "none"} />
-                          );
-                        })()}
+                        <RicIndicator
+                          status={(transaction as any).reconciliation_status || "none"}
+                          copertura={coperturaMap?.get(transaction.id)}
+                        />
                       </TableCell>
                       <TableCell className="print:hidden">
                         <div className="flex gap-1">
