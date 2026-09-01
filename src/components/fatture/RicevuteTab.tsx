@@ -138,6 +138,22 @@ export function RicevuteTab({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [pagaDocs, setPagaDocs] = useState<DocumentoSaldo[] | null>(null);
+  const [compensa, setCompensa] = useState<{ doc: DocumentoSaldo; note: NotaCreditoCompensabile[] } | null>(null);
+  const findNote = useFindNoteCreditoCompensabili();
+
+  const apriCompensa = async (d: DocumentoSaldo) => {
+    try {
+      const note = await findNote.mutateAsync(d.id);
+      if (!note.length) {
+        toast.info("Nessuna nota di credito aperta per questo fornitore");
+        return;
+      }
+      setCompensa({ doc: d, note });
+    } catch (e: any) {
+      toast.error(`${e?.message ?? e}`);
+    }
+  };
+
 
   const periodoAttivo = !!(periodo.dal || periodo.al);
   const importoAttivo = !!(importoDa || importoA);
