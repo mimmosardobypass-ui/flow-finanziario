@@ -272,7 +272,14 @@ export function PianiRateCard() {
                   {inCorso.map((p) => renderPiano(p, false))}
                 </div>
               )}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+              <label className="flex items-center gap-2 border-t pt-3 text-sm cursor-pointer">
+                <Checkbox
+                  checked={creaScadenziario}
+                  onCheckedChange={(v) => setCreaScadenziario(v === true)}
+                />
+                Crea anche la voce nello Scadenziario
+              </label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm text-muted-foreground">
                   Selezionati: {selPiani.length} piani · {eur(selTotale)}
                 </span>
