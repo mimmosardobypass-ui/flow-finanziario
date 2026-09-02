@@ -95,6 +95,17 @@ export default function Scadenziario() {
       </div>
 
       <Card>
+        <CardContent className="pt-6">
+          <div className="text-sm text-muted-foreground">In scadenza nei prossimi 30 giorni</div>
+          <div className="text-2xl font-bold">{eur(prossime.totale)}</div>
+          <div className="text-xs text-muted-foreground">
+            {prossime.count} rate
+            {prossime.stimato > 0 && <> · di cui {eur(prossime.stimato)} stimati</>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader>
           <CardTitle>Contratti</CardTitle>
         </CardHeader>
