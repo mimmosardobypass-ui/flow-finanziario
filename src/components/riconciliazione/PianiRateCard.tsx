@@ -34,6 +34,8 @@ export function PianiRateCard() {
   const [piani, setPiani] = useState<PianoRate[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [creaScadenziario, setCreaScadenziario] = useState(true);
+  const navigate = useNavigate();
 
   const completi = useMemo(() => (piani ?? []).filter((p) => p.stato === "completo"), [piani]);
   const inCorso = useMemo(() => (piani ?? []).filter((p) => p.stato !== "completo"), [piani]);
