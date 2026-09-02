@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { CreditCard, Loader2, Search, CheckCheck, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { format, addDays, differenceInCalendarDays } from "date-fns";
 import { it } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
