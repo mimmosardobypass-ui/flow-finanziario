@@ -33,7 +33,12 @@ import {
 import {
   useFornitori, useCreateFornitore, useUpdateFornitore, useDeleteFornitore, Fornitore,
 } from "@/hooks/useFornitori";
-import { useCategories } from "@/hooks/useCategories";
+import { useCategories, useCreateCategory } from "@/hooks/useCategories";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
+
 import { useTransactions } from "@/hooks/useTransactions";
 import { RicevuteTab } from "@/components/fatture/RicevuteTab";
 import { SituazioneTab } from "@/components/fatture/SituazioneTab";
