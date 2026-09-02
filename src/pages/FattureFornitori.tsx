@@ -332,7 +332,7 @@ export default function FattureFornitori() {
             </Button>
           </div>
           <SdiMancantiCard search={search} />
-          <PagamentiDaAbbinareCard search={search} />
+          <PagamentiFattureCard search={search} />
           <RicevuteTab
             fatture={fattureRaw}
             onSelect={setSelFattura}
