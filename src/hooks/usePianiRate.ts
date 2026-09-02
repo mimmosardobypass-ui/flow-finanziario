@@ -78,6 +78,8 @@ export function useCollegaPianoRate() {
       qc.invalidateQueries({ queryKey: ["documenti-saldi"] });
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["movimenti-copertura"] });
+      qc.invalidateQueries({ queryKey: ["scadenziario"] });
+      qc.invalidateQueries({ queryKey: ["scadenze_rate_unpaid"] });
     },
   });
 }
