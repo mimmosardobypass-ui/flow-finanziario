@@ -71,6 +71,18 @@ export default function Scadenziario() {
     return { totale, stimato, count };
   }, [contratti]);
 
+  const { inCorso, cronologia } = useMemo(() => {
+    const aperti: ScadenziarioWithRate[] = [];
+    const chiusi: ScadenziarioWithRate[] = [];
+    for (const c of contratti) {
+      const rate = c.scadenze_rate || [];
+      if (rate.length > 0 && rate.every((r) => r.stato === "pagata")) chiusi.push(c);
+      else aperti.push(c);
+    }
+    aperti.sort((a, b) => (getInfo(a).prossima?.getTime() ?? Infinity) - (getInfo(b).prossima?.getTime() ?? Infinity));
+    chiusi.sort((a, b) => (getInfo(b).ultima?.getTime() ?? 0) - (getInfo(a).ultima?.getTime() ?? 0));
+    return { inCorso: aperti, cronologia: chiusi };
+  }, [contratti]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -82,6 +94,107 @@ export default function Scadenziario() {
       toast({ title: "Errore", description: "Impossibile eliminare il contratto", variant: "destructive" });
     }
   };
+
+  const renderTable = (lista: ScadenziarioWithRate[], mode: "in_corso" | "cronologia") => (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-10"></TableHead>
+            <TableHead>N. Contratto</TableHead>
+            <TableHead>Società</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead className="w-32">Avanzamento</TableHead>
+            <TableHead className="text-right">Importo Totale</TableHead>
+            <TableHead>Stato</TableHead>
+            <TableHead className="w-12"></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {lista.map((c) => {
+            const rate = c.scadenze_rate || [];
+            const info = getInfo(c);
+            const status = getContractStatus(c);
+            const isExpanded = expandedId === c.id;
+            const perc = info.totale > 0 ? (info.pagate / info.totale) * 100 : 0;
+
+            return (
+              <>
+                <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setExpandedId(isExpanded ? null : c.id)}>
+                  <TableCell>
+                    {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-medium">{c.numero_contratto}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {info.pagate} di {info.totale} pagate
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {c.societa_finanziaria === "PayPal" ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        <CreditCard className="h-3.5 w-3.5" />
+                        PayPal a rate
+                      </span>
+                    ) : (
+                      c.societa_finanziaria
+                    )}
+                  </TableCell>
+                  <TableCell>{getTipoLabel(c.tipo)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full bg-green-600" style={{ width: `${perc}%` }} />
+                      </div>
+                      <span className="text-xs text-muted-foreground">{Math.round(perc)}%</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div>{eur(c.importo_totale)}</div>
+                    {mode === "in_corso" && info.prossimaRata && (
+                      <div className="text-xs text-muted-foreground">
+                        Prossimo pagamento:{" "}
+                        <span className={info.prossimaRata.stimata ? "italic" : ""}>
+                          {info.prossima ? format(info.prossima, "dd/MM/yyyy") : "—"}
+                          {info.prossimaRata.stimata && " (stimata)"}
+                        </span>
+                      </div>
+                    )}
+                    {mode === "cronologia" && info.ultima && (
+                      <div className="text-xs text-muted-foreground">
+                        Completato il {format(info.ultima, "dd/MM/yyyy")}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={status.className} variant={status.variant}>{status.label}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(c.id); }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+                {isExpanded && (
+                  <TableRow key={`${c.id}-detail`}>
+                    <TableCell colSpan={8} className="bg-muted/30 p-4">
+                      <RateTable rate={rate} />
+                    </TableCell>
+                  </TableRow>
+                )}
+              </>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
 
   return (
     <div className="space-y-6">
