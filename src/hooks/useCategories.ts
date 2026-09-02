@@ -1,7 +1,8 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+
 
 export interface Category {
   id: string;
@@ -92,4 +93,32 @@ export function useGetCategoryWithChildrenIds() {
       return ids;
     };
   }, [categories]);
+}
+
+/** Crea al volo una categoria (default: uscita) */
+export function useCreateCategory() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      name,
+      type = "expense",
+    }: {
+      name: string;
+      type?: "income" | "expense";
+    }) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase
+        .from("categories")
+        .insert({ name, type, user_id: user.id })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Category;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+  });
 }
