@@ -901,6 +901,19 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
             <div className="space-y-2"><Label>Totale</Label>
               <Input type="number" step="0.01" value={form.totale} onChange={(e) => setForm({ ...form, totale: e.target.value })} /></div>
           </div>
+          <div className="space-y-2">
+            <Label>Categoria di costo</Label>
+            <CreatableCombobox
+              value={categoryId}
+              options={expCats.map((c) => ({ id: c.id, label: c.name }))}
+              placeholder="Seleziona o cerca categoria"
+              emptyLabel="Nessuna"
+              createLabel={(q) => `Crea categoria "${q}"`}
+              onSelect={setCategoryId}
+              onCreate={handleCreateCategoria}
+            />
+          </div>
+
           <OrigineFields
             origine={origine}
             setOrigine={setOrigine}
