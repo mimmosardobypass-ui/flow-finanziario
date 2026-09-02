@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
-import { format, isBefore, isAfter, startOfDay, addDays } from "date-fns";
+import { format, isBefore, isAfter, startOfDay, addDays, differenceInCalendarDays } from "date-fns";
 import { Plus, ChevronDown, ChevronUp, Trash2, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -17,6 +18,7 @@ import { ScadenziarioDialog } from "@/components/scadenziario/ScadenziarioDialog
 import { RateTable } from "@/components/scadenziario/RateTable";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { toast } from "@/hooks/use-toast";
+
 
 function getContractStatus(contract: ScadenziarioWithRate) {
   const rate = contract.scadenze_rate || [];
