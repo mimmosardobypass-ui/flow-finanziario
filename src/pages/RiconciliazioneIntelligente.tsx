@@ -287,6 +287,10 @@ export default function RiconciliazioneIntelligente() {
   );
   const allSafeSelected =
     controSafe.length > 0 && controSafe.every((c) => selectedContro.has(c.dest_id));
+  const selectedConAvvisoContropartita = useMemo(
+    () => contropartite.filter((c) => selectedContro.has(c.dest_id) && c.avviso === 'contropartita_presente').length,
+    [contropartite, selectedContro]
+  );
 
   const toggleAllContro = () => {
     setSelectedContro((prev) => {
