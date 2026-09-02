@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Upload, Plus, Link2, Trash2, Pencil, Download, AlertTriangle, ChevronDown, ChevronRight, Search, X } from "lucide-react";
+import { FileText, Upload, Plus, Trash2, Pencil, Download, AlertTriangle, Search, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -26,9 +26,7 @@ import {
   useUpdateFattura, useCreateFattura, useImportFattureExcel,
   useCollegaTransazione, FatturaWithRel,
   useFattureSdiMancanti, ORIGINE_LABELS,
-  usePagamentiFatture, useCollegaPagamentiFatture, PagamentoProposta,
   useDocumentiSaldi, DocumentoSaldo, useDatePagamentoDocumenti,
-
 } from "@/hooks/useFattureFornitori";
 import {
   useFornitori, useCreateFornitore, useUpdateFornitore, useDeleteFornitore, Fornitore,
@@ -42,6 +40,7 @@ import {
 import { useTransactions } from "@/hooks/useTransactions";
 import { RicevuteTab } from "@/components/fatture/RicevuteTab";
 import { SituazioneTab } from "@/components/fatture/SituazioneTab";
+import { PagamentiFattureCard } from "@/components/riconciliazione/PagamentiFattureCard";
 
 function EmesseTab() {
   return (
