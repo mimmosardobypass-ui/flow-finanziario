@@ -673,6 +673,87 @@ function FatturaDettaglioDialog({
   );
 }
 
+/* ----- Combobox riutilizzabile con creazione al volo ----- */
+function CreatableCombobox({
+  value, options, placeholder, emptyLabel, createLabel, onSelect, onCreate,
+}: {
+  value: string | null;
+  options: { id: string; label: string }[];
+  placeholder: string;
+  emptyLabel: string;
+  createLabel: (q: string) => string;
+  onSelect: (id: string | null) => void;
+  onCreate: (name: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const norm = (s: string) => s.trim().toLowerCase();
+  const q = norm(query);
+  const filtered = useMemo(
+    () => (q ? options.filter((o) => norm(o.label).includes(q)) : options),
+    [options, q]
+  );
+  const selected = options.find((o) => o.id === value);
+  const showCreate = q.length > 0 && !options.some((o) => norm(o.label) === q);
+
+  const handleCreate = async () => {
+    setBusy(true);
+    try {
+      await onCreate(query.trim());
+      setOpen(false);
+      setQuery("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+          <span className={selected ? "" : "text-muted-foreground"}>
+            {selected ? selected.label : placeholder}
+          </span>
+          <ChevronDown className="h-4 w-4 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Cerca..." value={query} onValueChange={setQuery} />
+          <CommandList>
+            {filtered.length === 0 && !showCreate && <CommandEmpty>Nessun risultato</CommandEmpty>}
+            <CommandGroup>
+              <CommandItem
+                value="__none__"
+                onSelect={() => { onSelect(null); setOpen(false); setQuery(""); }}
+              >
+                {emptyLabel}
+              </CommandItem>
+              {filtered.map((o) => (
+                <CommandItem
+                  key={o.id}
+                  value={o.id}
+                  onSelect={() => { onSelect(o.id); setOpen(false); setQuery(""); }}
+                >
+                  {o.label}
+                </CommandItem>
+              ))}
+              {showCreate && (
+                <CommandItem value="__create__" disabled={busy} onSelect={handleCreate}>
+                  <Plus className="h-4 w-4" />
+                  {createLabel(query.trim())}
+                </CommandItem>
+              )}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /* ----- Nuova Fattura ----- */
 function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; fornitori: Fornitore[] }) {
   const [form, setForm] = useState({
@@ -688,7 +769,60 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
   const [origine, setOrigine] = useState("sdi");
   const [sdiMancante, setSdiMancante] = useState(false);
   const [identificativoSdi, setIdentificativoSdi] = useState("");
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const create = useCreateFattura();
+  const createFornitore = useCreateFornitore();
+  const createCategoria = useCreateCategory();
+  const { data: categories = [] } = useCategories();
+
+  const norm = (s: string) => s.trim().toLowerCase();
+  const expCats = useMemo(
+    () => categories.filter((c) => c.type === "expense").sort((a, b) => a.name.localeCompare(b.name, "it")),
+    [categories]
+  );
+
+  const selezionaFornitore = (id: string | null, catId?: string | null) => {
+    const f = id ? fornitori.find((x) => x.id === id) : null;
+    setForm((prev) => ({
+      ...prev,
+      fornitore_id: id ?? "",
+      mittente: f?.nome ?? prev.mittente,
+    }));
+    const cat = catId !== undefined ? catId : f?.category_id ?? null;
+    if (cat) setCategoryId(cat);
+  };
+
+  const handleCreateFornitore = async (nome: string) => {
+    const esistente = fornitori.find((f) => norm(f.nome) === norm(nome));
+    if (esistente) {
+      selezionaFornitore(esistente.id);
+      toast.info("Fornitore già presente, l'ho selezionato");
+      return;
+    }
+    try {
+      const nuovo = await createFornitore.mutateAsync({ nome: nome.trim() });
+      setForm((prev) => ({ ...prev, fornitore_id: nuovo.id, mittente: nome.trim() }));
+      toast.success("Fornitore creato");
+    } catch {
+      toast.error("Impossibile creare il fornitore");
+    }
+  };
+
+  const handleCreateCategoria = async (nome: string) => {
+    const esistente = expCats.find((c) => norm(c.name) === norm(nome));
+    if (esistente) {
+      setCategoryId(esistente.id);
+      toast.info("Categoria già presente, l'ho selezionata");
+      return;
+    }
+    try {
+      const nuova = await createCategoria.mutateAsync({ name: nome.trim(), type: "expense" });
+      setCategoryId(nuova.id);
+      toast.success("Categoria creata");
+    } catch {
+      toast.error("Impossibile creare la categoria");
+    }
+  };
 
   const handleSubmit = async () => {
     if (!form.mittente || !form.totale) {
@@ -714,6 +848,7 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
       stato_pagamento: form.tipo === "Nota Credito" ? "nota_credito" : "da_pagare",
       origine,
       sdi_mancante: sdiMancante,
+      category_id: categoryId,
     });
     toast.success("Fattura creata");
     onClose();
@@ -726,16 +861,17 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
         <div className="space-y-3">
           <div className="space-y-2">
             <Label>Fornitore</Label>
-            <Select value={form.fornitore_id} onValueChange={(v) => {
-              const f = fornitori.find((x) => x.id === v);
-              setForm({ ...form, fornitore_id: v, mittente: f?.nome ?? form.mittente });
-            }}>
-              <SelectTrigger><SelectValue placeholder="Seleziona" /></SelectTrigger>
-              <SelectContent>
-                {fornitori.map((f) => <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <CreatableCombobox
+              value={form.fornitore_id || null}
+              options={fornitori.map((f) => ({ id: f.id, label: f.nome }))}
+              placeholder="Seleziona o cerca fornitore"
+              emptyLabel="Nessun fornitore"
+              createLabel={(q) => `Crea fornitore "${q}"`}
+              onSelect={(id) => selezionaFornitore(id)}
+              onCreate={handleCreateFornitore}
+            />
           </div>
+
           <div className="space-y-2">
             <Label>Mittente</Label>
             <Input value={form.mittente} onChange={(e) => setForm({ ...form, mittente: e.target.value })} />
