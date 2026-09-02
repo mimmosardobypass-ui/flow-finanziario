@@ -296,6 +296,7 @@ export interface ContropartitaMancante {
   origine_importo: number;
   origine_data: string;
   gia_esiste_simile: boolean;
+  avviso: string | null;
 }
 
 export function useFindContropartiteMancanti() {
