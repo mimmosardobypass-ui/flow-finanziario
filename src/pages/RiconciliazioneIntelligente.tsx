@@ -16,6 +16,7 @@ import { it } from "date-fns/locale";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { ReconciliationRuleDialog } from "@/components/ReconciliationRuleDialog";
 import { PianiRateCard } from "@/components/riconciliazione/PianiRateCard";
+import { PagamentiFattureCard } from "@/components/riconciliazione/PagamentiFattureCard";
 
 import {
   useReconciliationRules,
@@ -751,6 +752,9 @@ export default function RiconciliazioneIntelligente() {
               </CardContent>
             </Card>
           )}
+
+          {/* PAGAMENTI DA ABBINARE FATTURE */}
+          <PagamentiFattureCard />
 
           {/* PIANI A RATE PAYPAL */}
           <PianiRateCard />
