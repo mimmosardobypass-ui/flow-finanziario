@@ -107,87 +107,47 @@ export default function Scadenziario() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Contratti</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-muted-foreground text-center py-8">Caricamento...</p>
-          ) : contratti.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">Nessun contratto. Clicca "Nuovo Contratto" per iniziare.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10"></TableHead>
-                    <TableHead>N. Contratto</TableHead>
-                    <TableHead>Società</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead className="text-right">Importo Totale</TableHead>
-                    <TableHead className="text-center">Rate</TableHead>
-                    <TableHead>Stato</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {contratti.map((c) => {
-                    const rate = c.scadenze_rate || [];
-                    const pagate = rate.filter((r) => r.stato === "pagata").length;
-                    const status = getContractStatus(c);
-                    const isExpanded = expandedId === c.id;
+      <Tabs defaultValue="in_corso">
+        <TabsList>
+          <TabsTrigger value="in_corso">In corso ({inCorso.length})</TabsTrigger>
+          <TabsTrigger value="cronologia">Cronologia ({cronologia.length})</TabsTrigger>
+        </TabsList>
 
-                    return (
-                      <>
-                        <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setExpandedId(isExpanded ? null : c.id)}>
-                          <TableCell>
-                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                          </TableCell>
-                          <TableCell className="font-medium">{c.numero_contratto}</TableCell>
-                          <TableCell>
-                            {c.societa_finanziaria === "PayPal" ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                                <CreditCard className="h-3.5 w-3.5" />
-                                PayPal a rate
-                              </span>
-                            ) : (
-                              c.societa_finanziaria
-                            )}
-                          </TableCell>
-                          <TableCell>{getTipoLabel(c.tipo)}</TableCell>
-                          <TableCell className="text-right">€ {c.importo_totale.toFixed(2)}</TableCell>
-                          <TableCell className="text-center">{pagate}/{rate.length}</TableCell>
-                          <TableCell>
-                            <Badge className={status.className} variant={status.variant}>{status.label}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7"
-                              onClick={(e) => { e.stopPropagation(); setDeleteTarget(c.id); }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                        {isExpanded && (
-                          <TableRow key={`${c.id}-detail`}>
-                            <TableCell colSpan={8} className="bg-muted/30 p-4">
-                              <RateTable rate={rate} />
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="in_corso" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Piani in corso</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <p className="text-muted-foreground text-center py-8">Caricamento...</p>
+              ) : inCorso.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">Nessun piano in corso.</p>
+              ) : (
+                renderTable(inCorso, "in_corso")
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="cronologia" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Piani completati</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <p className="text-muted-foreground text-center py-8">Caricamento...</p>
+              ) : cronologia.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">Nessun piano completato.</p>
+              ) : (
+                renderTable(cronologia, "cronologia")
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
 
       <ScadenziarioDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreated={(id) => setExpandedId(id)} />
 
