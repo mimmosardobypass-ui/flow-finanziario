@@ -287,6 +287,10 @@ export default function RiconciliazioneIntelligente() {
   );
   const allSafeSelected =
     controSafe.length > 0 && controSafe.every((c) => selectedContro.has(c.dest_id));
+  const selectedConAvvisoContropartita = useMemo(
+    () => contropartite.filter((c) => selectedContro.has(c.dest_id) && c.avviso === 'contropartita_presente').length,
+    [contropartite, selectedContro]
+  );
 
   const toggleAllContro = () => {
     setSelectedContro((prev) => {
@@ -678,7 +682,7 @@ export default function RiconciliazioneIntelligente() {
                 {controSafe.length > 0 && (
                   <div className="flex items-center gap-2 pb-1 text-xs text-muted-foreground">
                     <Checkbox checked={allSafeSelected} onCheckedChange={toggleAllContro} />
-                    <span>Seleziona tutte (escluse quelle con avviso)</span>
+                    <span>Seleziona tutte (escluse quelle con contropartita già presente)</span>
                   </div>
                 )}
                 {contropartite.map((c) => {
@@ -715,19 +719,34 @@ export default function RiconciliazioneIntelligente() {
                       </div>
                       <div className="flex flex-wrap items-center gap-2 border-t pt-2 text-xs text-muted-foreground">
                         <span>{c.rule_name}</span>
-                        {c.gia_esiste_simile && (
+                        {c.avviso === 'contropartita_presente' && (
+                          <>
+                            <span>·</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1 rounded border border-red-300 bg-red-100 px-1.5 py-0.5 font-semibold text-red-800">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Contropartita già presente
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                In Cassa esiste già un versamento dello stesso importo, con la stessa categoria o descrizione, non ancora riconciliato. Non crearne un altro: riconcilia la coppia esistente dalla sezione Coppie trovate.
+                              </TooltipContent>
+                            </Tooltip>
+                          </>
+                        )}
+                        {c.avviso === 'importo_simile' && (
                           <>
                             <span>·</span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">
                                   <AlertTriangle className="h-3 w-3" />
-                                  Forse già registrata
+                                  Importo simile in Cassa
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs">
-                                Sul conto di origine esiste già un movimento dello stesso importo in quei giorni.
-                                Controlla di non registrarla due volte.
+                                In Cassa c'è un'uscita dello stesso importo in quei giorni, ma con categoria e descrizione diverse: probabilmente è un'altra operazione. Controlla prima di creare.
                               </TooltipContent>
                             </Tooltip>
                           </>
@@ -736,6 +755,12 @@ export default function RiconciliazioneIntelligente() {
                     </div>
                   );
                 })}
+                {selectedConAvvisoContropartita > 0 && (
+                  <div className="flex items-start gap-2 rounded border border-red-300 bg-red-100 p-2 text-xs font-medium text-red-800">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    Stai per creare una contropartita per {selectedConAvvisoContropartita} movimenti che ne hanno già una: creeresti dei doppioni in Cassa.
+                  </div>
+                )}
                 <div className="flex justify-end pt-1">
                   <Button
                     onClick={handleCreateContropartite}
