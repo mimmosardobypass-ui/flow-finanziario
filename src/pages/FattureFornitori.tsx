@@ -1028,13 +1028,23 @@ function FornitoreDialog({
   onClose: () => void;
   onSave: (data: any) => Promise<void>;
 }) {
+  const prefilledRef = useRef(false);
   const [form, setForm] = useState({
     nome: fornitore?.nome ?? "",
     piva: fornitore?.piva ?? "",
     codice_fiscale: fornitore?.codice_fiscale ?? "",
+    match_keyword: fornitore?.match_keyword ?? "",
     category_id: fornitore?.category_id ?? "",
     note: fornitore?.note ?? "",
   });
+
+  useEffect(() => {
+    if (!fornitore && form.nome.trim() && !prefilledRef.current) {
+      prefilledRef.current = true;
+      setForm((prev) => ({ ...prev, match_keyword: form.nome.toUpperCase().trim() }));
+    }
+  }, [fornitore, form.nome]);
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
@@ -1047,6 +1057,18 @@ function FornitoreDialog({
               <Input value={form.piva} onChange={(e) => setForm({ ...form, piva: e.target.value })} /></div>
             <div className="space-y-2"><Label>Cod. Fiscale</Label>
               <Input value={form.codice_fiscale} onChange={(e) => setForm({ ...form, codice_fiscale: e.target.value })} /></div>
+          </div>
+          <div className="space-y-2">
+            <Label>Parola chiave nei movimenti bancari</Label>
+            <Input
+              value={form.match_keyword}
+              onChange={(e) => setForm({ ...form, match_keyword: e.target.value })}
+              placeholder="Es. ELHOPE, PLENITUDE, MOXEDO"
+            />
+            <p className="text-xs text-muted-foreground">
+              Testo cercato nella descrizione dei movimenti per proporre gli abbinamenti automatici.
+              Se lo lasci vuoto, le fatture di questo fornitore non verranno abbinate automaticamente.
+            </p>
           </div>
           <div className="space-y-2"><Label>Categoria default</Label>
             <Select value={form.category_id || "none"} onValueChange={(v) => setForm({ ...form, category_id: v === "none" ? "" : v })}>
@@ -1069,6 +1091,7 @@ function FornitoreDialog({
               nome: form.nome,
               piva: form.piva || null,
               codice_fiscale: form.codice_fiscale || null,
+              match_keyword: form.match_keyword.trim().toUpperCase() || null,
               category_id: form.category_id || null,
               note: form.note || null,
             });
