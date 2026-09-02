@@ -715,19 +715,34 @@ export default function RiconciliazioneIntelligente() {
                       </div>
                       <div className="flex flex-wrap items-center gap-2 border-t pt-2 text-xs text-muted-foreground">
                         <span>{c.rule_name}</span>
-                        {c.gia_esiste_simile && (
+                        {c.avviso === 'contropartita_presente' && (
+                          <>
+                            <span>·</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1 rounded border border-red-300 bg-red-100 px-1.5 py-0.5 font-semibold text-red-800">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Contropartita già presente
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                In Cassa esiste già un versamento dello stesso importo, con la stessa categoria o descrizione, non ancora riconciliato. Non crearne un altro: riconcilia la coppia esistente dalla sezione Coppie trovate.
+                              </TooltipContent>
+                            </Tooltip>
+                          </>
+                        )}
+                        {c.avviso === 'importo_simile' && (
                           <>
                             <span>·</span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">
                                   <AlertTriangle className="h-3 w-3" />
-                                  Forse già registrata
+                                  Importo simile in Cassa
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs">
-                                Sul conto di origine esiste già un movimento dello stesso importo in quei giorni.
-                                Controlla di non registrarla due volte.
+                                In Cassa c'è un'uscita dello stesso importo in quei giorni, ma con categoria e descrizione diverse: probabilmente è un'altra operazione. Controlla prima di creare.
                               </TooltipContent>
                             </Tooltip>
                           </>
