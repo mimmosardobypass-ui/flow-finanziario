@@ -67,22 +67,41 @@ export function PianiRateCard() {
     setSaving(true);
     let ok = 0;
     let chiuse = 0;
+    let inScadenziario = 0;
     try {
       for (const p of selPiani) {
         try {
           const res = await collegaMut.mutateAsync({
             fattura_id: p.fattura_id,
             transaction_ids: p.transaction_ids,
+            crea_scadenziario: creaScadenziario,
           });
           ok++;
           if (res?.piano_completo || Number(res?.residuo_fattura ?? 1) <= 0.01) chiuse++;
+          if (res?.scadenziario_id) inScadenziario++;
         } catch (e) {
           console.error("[Piani rate] errore piano", e);
         }
       }
       toast({
         title: "Rate collegate",
-        description: `${ok} piani collegati, ${chiuse} fatture chiuse`,
+        description: (
+          <span>
+            {ok} piani collegati, {chiuse} fatture chiuse
+            {inScadenziario > 0 && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className="underline font-medium"
+                  onClick={() => navigate("/scadenziario")}
+                >
+                  {inScadenziario} piani aggiunti allo Scadenziario
+                </button>
+              </>
+            )}
+          </span>
+        ),
       });
       qc.invalidateQueries({ queryKey: ["fatture-fornitori"] });
       qc.invalidateQueries({ queryKey: ["documenti-saldi"] });
