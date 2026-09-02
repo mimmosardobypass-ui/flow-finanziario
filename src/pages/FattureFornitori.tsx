@@ -805,7 +805,10 @@ function NuovaFatturaDialog({ onClose, fornitori }: { onClose: () => void; forni
       return;
     }
     try {
-      const nuovo = await createFornitore.mutateAsync({ nome: nome.trim() });
+      const nuovo = await createFornitore.mutateAsync({
+        nome: nome.trim(),
+        match_keyword: nome.trim().toUpperCase(),
+      });
       setForm((prev) => ({ ...prev, fornitore_id: nuovo.id, mittente: nome.trim() }));
       toast.success("Fornitore creato");
     } catch {
