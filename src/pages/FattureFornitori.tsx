@@ -968,6 +968,7 @@ function FornitoriTab({
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>P.IVA</TableHead>
+              <TableHead>Parola chiave</TableHead>
               <TableHead>Categoria</TableHead>
               <TableHead className="text-right">Fatture</TableHead>
               <TableHead className="text-right">Totale</TableHead>
@@ -976,7 +977,7 @@ function FornitoriTab({
           </TableHeader>
           <TableBody>
             {fornitori.length === 0 && (
-              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">Nessun fornitore</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">Nessun fornitore</TableCell></TableRow>
             )}
             {fornitori.map((f) => {
               const s = stats.get(f.id) ?? { count: 0, totale: 0 };
@@ -985,6 +986,26 @@ function FornitoriTab({
                 <TableRow key={f.id}>
                   <TableCell className="font-medium cursor-pointer" onClick={() => onSelectFornitore(f.id)}>{f.nome}</TableCell>
                   <TableCell>{f.piva ?? "—"}</TableCell>
+                  <TableCell>
+                    {f.match_keyword ? (
+                      f.match_keyword
+                    ) : (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap"
+                            style={{ backgroundColor: "#fffaeb", borderColor: "#fde3a7", color: "#b54708" }}
+                          >
+                            <AlertTriangle className="h-3 w-3" />
+                            nessuna parola chiave
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          Le fatture di questo fornitore non vengono abbinate automaticamente ai movimenti bancari.
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </TableCell>
                   <TableCell>{cat?.name ?? "—"}</TableCell>
                   <TableCell className="text-right">{s.count}</TableCell>
                   <TableCell className="text-right">{fmtEur(s.totale)}</TableCell>
