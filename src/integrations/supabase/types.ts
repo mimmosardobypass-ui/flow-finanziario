@@ -1086,6 +1086,7 @@ export type Database = {
       find_contropartite_mancanti: {
         Args: { p_user_id: string }
         Returns: {
+          avviso: string
           dest_amount: number
           dest_conto: string
           dest_date: string
