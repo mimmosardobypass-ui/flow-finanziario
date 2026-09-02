@@ -50,6 +50,26 @@ export default function Scadenziario() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
+  const prossime = useMemo(() => {
+    const oggi = startOfDay(new Date());
+    const limite = addDays(oggi, 30);
+    let totale = 0;
+    let stimato = 0;
+    let count = 0;
+    for (const c of contratti) {
+      for (const r of c.scadenze_rate || []) {
+        if (r.stato === "pagata" || !r.data_scadenza) continue;
+        const d = new Date(r.data_scadenza);
+        if (isBefore(d, oggi) || isAfter(d, limite)) continue;
+        count++;
+        totale += Number(r.importo || 0);
+        if (r.stimata) stimato += Number(r.importo || 0);
+      }
+    }
+    return { totale, stimato, count };
+  }, [contratti]);
+
+
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
