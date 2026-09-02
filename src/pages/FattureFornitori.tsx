@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Upload, Plus, Trash2, Pencil, Download, AlertTriangle, Search, X } from "lucide-react";
+import { FileText, Upload, Plus, Link2, Trash2, Pencil, Download, AlertTriangle, ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
