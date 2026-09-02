@@ -8,6 +8,7 @@ export interface Fornitore {
   nome: string;
   piva: string | null;
   codice_fiscale: string | null;
+  match_keyword: string | null;
   category_id: string | null;
   note: string | null;
   created_at: string;
@@ -18,6 +19,7 @@ export interface CreateFornitoreInput {
   nome: string;
   piva?: string | null;
   codice_fiscale?: string | null;
+  match_keyword?: string | null;
   category_id?: string | null;
   note?: string | null;
 }
