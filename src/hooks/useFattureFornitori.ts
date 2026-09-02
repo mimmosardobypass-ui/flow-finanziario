@@ -529,13 +529,6 @@ export function useFindNoteCreditoCompensabili() {
   });
 }
 
-function invalidaDocumenti(qc: ReturnType<typeof useQueryClient>) {
-  [
-    "fatture-fornitori", "fatture-sdi-mancanti", "documenti-saldi", "documento-pagamenti",
-    "esposizione-controparti", "pagamenti-fatture", "documenti-per-movimento",
-    "combinazioni-documenti", "movimenti-copertura",
-  ].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-}
 
 export function useCompensaDocumenti() {
   const { user } = useAuth();
