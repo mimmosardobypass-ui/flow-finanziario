@@ -40,6 +40,9 @@ function getTipoLabel(tipo: string) {
   return tipoLabelsMap[tipo] || tipo.charAt(0).toUpperCase() + tipo.slice(1);
 }
 
+const eur = (n: number) =>
+  `€ ${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 export default function Scadenziario() {
   const { data: contratti = [], isLoading } = useScadenziarioList();
   const deleteMutation = useDeleteScadenziario();
