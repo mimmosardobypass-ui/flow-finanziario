@@ -101,9 +101,18 @@ export function RateTable({ rate }: RateTableProps) {
                       className="w-36 h-8"
                     />
                   ) : (
-                    r.data_scadenza
-                      ? format(new Date(r.data_scadenza), "dd/MM/yyyy")
-                      : "—"
+                    <span className="flex items-center gap-2">
+                      <span className={r.stimata ? "italic text-muted-foreground" : ""}>
+                        {r.data_scadenza
+                          ? format(new Date(r.data_scadenza), "dd/MM/yyyy")
+                          : "—"}
+                      </span>
+                      {r.stimata && (
+                        <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px] font-normal">
+                          stimata
+                        </Badge>
+                      )}
+                    </span>
                   )}
                 </TableCell>
                 <TableCell>{getStatoBadge(r)}</TableCell>
