@@ -45,6 +45,26 @@ function getTipoLabel(tipo: string) {
 const eur = (n: number) =>
   `€ ${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+function getInfo(c: ScadenziarioWithRate) {
+  const rate = c.scadenze_rate || [];
+  const pagate = rate.filter((r) => r.stato === "pagata").length;
+  const nonPagate = rate
+    .filter((r) => r.stato !== "pagata" && r.data_scadenza)
+    .sort((a, b) => new Date(a.data_scadenza!).getTime() - new Date(b.data_scadenza!).getTime());
+  const conData = rate
+    .filter((r) => r.data_scadenza)
+    .sort((a, b) => new Date(a.data_scadenza!).getTime() - new Date(b.data_scadenza!).getTime());
+  const prossimaRata = nonPagate[0] || null;
+  const ultimaRata = conData[conData.length - 1] || null;
+  return {
+    pagate,
+    totale: rate.length,
+    prossimaRata,
+    prossima: prossimaRata?.data_scadenza ? new Date(prossimaRata.data_scadenza) : null,
+    ultima: ultimaRata?.data_scadenza ? new Date(ultimaRata.data_scadenza) : null,
+  };
+}
+
 export default function Scadenziario() {
   const { data: contratti = [], isLoading } = useScadenziarioList();
   const deleteMutation = useDeleteScadenziario();
