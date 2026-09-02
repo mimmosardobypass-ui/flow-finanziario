@@ -143,7 +143,16 @@ export default function Scadenziario() {
                             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                           </TableCell>
                           <TableCell className="font-medium">{c.numero_contratto}</TableCell>
-                          <TableCell>{c.societa_finanziaria}</TableCell>
+                          <TableCell>
+                            {c.societa_finanziaria === "PayPal" ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                <CreditCard className="h-3.5 w-3.5" />
+                                PayPal a rate
+                              </span>
+                            ) : (
+                              c.societa_finanziaria
+                            )}
+                          </TableCell>
                           <TableCell>{getTipoLabel(c.tipo)}</TableCell>
                           <TableCell className="text-right">€ {c.importo_totale.toFixed(2)}</TableCell>
                           <TableCell className="text-center">{pagate}/{rate.length}</TableCell>
