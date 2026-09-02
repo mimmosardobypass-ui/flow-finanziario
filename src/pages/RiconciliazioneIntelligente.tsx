@@ -753,6 +753,9 @@ export default function RiconciliazioneIntelligente() {
             </Card>
           )}
 
+          {/* PAGAMENTI DA ABBINARE FATTURE */}
+          <PagamentiFattureCard />
+
           {/* PIANI A RATE PAYPAL */}
           <PianiRateCard />
         </TabsContent>
