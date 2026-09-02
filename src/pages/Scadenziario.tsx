@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { format, isBefore, startOfDay } from "date-fns";
-import { Plus, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { format, isBefore, isAfter, startOfDay, addDays } from "date-fns";
+import { Plus, ChevronDown, ChevronUp, Trash2, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,12 +40,35 @@ function getTipoLabel(tipo: string) {
   return tipoLabelsMap[tipo] || tipo.charAt(0).toUpperCase() + tipo.slice(1);
 }
 
+const eur = (n: number) =>
+  `€ ${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 export default function Scadenziario() {
   const { data: contratti = [], isLoading } = useScadenziarioList();
   const deleteMutation = useDeleteScadenziario();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  const prossime = useMemo(() => {
+    const oggi = startOfDay(new Date());
+    const limite = addDays(oggi, 30);
+    let totale = 0;
+    let stimato = 0;
+    let count = 0;
+    for (const c of contratti) {
+      for (const r of c.scadenze_rate || []) {
+        if (r.stato === "pagata" || !r.data_scadenza) continue;
+        const d = new Date(r.data_scadenza);
+        if (isBefore(d, oggi) || isAfter(d, limite)) continue;
+        count++;
+        totale += Number(r.importo || 0);
+        if (r.stimata) stimato += Number(r.importo || 0);
+      }
+    }
+    return { totale, stimato, count };
+  }, [contratti]);
+
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -70,6 +93,17 @@ export default function Scadenziario() {
           Nuovo Contratto
         </Button>
       </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-sm text-muted-foreground">In scadenza nei prossimi 30 giorni</div>
+          <div className="text-2xl font-bold">{eur(prossime.totale)}</div>
+          <div className="text-xs text-muted-foreground">
+            {prossime.count} rate
+            {prossime.stimato > 0 && <> · di cui {eur(prossime.stimato)} stimati</>}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -109,7 +143,16 @@ export default function Scadenziario() {
                             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                           </TableCell>
                           <TableCell className="font-medium">{c.numero_contratto}</TableCell>
-                          <TableCell>{c.societa_finanziaria}</TableCell>
+                          <TableCell>
+                            {c.societa_finanziaria === "PayPal" ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                <CreditCard className="h-3.5 w-3.5" />
+                                PayPal a rate
+                              </span>
+                            ) : (
+                              c.societa_finanziaria
+                            )}
+                          </TableCell>
                           <TableCell>{getTipoLabel(c.tipo)}</TableCell>
                           <TableCell className="text-right">€ {c.importo_totale.toFixed(2)}</TableCell>
                           <TableCell className="text-center">{pagate}/{rate.length}</TableCell>

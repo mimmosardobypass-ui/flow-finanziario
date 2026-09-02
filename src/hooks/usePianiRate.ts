@@ -49,15 +49,18 @@ export function useCollegaPianoRate() {
     mutationFn: async ({
       fattura_id,
       transaction_ids,
+      crea_scadenziario = true,
     }: {
       fattura_id: string;
       transaction_ids: string[];
+      crea_scadenziario?: boolean;
     }) => {
       if (!user) throw new Error("Non autenticato");
       const { data, error } = await supabase.rpc("collega_piano_rate", {
         p_user_id: user.id,
         p_fattura_id: fattura_id,
         p_transaction_ids: transaction_ids,
+        p_crea_scadenziario: crea_scadenziario,
       });
       if (error) throw error;
       return data as unknown as {
@@ -67,6 +70,7 @@ export function useCollegaPianoRate() {
         arrotondamento: number;
         residuo_fattura: number;
         stato: string;
+        scadenziario_id?: string | null;
       };
     },
     onSuccess: () => {
@@ -74,6 +78,8 @@ export function useCollegaPianoRate() {
       qc.invalidateQueries({ queryKey: ["documenti-saldi"] });
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["movimenti-copertura"] });
+      qc.invalidateQueries({ queryKey: ["scadenziario"] });
+      qc.invalidateQueries({ queryKey: ["scadenze_rate_unpaid"] });
     },
   });
 }

@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { CreditCard, Loader2, Search, CheckCheck, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { format, addDays, differenceInCalendarDays } from "date-fns";
 import { it } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ export function PianiRateCard() {
   const [piani, setPiani] = useState<PianoRate[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [creaScadenziario, setCreaScadenziario] = useState(true);
+  const navigate = useNavigate();
 
   const completi = useMemo(() => (piani ?? []).filter((p) => p.stato === "completo"), [piani]);
   const inCorso = useMemo(() => (piani ?? []).filter((p) => p.stato !== "completo"), [piani]);
@@ -67,22 +70,41 @@ export function PianiRateCard() {
     setSaving(true);
     let ok = 0;
     let chiuse = 0;
+    let inScadenziario = 0;
     try {
       for (const p of selPiani) {
         try {
           const res = await collegaMut.mutateAsync({
             fattura_id: p.fattura_id,
             transaction_ids: p.transaction_ids,
+            crea_scadenziario: creaScadenziario,
           });
           ok++;
           if (res?.piano_completo || Number(res?.residuo_fattura ?? 1) <= 0.01) chiuse++;
+          if (res?.scadenziario_id) inScadenziario++;
         } catch (e) {
           console.error("[Piani rate] errore piano", e);
         }
       }
       toast({
         title: "Rate collegate",
-        description: `${ok} piani collegati, ${chiuse} fatture chiuse`,
+        description: (
+          <span>
+            {ok} piani collegati, {chiuse} fatture chiuse
+            {inScadenziario > 0 && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className="underline font-medium"
+                  onClick={() => navigate("/scadenziario")}
+                >
+                  {inScadenziario} piani aggiunti allo Scadenziario
+                </button>
+              </>
+            )}
+          </span>
+        ),
       });
       qc.invalidateQueries({ queryKey: ["fatture-fornitori"] });
       qc.invalidateQueries({ queryKey: ["documenti-saldi"] });
@@ -250,7 +272,14 @@ export function PianiRateCard() {
                   {inCorso.map((p) => renderPiano(p, false))}
                 </div>
               )}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+              <label className="flex items-center gap-2 border-t pt-3 text-sm cursor-pointer">
+                <Checkbox
+                  checked={creaScadenziario}
+                  onCheckedChange={(v) => setCreaScadenziario(v === true)}
+                />
+                Crea anche la voce nello Scadenziario
+              </label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm text-muted-foreground">
                   Selezionati: {selPiani.length} piani · {eur(selTotale)}
                 </span>
