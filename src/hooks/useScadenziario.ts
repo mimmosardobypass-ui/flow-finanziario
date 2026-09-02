@@ -25,6 +25,7 @@ export interface ScadenzaRata {
   stato: string;
   transaction_id: string | null;
   created_at: string;
+  stimata?: boolean;
 }
 
 export interface ScadenziarioWithRate extends Scadenziario {
