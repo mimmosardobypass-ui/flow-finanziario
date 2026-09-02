@@ -755,6 +755,12 @@ export default function RiconciliazioneIntelligente() {
                     </div>
                   );
                 })}
+                {selectedConAvvisoContropartita > 0 && (
+                  <div className="flex items-start gap-2 rounded border border-red-300 bg-red-100 p-2 text-xs font-medium text-red-800">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    Stai per creare una contropartita per {selectedConAvvisoContropartita} movimenti che ne hanno già una: creeresti dei doppioni in Cassa.
+                  </div>
+                )}
                 <div className="flex justify-end pt-1">
                   <Button
                     onClick={handleCreateContropartite}
