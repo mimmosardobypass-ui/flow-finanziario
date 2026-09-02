@@ -678,7 +678,7 @@ export default function RiconciliazioneIntelligente() {
                 {controSafe.length > 0 && (
                   <div className="flex items-center gap-2 pb-1 text-xs text-muted-foreground">
                     <Checkbox checked={allSafeSelected} onCheckedChange={toggleAllContro} />
-                    <span>Seleziona tutte (escluse quelle con avviso)</span>
+                    <span>Seleziona tutte (escluse quelle con contropartita già presente)</span>
                   </div>
                 )}
                 {contropartite.map((c) => {
