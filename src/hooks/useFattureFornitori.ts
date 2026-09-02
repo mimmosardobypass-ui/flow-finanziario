@@ -191,6 +191,14 @@ export function useFattureStats() {
 }
 
 
+function invalidaDocumenti(qc: ReturnType<typeof useQueryClient>) {
+  [
+    "fatture-fornitori", "fatture-sdi-mancanti", "documenti-saldi", "documento-pagamenti",
+    "esposizione-controparti", "pagamenti-fatture", "documenti-per-movimento",
+    "combinazioni-documenti", "movimenti-copertura",
+  ].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+}
+
 export function useCreateFattura() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -205,7 +213,7 @@ export function useCreateFattura() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
+    onSuccess: () => invalidaDocumenti(qc),
   });
 }
 
@@ -223,7 +231,7 @@ export function useUpdateFattura() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
+    onSuccess: () => invalidaDocumenti(qc),
   });
 }
 
@@ -234,7 +242,7 @@ export function useDeleteFattura() {
       const { error } = await supabase.from("fatture_fornitori").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
+    onSuccess: () => invalidaDocumenti(qc),
   });
 }
 
@@ -263,7 +271,7 @@ export function useCollegaTransazione() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["fatture-fornitori"] }); qc.invalidateQueries({ queryKey: ["fatture-sdi-mancanti"] }); },
+    onSuccess: () => invalidaDocumenti(qc),
   });
 }
 
@@ -521,13 +529,6 @@ export function useFindNoteCreditoCompensabili() {
   });
 }
 
-function invalidaDocumenti(qc: ReturnType<typeof useQueryClient>) {
-  [
-    "fatture-fornitori", "fatture-sdi-mancanti", "documenti-saldi", "documento-pagamenti",
-    "esposizione-controparti", "pagamenti-fatture", "documenti-per-movimento",
-    "combinazioni-documenti", "movimenti-copertura",
-  ].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-}
 
 export function useCompensaDocumenti() {
   const { user } = useAuth();
