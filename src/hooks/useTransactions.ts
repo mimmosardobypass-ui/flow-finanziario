@@ -187,7 +187,7 @@ export function useUpdateTransaction() {
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      invalidaMovimenti(queryClient);
       // Re-generate suggestions for updated transaction
       if (data?.id) {
         generateSuggestionsForIds([data.id], data.user_id).then(() => {
@@ -280,7 +280,7 @@ export function useCreateTransfer() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      invalidaMovimenti(queryClient);
       queryClient.invalidateQueries({ queryKey: ["categories"] });
     },
   });
@@ -300,8 +300,7 @@ export function useDeleteTransaction() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["reconciliation-suggestions"] });
+      invalidaMovimenti(queryClient);
     },
   });
 }
