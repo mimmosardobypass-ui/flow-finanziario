@@ -272,12 +272,23 @@ export default function Transactions() {
     }
   }, [isLoading, transactions]);
 
-  // Calcola totali
+  // Calcola totali (opzionalmente esclusi i giroconti)
+  const isGiroconto = (t: TransactionWithCategory) =>
+    !!(t as any).transfer_id || (t as any).reconciliation_type === "transfer";
+
+  const girocontiEsclusi = useMemo(
+    () => (includiGiroconti ? 0 : displayedTransactions.filter(isGiroconto).length),
+    [displayedTransactions, includiGiroconti],
+  );
+
   const totals = useMemo(() => {
-    const entrate = displayedTransactions
+    const base = includiGiroconti
+      ? displayedTransactions
+      : displayedTransactions.filter((t) => !isGiroconto(t));
+    const entrate = base
       .filter((t) => t.type === "income")
       .reduce((sum, t) => sum + t.amount, 0);
-    const uscite = displayedTransactions
+    const uscite = base
       .filter((t) => t.type === "expense")
       .reduce((sum, t) => sum + t.amount, 0);
     return {
@@ -285,7 +296,22 @@ export default function Transactions() {
       uscite,
       saldo: entrate - uscite,
     };
-  }, [displayedTransactions]);
+  }, [displayedTransactions, includiGiroconti]);
+
+  const [loadingAll, setLoadingAll] = useState(false);
+  const handleLoadAll = async () => {
+    setLoadingAll(true);
+    try {
+      let guard = 0;
+      while (hasNextPage && guard < 200) {
+        guard++;
+        await fetchNextPage();
+      }
+    } finally {
+      setLoadingAll(false);
+    }
+  };
+
 
   const handleEdit = (transaction: TransactionWithCategory) => {
     setSelectedTransaction(transaction);
