@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { invalidaAnagrafiche } from "@/lib/invalidate";
 
 export interface CreateCategoryInput {
   name: string;
@@ -35,7 +36,7 @@ export function useCreateCategory() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      invalidaAnagrafiche(queryClient);
     },
   });
 }
@@ -60,7 +61,7 @@ export function useUpdateCategory() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      invalidaAnagrafiche(queryClient);
     },
   });
 }
@@ -78,7 +79,7 @@ export function useDeleteCategory() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      invalidaAnagrafiche(queryClient);
     },
   });
 }
