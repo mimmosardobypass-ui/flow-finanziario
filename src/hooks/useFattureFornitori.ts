@@ -248,32 +248,31 @@ export function useDeleteFattura() {
 
 export function useCollegaTransazione() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       fattura_id,
       transaction_id,
-      data_pagamento,
     }: {
       fattura_id: string;
       transaction_id: string;
-      data_pagamento: string;
+      data_pagamento?: string;
     }) => {
-      const { data, error } = await supabase
-        .from("fatture_fornitori")
-        .update({
-          transaction_id,
-          stato_pagamento: "pagata",
-          data_pagamento,
-        })
-        .eq("id", fattura_id)
-        .select()
-        .single();
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase.rpc("associa_documenti_movimento", {
+        p_user_id: user.id,
+        p_transaction_id: transaction_id,
+        p_fattura_ids: [fattura_id],
+        p_importi: null,
+      });
       if (error) throw error;
       return data;
     },
     onSuccess: () => invalidaDocumenti(qc),
+    onError: (e: any) => toast.error(`Collegamento fallito: ${e?.message ?? e}`),
   });
 }
+
 
 function parseDate(value: any): string | null {
   if (value === null || value === undefined || value === "") return null;
