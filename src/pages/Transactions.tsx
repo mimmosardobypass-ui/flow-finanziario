@@ -101,6 +101,8 @@ export default function Transactions() {
     useState<TransactionWithCategory | null>(null);
   const [selectedTransaction, setSelectedTransaction] =
     useState<TransactionWithCategory | null>(null);
+  const [includiGiroconti, setIncludiGiroconti] = useState(false);
+
   
   // Initialize filters from URL params
   const [filters, setFilters] = useState<FiltersType>(() => {
@@ -303,14 +305,17 @@ export default function Transactions() {
     setLoadingAll(true);
     try {
       let guard = 0;
-      while (hasNextPage && guard < 200) {
+      let more = hasNextPage;
+      while (more && guard < 200) {
         guard++;
-        await fetchNextPage();
+        const r = await fetchNextPage();
+        more = !!r.hasNextPage;
       }
     } finally {
       setLoadingAll(false);
     }
   };
+
 
 
   const handleEdit = (transaction: TransactionWithCategory) => {
