@@ -2,7 +2,9 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, Check, RefreshCw, Copy, Paperclip, type LucideIcon } from "lucide-react";
+import { Receipt, Plus, Pencil, Trash2, Upload, ArrowLeftRight, Circle, Check, RefreshCw, Copy, Paperclip, AlertTriangle, type LucideIcon } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useMovimentiCopertura } from "@/hooks/useDocumentiMovimento";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -467,21 +469,67 @@ export default function Transactions() {
 
       {/* Conteggio e totali */}
       {displayedTransactions.length > 0 && (
-        <div className="flex flex-wrap gap-4 items-center text-sm print:hidden">
-          <span className="text-muted-foreground">
-            {displayedTransactions.length} transazion{displayedTransactions.length === 1 ? "e" : "i"}
-          </span>
-          <span className="text-success font-medium">
-            Entrate: +€{totals.entrate.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-          </span>
-          <span className="text-destructive font-medium">
-            Uscite: -€{totals.uscite.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-          </span>
-          <span className={`font-bold ${totals.saldo >= 0 ? "text-success" : "text-destructive"}`}>
-            Saldo: {totals.saldo >= 0 ? "+" : ""}€{totals.saldo.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-          </span>
+        <div className="space-y-2 print:hidden">
+          <div className="flex flex-wrap gap-4 items-center text-sm">
+            <span className="text-muted-foreground">
+              {displayedTransactions.length} transazion{displayedTransactions.length === 1 ? "e" : "i"}
+            </span>
+            <span className="text-success font-medium">
+              Entrate: +€{totals.entrate.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+            </span>
+            <span className="text-destructive font-medium">
+              Uscite: -€{totals.uscite.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+            </span>
+            <span className={`font-bold ${totals.saldo >= 0 ? "text-success" : "text-destructive"}`}>
+              Saldo: {totals.saldo >= 0 ? "+" : ""}€{totals.saldo.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="includi-giroconti"
+                checked={includiGiroconti}
+                onCheckedChange={setIncludiGiroconti}
+              />
+              <Label htmlFor="includi-giroconti" className="text-sm">
+                Includi giroconti
+              </Label>
+            </div>
+            {!includiGiroconti && girocontiEsclusi > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {girocontiEsclusi} girocont{girocontiEsclusi === 1 ? "o" : "i"} esclus{girocontiEsclusi === 1 ? "o" : "i"} dai totali
+              </span>
+            )}
+          </div>
+
+          {hasNextPage && (
+            <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+              <span>
+                Totali calcolati su {displayedTransactions.length} movimenti caricati. Scorri fino in
+                fondo per il totale completo.
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLoadAll}
+                disabled={loadingAll || isFetchingNextPage}
+              >
+                {loadingAll ? (
+                  <>
+                    <RefreshCw className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    Caricamento…
+                  </>
+                ) : (
+                  "Carica tutto"
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       )}
+
 
       {/* Contenuto principale */}
       {displayedTransactions.length === 0 ? (
