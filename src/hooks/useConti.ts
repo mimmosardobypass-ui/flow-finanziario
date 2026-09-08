@@ -79,7 +79,7 @@ export function useCreateConto() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conti"] });
+      invalidaAnagrafiche(queryClient);
     },
   });
 }
@@ -103,7 +103,7 @@ export function useUpdateConto() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conti"] });
+      invalidaAnagrafiche(queryClient);
     },
   });
 }
@@ -119,7 +119,7 @@ export function useToggleContoAttivo() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conti"] });
+      invalidaAnagrafiche(queryClient);
     },
   });
 }

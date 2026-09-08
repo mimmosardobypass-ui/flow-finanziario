@@ -36,7 +36,7 @@ export function useCreateCategory() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      invalidaAnagrafiche(queryClient);
     },
   });
 }
@@ -61,7 +61,7 @@ export function useUpdateCategory() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      invalidaAnagrafiche(queryClient);
     },
   });
 }
@@ -79,7 +79,7 @@ export function useDeleteCategory() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      invalidaAnagrafiche(queryClient);
     },
   });
 }
