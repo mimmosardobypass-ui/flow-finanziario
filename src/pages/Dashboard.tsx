@@ -68,6 +68,7 @@ import { CategoryBreakdownCard } from "@/components/dashboard/CategoryBreakdownC
 import { RecentTransactionsCard } from "@/components/dashboard/RecentTransactionsCard";
 import { PeriodComparisonCard } from "@/components/dashboard/PeriodComparisonCard";
 import { InsightsCard } from "@/components/dashboard/InsightsCard";
+import { FinanziamentiCard } from "@/components/dashboard/FinanziamentiCard";
 
 // Custom Tooltip for the chart
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -381,6 +382,11 @@ export default function Dashboard() {
           avgDailyExpense={stats.avgDailyExpense}
           periodLabel={periodLabel}
         />
+      </div>
+
+      {/* Finanziamenti */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <FinanziamentiCard />
       </div>
 
       {/* Recent Transactions */}

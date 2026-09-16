@@ -14,6 +14,7 @@ import Categories from "./pages/Categories";
 import Scadenziario from "./pages/Scadenziario";
 import Conti from "./pages/Conti";
 import Bilancio from "./pages/Bilancio";
+import Finanziamenti from "./pages/Finanziamenti";
 import Regole from "./pages/Regole";
 import RiconciliazioneIntelligente from "./pages/RiconciliazioneIntelligente";
 import FattureFornitori from "./pages/FattureFornitori";
@@ -104,6 +105,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <Conti />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/finanziamenti"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Finanziamenti />
                   </Layout>
                 </ProtectedRoute>
               }
