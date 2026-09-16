@@ -34,6 +34,12 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
+    --account-1: 212 68% 50%;
+    --account-2: 16 81% 56%;
+    --account-3: 160 73% 40%;
+    --account-4: 41 100% 46%;
+    --account-5: 215 12% 55%;
+
     --border: 220 15% 88%;
     --input: 220 15% 88%;
     --ring: 215 70% 45%;
@@ -48,6 +54,14 @@
     --sidebar-accent-foreground: 215 25% 20%;
     --sidebar-border: 220 15% 88%;
     --sidebar-ring: 215 70% 45%;
+  }
+
+  .dark {
+    --account-1: 212 77% 56%;
+    --account-2: 16 69% 50%;
+    --account-3: 160 73% 36%;
+    --account-4: 40 100% 39%;
+    --account-5: 215 12% 55%;
   }
 }
 
