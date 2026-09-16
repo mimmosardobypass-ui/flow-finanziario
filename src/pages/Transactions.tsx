@@ -109,8 +109,8 @@ export default function Transactions() {
   // Initialize filters from URL params
   const [filters, setFilters] = useState<FiltersType>(() => {
     const type = searchParams.get("type");
-    const categoryId = searchParams.get("categoryId");
-    const contoId = searchParams.get("contoId");
+    const contoId = searchParams.get("contoId") || searchParams.get("conto");
+
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
     const search = searchParams.get("search");
