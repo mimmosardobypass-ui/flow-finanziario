@@ -99,7 +99,7 @@ export function NuovoFinanziamentoDialog({
   modoIniziale = "calcola",
 }: Props) {
   const { data: conti = [] } = useContiAttivi();
-  const { data: albero = [] } = useCategoryTree();
+  const albero = useCategoryTree();
   const { data: contratti = [] } = useFinanziamenti();
   const crea = useCreateFinanziamento();
 
