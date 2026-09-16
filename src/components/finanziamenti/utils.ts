@@ -30,15 +30,27 @@ export const tronca = (testo: string | null | undefined, max = 60) => {
   return t.length > max ? `${t.slice(0, max)}…` : t;
 };
 
-/** Converte un importo scritto con la virgola in numero. */
+/** Converte un importo scritto all'italiana (o con il punto decimale) in numero. */
 export const parseImporto = (v: string): number | null => {
-  const pulito = v.replace(/\./g, "").replace(",", ".").trim();
-  if (!pulito) return null;
-  const num = Number(pulito);
+  const grezzo = (v ?? "").trim();
+  if (!grezzo) return null;
+
+  let pulito: string;
+  if (grezzo.includes(",")) {
+    // La virgola è il decimale, i punti sono separatori delle migliaia.
+    pulito = grezzo.replace(/\./g, "").replace(",", ".");
+  } else if (/^[^.]*\.\d{1,2}$/.test(grezzo)) {
+    // Un solo punto seguito da 1 o 2 cifre finali: è il decimale.
+    pulito = grezzo;
+  } else {
+    pulito = grezzo.replace(/\./g, "");
+  }
+
+  const num = Number(pulito.replace(/\s/g, ""));
   return Number.isFinite(num) ? num : null;
 };
 
-export const oggiISO = () => new Date().toISOString().slice(0, 10);
+export const oggiISO = () => format(new Date(), "yyyy-MM-dd");
 
 /** Aggiunge mesi a una data ISO mantenendo il giorno, con correzione fine mese. */
 export function aggiungiMesi(dataISO: string, mesi: number): string {

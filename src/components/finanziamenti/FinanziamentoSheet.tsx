@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   useFinanziamentoDettaglio,
@@ -90,6 +91,7 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
 
   const rate = dettaglio?.rate ?? [];
   const movimenti = dettaglio?.movimenti ?? {};
+  const speseMovimenti = dettaglio?.spese_movimenti ?? {};
   const eventi = dettaglio?.eventi ?? [];
   const regole = dettaglio?.regole ?? [];
 
@@ -227,6 +229,8 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                     {rate.map((r) => {
                       const st = statoRata(r);
                       const mov = movimenti[r.id];
+                      const speseMov = speseMovimenti[r.id] ?? [];
+                      const totaleSpeseMov = speseMov.reduce((a, s) => a + s.amount, 0);
                       const scaduta = r.stato !== "pagata" && (r.data_scadenza ?? "") < oggiISO();
                       return (
                         <TableRow
@@ -280,7 +284,30 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            {r.spese > 0 ? fmtEur(r.spese) : "—"}
+                            {speseMov.length > 0 ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-help underline decoration-dotted">
+                                    {r.spese > 0 ? fmtEur(r.spese) : fmtEur(totaleSpeseMov)}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <p className="mb-1 font-medium">Spese accessorie</p>
+                                  <ul className="space-y-0.5">
+                                    {speseMov.map((s) => (
+                                      <li key={s.id} className="text-xs">
+                                        {fmtData(s.date)} · {tronca(s.description, 30)} ·{" "}
+                                        {fmtEur(s.amount)}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : r.spese > 0 ? (
+                              fmtEur(r.spese)
+                            ) : (
+                              "—"
+                            )}
                           </TableCell>
                           <TableCell>
                             <DropdownMenu>
