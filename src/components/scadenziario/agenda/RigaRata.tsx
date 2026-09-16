@@ -7,7 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from "@/lib/utils";
 import type { ScadenzaAgenda } from "@/hooks/useScadenzeAgenda";
 import { fmtEur } from "@/components/finanziamenti/utils";
-import { isStimata } from "./calcoli";
+import { classeColoreConto, isStimata } from "./calcoli";
 
 interface Props { rata: ScadenzaAgenda; indiceColore: number; onApri: () => void; onCollega: () => void; onSegnaEnte: () => void }
 
@@ -25,7 +25,7 @@ export function RigaRata({ rata, indiceColore, onApri, onCollega, onSegnaEnte }:
         <p className="truncate text-xs text-muted-foreground" title={meta}>{meta}</p>
       </button>
       <div className="col-start-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground sm:col-start-auto">
-        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-sm", `bg-account-${Math.min(indiceColore + 1, 5)}`)} /><span className="truncate">{rata.nome_conto ?? "Senza conto"}</span>
+        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-sm", classeColoreConto(indiceColore))} /><span className="truncate">{rata.nome_conto ?? "Senza conto"}</span>
       </div>
       <div className="text-right sm:col-start-auto">
         <p className="whitespace-nowrap text-sm font-bold tabular-nums text-foreground">{fmtEur(rata.importo)}</p>

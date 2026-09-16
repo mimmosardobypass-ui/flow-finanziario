@@ -6,6 +6,8 @@ import type { EntrataPrevista, ScadenzaAgenda } from "@/hooks/useScadenzeAgenda"
 export const DATA_OGGI = () => format(new Date(), "yyyy-MM-dd");
 
 export const isStimata = (r: ScadenzaAgenda) => r.stimata || r.piano_stimato;
+const CLASSI_CONTO = ["bg-account-1", "bg-account-2", "bg-account-3", "bg-account-4", "bg-account-5"];
+export const classeColoreConto = (indice: number) => CLASSI_CONTO[Math.min(Math.max(indice, 0), 4)];
 export const filtraConto = (rate: ScadenzaAgenda[], contoId: string) => contoId === "tutti" ? rate : rate.filter((r) => r.conto_id === contoId);
 export const sommaRate = (rate: ScadenzaAgenda[], previsto = false) => rate.reduce((s, r) => s + (previsto ? r.importo_previsto : r.importo), 0);
 
