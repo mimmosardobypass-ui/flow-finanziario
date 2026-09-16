@@ -254,7 +254,7 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                           <TableCell className="whitespace-nowrap px-2">
                             <span className={cn(r.stimata && "italic")}>{fmtData(r.data_scadenza)}</span>
                             {r.id === prossimaId && (
-                              <span className="ml-1 text-xs text-primary">prossima</span>
+                              <div className="text-xs text-primary">prossima</div>
                             )}
                           </TableCell>
                           <TableCell className="whitespace-nowrap px-2 text-right">
@@ -271,7 +271,13 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                             )}
                           </TableCell>
                           <TableCell className="px-2">
-                            <Badge variant="outline" className={st.classe}>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "max-w-full whitespace-normal text-center leading-tight",
+                                st.classe,
+                              )}
+                            >
                               {st.testo}
                             </Badge>
                             {r.nota && (
