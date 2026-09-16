@@ -638,7 +638,7 @@ export function useEstinguiFinanziamento() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (!user) throw new Error("Non autenticato");
-      const oggi = new Date().toISOString().slice(0, 10);
+      const oggi = format(new Date(), "yyyy-MM-dd");
       const { error } = await supabase
         .from("scadenziario")
         .update({ stato: "estinto", data_estinzione: oggi })
