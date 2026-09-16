@@ -134,6 +134,7 @@ export function useCreateScadenziario() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scadenziario"] });
       queryClient.invalidateQueries({ queryKey: ["scadenze_rate_unpaid"] });
+      queryClient.invalidateQueries({ queryKey: ["scadenze-agenda"] });
     },
   });
 }
@@ -152,6 +153,7 @@ export function useUpdateRata() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scadenziario"] });
+      queryClient.invalidateQueries({ queryKey: ["scadenze-agenda"] });
     },
   });
 }
@@ -187,6 +189,7 @@ export function useDeleteScadenziario() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scadenziario"] });
       queryClient.invalidateQueries({ queryKey: ["scadenze_rate_unpaid"] });
+      queryClient.invalidateQueries({ queryKey: ["scadenze-agenda"] });
     },
   });
 }
