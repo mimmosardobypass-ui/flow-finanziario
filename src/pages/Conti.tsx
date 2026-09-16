@@ -17,7 +17,13 @@ import {
   AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
-import { Area, AreaChart, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+} from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
