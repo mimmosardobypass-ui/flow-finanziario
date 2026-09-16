@@ -17,7 +17,13 @@ import {
   AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
-import { Area, AreaChart, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+} from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -363,6 +369,7 @@ export default function Conti() {
                       <div className="h-12 -mx-1">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={serie} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                            <XAxis dataKey="mese" hide />
                             <RTooltip
                               contentStyle={{
                                 background: "hsl(var(--popover))",
@@ -370,7 +377,9 @@ export default function Conti() {
                                 borderRadius: 8,
                                 fontSize: 12,
                               }}
-                              labelFormatter={(v) => fmtMeseAnno(String(v))}
+                              labelFormatter={(_, payload) =>
+                                fmtMeseAnno((payload?.[0]?.payload as { mese?: string })?.mese)
+                              }
                               formatter={(v: number) => [fmtEur(v), "Saldo"]}
                             />
                             <Area

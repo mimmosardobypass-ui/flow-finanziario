@@ -1,4 +1,4 @@
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { it } from "date-fns/locale";
 
 export const fmtEur = (v: number | null | undefined) =>
@@ -7,11 +7,17 @@ export const fmtEur = (v: number | null | undefined) =>
     maximumFractionDigits: 2,
   })}`;
 
-export const fmtData = (v: string | null | undefined) =>
-  v ? format(parseISO(v), "dd/MM/yyyy") : "—";
+export const fmtData = (v: string | null | undefined) => {
+  if (!v) return "—";
+  const d = parseISO(v);
+  return isValid(d) ? format(d, "dd/MM/yyyy") : "—";
+};
 
-export const fmtMeseAnno = (v: string | null | undefined) =>
-  v ? format(parseISO(v), "MMM yyyy", { locale: it }) : "—";
+export const fmtMeseAnno = (v: string | null | undefined) => {
+  if (!v) return "—";
+  const d = parseISO(v);
+  return isValid(d) ? format(d, "MMM yyyy", { locale: it }) : "—";
+};
 
 export const iniziali = (testo: string | null | undefined) =>
   (testo ?? "?")
