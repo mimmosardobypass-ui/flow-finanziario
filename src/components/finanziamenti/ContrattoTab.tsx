@@ -512,8 +512,7 @@ export function ContrattoTab({ contratto, regole }: Props) {
               Conferma
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogFooter>
-      </AlertDialogContent>
+        </AlertDialogContent>
       </AlertDialog>
     </div>
   );
