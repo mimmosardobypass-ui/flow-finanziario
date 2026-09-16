@@ -110,6 +110,13 @@ export type Database = {
             referencedRelation: "conti"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "categorization_rules_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "v_conti_riepilogo"
+            referencedColumns: ["id"]
+          },
         ]
       }
       clienti_unieuro: {
@@ -158,29 +165,56 @@ export type Database = {
         Row: {
           attivo: boolean
           banca: string | null
+          colore: string | null
           created_at: string
           id: string
+          identificativo: string | null
+          intestatario: string | null
           nome_conto: string
+          note: string | null
           saldo_iniziale: number
+          saldo_riferimento: number | null
+          saldo_riferimento_data: string | null
+          tipo: string | null
           user_id: string
+          verificato_dal: string | null
+          verificato_fino_al: string | null
         }
         Insert: {
           attivo?: boolean
           banca?: string | null
+          colore?: string | null
           created_at?: string
           id?: string
+          identificativo?: string | null
+          intestatario?: string | null
           nome_conto: string
+          note?: string | null
           saldo_iniziale?: number
+          saldo_riferimento?: number | null
+          saldo_riferimento_data?: string | null
+          tipo?: string | null
           user_id: string
+          verificato_dal?: string | null
+          verificato_fino_al?: string | null
         }
         Update: {
           attivo?: boolean
           banca?: string | null
+          colore?: string | null
           created_at?: string
           id?: string
+          identificativo?: string | null
+          intestatario?: string | null
           nome_conto?: string
+          note?: string | null
           saldo_iniziale?: number
+          saldo_riferimento?: number | null
+          saldo_riferimento_data?: string | null
+          tipo?: string | null
           user_id?: string
+          verificato_dal?: string | null
+          verificato_fino_al?: string | null
         }
         Relationships: []
       }
@@ -517,6 +551,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "finanziamento_regole_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "v_conti_riepilogo"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "finanziamento_regole_scadenziario_id_fkey"
             columns: ["scadenziario_id"]
             isOneToOne: false
@@ -670,10 +711,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "reconciliation_rules_conto_dest_id_fkey"
+            columns: ["conto_dest_id"]
+            isOneToOne: false
+            referencedRelation: "v_conti_riepilogo"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "reconciliation_rules_conto_origine_id_fkey"
             columns: ["conto_origine_id"]
             isOneToOne: false
             referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reconciliation_rules_conto_origine_id_fkey"
+            columns: ["conto_origine_id"]
+            isOneToOne: false
+            referencedRelation: "v_conti_riepilogo"
             referencedColumns: ["id"]
           },
           {
@@ -1005,6 +1060,13 @@ export type Database = {
             referencedRelation: "conti"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "scadenziario_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "v_conti_riepilogo"
+            referencedColumns: ["id"]
+          },
         ]
       }
       transactions: {
@@ -1078,6 +1140,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "transactions_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "v_conti_riepilogo"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "transactions_rata_id_fkey"
             columns: ["rata_id"]
             isOneToOne: false
@@ -1103,6 +1172,69 @@ export type Database = {
           primo_incasso: string | null
           ultimo_incasso: string | null
           user_id: string | null
+        }
+        Relationships: []
+      }
+      v_conti_andamento_mensile: {
+        Row: {
+          conto_id: string | null
+          entrate: number | null
+          mese: string | null
+          n_movimenti: number | null
+          netto: number | null
+          uscite: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "v_conti_riepilogo"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_conti_riepilogo: {
+        Row: {
+          attivo: boolean | null
+          banca: string | null
+          colore: string | null
+          created_at: string | null
+          da_classificare: number | null
+          da_riconciliare: number | null
+          entrate_mese: number | null
+          entrate_mese_prec: number | null
+          giorni_da_ultimo_movimento: number | null
+          id: string | null
+          identificativo: string | null
+          intestatario: string | null
+          n_movimenti: number | null
+          nome_conto: string | null
+          note: string | null
+          primo_movimento: string | null
+          saldo_attuale: number | null
+          saldo_confermato: boolean | null
+          saldo_iniziale: number | null
+          saldo_prima_del_primo_movimento: number | null
+          saldo_riferimento: number | null
+          saldo_riferimento_data: string | null
+          tipo: string | null
+          totale_movimenti: number | null
+          ultimo_import: string | null
+          ultimo_movimento: string | null
+          uscite_mese: number | null
+          uscite_mese_prec: number | null
+          user_id: string | null
+          verificato_dal: string | null
+          verificato_fino_al: string | null
         }
         Relationships: []
       }
@@ -1314,6 +1446,13 @@ export type Database = {
             columns: ["conto_id"]
             isOneToOne: false
             referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scadenziario_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "v_conti_riepilogo"
             referencedColumns: ["id"]
           },
         ]
