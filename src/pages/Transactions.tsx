@@ -176,6 +176,20 @@ export default function Transactions() {
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, allTransactions.length]);
   const { data: allCategories = [] } = useCategories();
+
+  // Supporto al parametro ?categoria=da-classificare (risolto quando le categorie sono pronte)
+  const categoriaUrlRef = useRef(false);
+  useEffect(() => {
+    if (categoriaUrlRef.current) return;
+    const alias = searchParams.get("categoria");
+    if (alias !== "da-classificare" || allCategories.length === 0) return;
+    const cat = allCategories.find(
+      (c) => c.name.trim().toLowerCase() === "da classificare"
+    );
+    categoriaUrlRef.current = true;
+    if (cat) setFilters((f) => ({ ...f, categoryId: cat.id }));
+  }, [allCategories, searchParams]);
+
   const deleteMutation = useDeleteTransaction();
 
   // Build a map: categoryId -> parent category name
