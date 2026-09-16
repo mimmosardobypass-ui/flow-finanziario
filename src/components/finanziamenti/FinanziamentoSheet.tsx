@@ -371,6 +371,7 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                     })}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </TabsContent>
 
