@@ -1,11 +1,13 @@
 import { format, parseISO, isValid } from "date-fns";
 import { it } from "date-fns/locale";
 
-export const fmtEur = (v: number | null | undefined) =>
-  `€ ${Number(v ?? 0).toLocaleString("it-IT", {
+export const fmtNum = (v: number | null | undefined) =>
+  Number(v ?? 0).toLocaleString("it-IT", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  });
+
+export const fmtEur = (v: number | null | undefined) => `€\u00A0${fmtNum(v)}`;
 
 export const fmtData = (v: string | null | undefined) => {
   if (!v) return "—";
