@@ -183,9 +183,10 @@ export function useFinanziamentoDettaglio(scadenziarioId: string | null) {
     queryKey: ["finanziamenti", "dettaglio", user?.id, scadenziarioId],
     queryFn: async () => {
       if (!user || !scadenziarioId)
-        return { rate: [], movimenti: {}, eventi: [], regole: [] } as {
+        return { rate: [], movimenti: {}, spese_movimenti: {}, eventi: [], regole: [] } as {
           rate: RataFinanziamento[];
           movimenti: Record<string, MovimentoRata>;
+          spese_movimenti: Record<string, MovimentoRata[]>;
           eventi: EventoFinanziamento[];
           regole: RegolaFinanziamento[];
         };
@@ -270,7 +271,7 @@ export function useFinanziamentoDettaglio(scadenziarioId: string | null) {
         importo_max: n((r as Record<string, unknown>).importo_max),
       }));
 
-      return { rate, movimenti, eventi, regole };
+      return { rate, movimenti, spese_movimenti, eventi, regole };
     },
     enabled: !!user && !!scadenziarioId,
   });
