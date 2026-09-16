@@ -41,10 +41,10 @@ export function raggruppaAgenda(rate: ScadenzaAgenda[], oggi = DATA_OGGI()): Gru
 
 export interface MeseUscite { chiave: string; breve: string; esteso: string; totale: number; perConto: Record<string, number> }
 export function calcolaMesi(rate: ScadenzaAgenda[], oggi = DATA_OGGI()): MeseUscite[] {
-  const base = startOfMonth(parseISO(oggi));
+  const base = addMonths(startOfMonth(parseISO(oggi)), 1);
   return Array.from({ length: 6 }, (_, i) => {
     const d = addMonths(base, i); const chiave = format(d, "yyyy-MM"); const perConto: Record<string, number> = {};
-    rate.filter((r) => r.stato_agenda !== "pagata" && r.data_addebito.slice(0, 7) === chiave).forEach((r) => {
+    rate.filter((r) => r.stato_agenda === "da_pagare" && r.data_addebito.slice(0, 7) === chiave).forEach((r) => {
       if (r.conto_id) perConto[r.conto_id] = (perConto[r.conto_id] ?? 0) + r.importo_previsto;
     });
     return { chiave, breve: format(d, "MMM", { locale: it }), esteso: format(d, "MMMM yyyy", { locale: it }), totale: Object.values(perConto).reduce((a, b) => a + b, 0), perConto };
