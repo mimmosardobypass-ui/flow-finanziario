@@ -384,6 +384,11 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* Finanziamenti */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <FinanziamentiCard />
+      </div>
+
       {/* Recent Transactions */}
       <RecentTransactionsCard
         periodTransactions={stats.periodTransactions}
