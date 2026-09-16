@@ -1,296 +1,80 @@
-import { useState, useMemo } from "react";
-import { format, isBefore, isAfter, startOfDay, addDays, differenceInCalendarDays } from "date-fns";
-import { Plus, ChevronDown, ChevronUp, Trash2, CreditCard } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { addDays, format, parseISO } from "date-fns";
+import { it } from "date-fns/locale";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { useScadenziarioList, useDeleteScadenziario, ScadenziarioWithRate } from "@/hooks/useScadenziario";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { ScadenziarioDialog } from "@/components/scadenziario/ScadenziarioDialog";
-import { RateTable } from "@/components/scadenziario/RateTable";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
+import { FinanziamentoSheet } from "@/components/finanziamenti/FinanziamentoSheet";
+import { CollegaMovimentoDialog } from "@/components/finanziamenti/CollegaMovimentoDialog";
+import { useScadenzeAgenda, useEntratePreviste, type ScadenzaAgenda } from "@/hooks/useScadenzeAgenda";
+import { useContiRiepilogo } from "@/hooks/useConti";
+import { useFinanziamenti, useSegnaRataPagataEnte, type Finanziamento, type RataFinanziamento } from "@/hooks/useFinanziamenti";
+import { useDeleteScadenziario, useScadenziarioList } from "@/hooks/useScadenziario";
+import { fmtEur, oggiISO } from "@/components/finanziamenti/utils";
 import { toast } from "@/hooks/use-toast";
+import { Kpi } from "@/components/scadenziario/agenda/Kpi";
+import { FiltroConti, type ContoFiltro } from "@/components/scadenziario/agenda/FiltroConti";
+import { GruppoRate } from "@/components/scadenziario/agenda/GruppoRate";
+import { GraficoUscite } from "@/components/scadenziario/agenda/GraficoUscite";
+import { CoperturaConti } from "@/components/scadenziario/agenda/CoperturaConti";
+import { TabContratti } from "@/components/scadenziario/agenda/TabContratti";
+import { TabPagate } from "@/components/scadenziario/agenda/TabPagate";
+import { calcolaCoperture, calcolaKpi, calcolaMesi, filtraConto, raggruppaAgenda, sommaRate } from "@/components/scadenziario/agenda/calcoli";
 
+const STORAGE_CONTO = "scadenziario-conto";
 
-function getContractStatus(contract: ScadenziarioWithRate) {
-  const rate = contract.scadenze_rate || [];
-  const pagate = rate.filter((r) => r.stato === "pagata").length;
-  const scadute = rate.filter(
-    (r) => r.stato !== "pagata" && r.data_scadenza && isBefore(new Date(r.data_scadenza), startOfDay(new Date()))
-  ).length;
-
-  if (pagate === rate.length && rate.length > 0) return { label: "Completato", variant: "default" as const, className: "bg-green-600 hover:bg-green-700" };
-  if (scadute > 0) return { label: "Scaduto", variant: "destructive" as const, className: "" };
-  return { label: "In corso", variant: "secondary" as const, className: "bg-yellow-500 hover:bg-yellow-600 text-white" };
-}
-
-const tipoLabelsMap: Record<string, string> = {
-  finanziamento: "Finanziamento",
-  abbonamento: "Abbonamento",
-  assicurazione: "Assicurazione",
-};
-
-function getTipoLabel(tipo: string) {
-  return tipoLabelsMap[tipo] || tipo.charAt(0).toUpperCase() + tipo.slice(1);
-}
-
-const eur = (n: number) =>
-  `€ ${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-function getInfo(c: ScadenziarioWithRate) {
-  const rate = c.scadenze_rate || [];
-  const pagate = rate.filter((r) => r.stato === "pagata").length;
-  const nonPagate = rate
-    .filter((r) => r.stato !== "pagata" && r.data_scadenza)
-    .sort((a, b) => new Date(a.data_scadenza!).getTime() - new Date(b.data_scadenza!).getTime());
-  const conData = rate
-    .filter((r) => r.data_scadenza)
-    .sort((a, b) => new Date(a.data_scadenza!).getTime() - new Date(b.data_scadenza!).getTime());
-  const prossimaRata = nonPagate[0] || null;
-  const ultimaRata = conData[conData.length - 1] || null;
-  return {
-    pagate,
-    totale: rate.length,
-    prossimaRata,
-    prossima: prossimaRata?.data_scadenza ? new Date(prossimaRata.data_scadenza) : null,
-    ultima: ultimaRata?.data_scadenza ? new Date(ultimaRata.data_scadenza) : null,
-  };
+function rataPerDialog(r: ScadenzaAgenda): RataFinanziamento {
+  return { id: r.rata_id, scadenziario_id: r.scadenziario_id, numero_rata: r.numero_rata, importo: r.importo, data_scadenza: r.data_scadenza, stato: r.stato, transaction_id: r.transaction_id, stimata: r.stimata, quota_capitale: null, quota_interessi: null, debito_residuo: null, data_pagamento: r.data_pagamento, importo_pagato: r.importo_pagato, spese: r.spese, tentativi_falliti: 0, fonte_pagamento: r.fonte_pagamento, confidenza: null, nota: r.nota };
 }
 
 export default function Scadenziario() {
-  const { data: contratti = [], isLoading } = useScadenziarioList();
-  const deleteMutation = useDeleteScadenziario();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const { data: agenda = [], isLoading } = useScadenzeAgenda();
+  const { data: entrate = [] } = useEntratePreviste();
+  const { data: conti = [] } = useContiRiepilogo();
+  const { data: finanziamenti = [] } = useFinanziamenti();
+  const { data: contratti = [] } = useScadenziarioList();
+  const elimina = useDeleteScadenziario(); const segnaEnte = useSegnaRataPagataEnte();
+  const [tab, setTab] = useState("agenda"); const [dialogOpen, setDialogOpen] = useState(false); const [conto, setConto] = useState(() => { try { return localStorage.getItem(STORAGE_CONTO) ?? "tutti"; } catch { return "tutti"; } });
+  const [finanziamentoAperto, setFinanziamentoAperto] = useState<Finanziamento | null>(null); const [contrattoEspanso, setContrattoEspanso] = useState<string | null>(null); const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [rataCollega, setRataCollega] = useState<ScadenzaAgenda | null>(null); const [rataEnte, setRataEnte] = useState<ScadenzaAgenda | null>(null); const [dataEnte, setDataEnte] = useState(oggiISO()); const [notaEnte, setNotaEnte] = useState("");
 
-  const prossime = useMemo(() => {
-    const oggi = startOfDay(new Date());
-    const limite = addDays(oggi, 30);
-    let totale = 0;
-    let stimato = 0;
-    let count = 0;
-    for (const c of contratti) {
-      for (const r of c.scadenze_rate || []) {
-        if (r.stato === "pagata" || !r.data_scadenza) continue;
-        const d = new Date(r.data_scadenza);
-        if (isBefore(d, oggi) || isAfter(d, limite)) continue;
-        count++;
-        totale += Number(r.importo || 0);
-        if (r.stimata) stimato += Number(r.importo || 0);
-      }
-    }
-    return { totale, stimato, count };
-  }, [contratti]);
-
-  const { inCorso, cronologia } = useMemo(() => {
-    const aperti: ScadenziarioWithRate[] = [];
-    const chiusi: ScadenziarioWithRate[] = [];
-    for (const c of contratti) {
-      const rate = c.scadenze_rate || [];
-      if (rate.length > 0 && rate.every((r) => r.stato === "pagata")) chiusi.push(c);
-      else aperti.push(c);
-    }
-    aperti.sort((a, b) => (getInfo(a).prossima?.getTime() ?? Infinity) - (getInfo(b).prossima?.getTime() ?? Infinity));
-    chiusi.sort((a, b) => (getInfo(b).ultima?.getTime() ?? 0) - (getInfo(a).ultima?.getTime() ?? 0));
-    return { inCorso: aperti, cronologia: chiusi };
-  }, [contratti]);
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    try {
-      await deleteMutation.mutateAsync(deleteTarget);
-      toast({ title: "Contratto eliminato" });
-      setDeleteTarget(null);
-    } catch {
-      toast({ title: "Errore", description: "Impossibile eliminare il contratto", variant: "destructive" });
-    }
+  const contiFiltro = useMemo<ContoFiltro[]>(() => {
+    const presenti = new Map<string, string>(); agenda.filter((r) => r.stato_agenda !== "pagata" && r.conto_id).forEach((r) => presenti.set(r.conto_id ?? "", r.nome_conto ?? "Senza conto"));
+    return [...presenti.entries()].sort((a, b) => a[1].localeCompare(b[1], "it")).map(([id, nome], indiceColore) => ({ id, nome, indiceColore }));
+  }, [agenda]);
+  useEffect(() => { if (conto !== "tutti" && !contiFiltro.some((c) => c.id === conto)) setConto("tutti"); }, [conto, contiFiltro]);
+  const cambiaConto = (id: string) => { setConto(id); try { localStorage.setItem(STORAGE_CONTO, id); } catch { /* preferenza non persistibile */ } };
+  const indiceColore = (id: string | null) => {
+    if (!id) return 4;
+    const trovato = contiFiltro.findIndex((c) => c.id === id);
+    return trovato < 0 ? 4 : trovato;
   };
+  const rateFiltrate = useMemo(() => filtraConto(agenda, conto), [agenda, conto]); const gruppi = useMemo(() => raggruppaAgenda(rateFiltrate), [rateFiltrate]); const kpi = useMemo(() => calcolaKpi(rateFiltrate), [rateFiltrate]);
+  const mesi = useMemo(() => calcolaMesi(rateFiltrate), [rateFiltrate]); const coperture = useMemo(() => calcolaCoperture(conti, agenda, entrate), [conti, agenda, entrate]);
+  const nonCoperti = coperture.filter((c) => c.stato === "non_coperto"); const entiScaduti = new Set(kpi.scadute.map((r) => r.ente)).size; const nomi7 = [...new Set(kpi.prossime7.map((r) => r.nome_visualizzato))].slice(0, 2).join(", ");
+  const stimato30 = kpi.prossime30.filter((r) => r.stimata || r.piano_stimato); const uscitaFissa = mesi[0]?.totale ? rateFiltrate.filter((r) => r.stato_agenda !== "pagata" && r.data_addebito.slice(0, 7) === mesi[0].chiave && r.ente.toLowerCase() !== "paypal a rate").reduce((s, r) => s + r.importo, 0) : 0;
+  const dataOggi = format(new Date(), "EEEE d MMMM yyyy", { locale: it });
 
-  const renderTable = (lista: ScadenziarioWithRate[], mode: "in_corso" | "cronologia") => (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-10"></TableHead>
-            <TableHead>N. Contratto</TableHead>
-            <TableHead>Società</TableHead>
-            <TableHead>Tipo</TableHead>
-            <TableHead className="w-32">Avanzamento</TableHead>
-            <TableHead className="text-right">Importo Totale</TableHead>
-            <TableHead>Stato</TableHead>
-            <TableHead className="w-12"></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {lista.map((c) => {
-            const rate = c.scadenze_rate || [];
-            const info = getInfo(c);
-            const status = getContractStatus(c);
-            const isExpanded = expandedId === c.id;
-            const perc = info.totale > 0 ? (info.pagate / info.totale) * 100 : 0;
+  const apri = (r: ScadenzaAgenda) => { const fin = finanziamenti.find((f) => f.id === r.scadenziario_id); if (r.tipo === "finanziamento" && fin) setFinanziamentoAperto(fin); else { setTab("contratti"); setContrattoEspanso(r.scadenziario_id); } };
+  const preparaPagamentoEnte = (r: ScadenzaAgenda) => { setRataEnte(r); setDataEnte(r.data_scadenza || oggiISO()); setNotaEnte(""); };
+  const segna = async () => { if (!rataEnte) return; await segnaEnte.mutateAsync({ rata_id: rataEnte.rata_id, data: dataEnte, nota: notaEnte.trim() || undefined }); toast({ title: "Rata segnata come pagata" }); setRataEnte(null); };
 
-            return (
-              <>
-                <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setExpandedId(isExpanded ? null : c.id)}>
-                  <TableCell>
-                    {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{c.numero_contratto}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {info.pagate} di {info.totale} pagate
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {c.societa_finanziaria === "PayPal" ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                        <CreditCard className="h-3.5 w-3.5" />
-                        PayPal a rate
-                      </span>
-                    ) : (
-                      c.societa_finanziaria
-                    )}
-                  </TableCell>
-                  <TableCell>{getTipoLabel(c.tipo)}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full bg-green-600" style={{ width: `${perc}%` }} />
-                      </div>
-                      <span className="text-xs text-muted-foreground">{Math.round(perc)}%</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div>{eur(c.importo_totale)}</div>
-                    {mode === "in_corso" && info.prossimaRata && (
-                      <div className="text-xs text-muted-foreground">
-                        Prossimo pagamento:{" "}
-                        <span className={info.prossimaRata.stimata ? "italic" : ""}>
-                          {info.prossima ? format(info.prossima, "dd/MM/yyyy") : "—"}
-                          {info.prossimaRata.stimata && " (stimata)"}
-                        </span>
-                      </div>
-                    )}
-                    {mode === "cronologia" && info.ultima && (
-                      <div className="text-xs text-muted-foreground">
-                        Completato il {format(info.ultima, "dd/MM/yyyy")}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={status.className} variant={status.variant}>{status.label}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(c.id); }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-                {isExpanded && (
-                  <TableRow key={`${c.id}-detail`}>
-                    <TableCell colSpan={8} className="bg-muted/30 p-4">
-                      <RateTable rate={rate} />
-                    </TableCell>
-                  </TableRow>
-                )}
-              </>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
-  );
-
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Scadenziario</h1>
-          <p className="text-muted-foreground">Gestisci i tuoi contratti e le relative rate</p>
-        </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuovo Contratto
-        </Button>
-      </div>
-
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-sm text-muted-foreground">In scadenza nei prossimi 30 giorni</div>
-          <div className="text-2xl font-bold">{eur(prossime.totale)}</div>
-          <div className="text-xs text-muted-foreground">
-            {prossime.count} rate
-            {prossime.stimato > 0 && <> · di cui {eur(prossime.stimato)} stimati</>}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="in_corso">
-        <TabsList>
-          <TabsTrigger value="in_corso">In corso ({inCorso.length})</TabsTrigger>
-          <TabsTrigger value="cronologia">Cronologia ({cronologia.length})</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="in_corso" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Piani in corso</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <p className="text-muted-foreground text-center py-8">Caricamento...</p>
-              ) : inCorso.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">Nessun piano in corso.</p>
-              ) : (
-                renderTable(inCorso, "in_corso")
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="cronologia" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Piani completati</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <p className="text-muted-foreground text-center py-8">Caricamento...</p>
-              ) : cronologia.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">Nessun piano completato.</p>
-              ) : (
-                renderTable(cronologia, "cronologia")
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-
-      <ScadenziarioDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreated={(id) => setExpandedId(id)} />
-
-      <DeleteConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        title="Elimina Contratto"
-        description="Sei sicuro di voler eliminare questo contratto? Tutte le rate associate verranno eliminate. Questa azione non può essere annullata."
-      />
-    </div>
-  );
+  return <div className="min-w-0 space-y-6 overflow-x-hidden">
+    <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h1 className="text-2xl font-bold text-foreground">Scadenziario</h1><p className="text-sm text-muted-foreground"><span className="capitalize">Oggi è {dataOggi}</span> · rate di finanziamenti, dilazioni e pagamenti a rate</p></div><Button onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Nuovo contratto</Button></header>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Kpi titolo="Scadute non pagate" valore={fmtEur(sommaRate(kpi.scadute))} dettaglio={kpi.scadute.length ? `${kpi.scadute.length} rate · ${entiScaduti} enti` : "Nessuna rata scaduta"} allarme={kpi.scadute.length > 0} /><Kpi titolo="Prossimi 7 giorni" valore={fmtEur(sommaRate(kpi.prossime7))} dettaglio={kpi.prossime7.length ? `${kpi.prossime7.length} rate · ${nomi7}` : "Nessuna rata in scadenza"} /><Kpi titolo="Prossimi 30 giorni" valore={fmtEur(sommaRate(kpi.prossime30))} dettaglio={`${kpi.prossime30.length} rate${stimato30.length ? ` · di cui ${fmtEur(sommaRate(stimato30))} con data stimata` : ""}`} /><Kpi titolo="Conti da coprire" valore={String(nonCoperti.length)} dettaglio={nonCoperti.length ? `${nonCoperti[0].conto.nome_conto}: mancano ${fmtEur(-nonCoperti[0].saldoMinimo)}` : "Tutti i conti coprono le rate"} allarme={nonCoperti.length > 0} /></div>
+    <Tabs value={tab} onValueChange={setTab}><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><TabsList><TabsTrigger value="agenda">Agenda</TabsTrigger><TabsTrigger value="contratti">Contratti ({contratti.length})</TabsTrigger><TabsTrigger value="pagate">Pagate</TabsTrigger></TabsList><FiltroConti conti={contiFiltro} valore={conto} onChange={cambiaConto} /></div>
+      <TabsContent value="agenda" className="mt-5"><div className="grid min-w-0 gap-6 min-[1040px]:grid-cols-[minmax(0,1fr)_380px]"><div className="min-w-0 space-y-4">{isLoading ? <p className="py-12 text-center text-sm text-muted-foreground">Caricamento agenda…</p> : <><GruppoRate titolo="Scadute" sottotitolo="da pagare subito" rate={gruppi.scadute} colore="rosso" indiceColore={indiceColore} onApri={apri} onCollega={setRataCollega} onSegnaEnte={preparaPagamentoEnte} /><GruppoRate titolo="Questa settimana" sottotitolo="oggi – prossimi 7 giorni" rate={gruppi.settimana} colore="blu" indiceColore={indiceColore} onApri={apri} onCollega={setRataCollega} onSegnaEnte={preparaPagamentoEnte} /><GruppoRate titolo="Entro 30 giorni" sottotitolo="dall’ottavo al trentesimo giorno" rate={gruppi.trenta} indiceColore={indiceColore} onApri={apri} onCollega={setRataCollega} onSegnaEnte={preparaPagamentoEnte} />{gruppi.mesi.map((m) => <GruppoRate key={m.chiave} titolo={m.label} sottotitolo="Più avanti" rate={m.rate} comprimibile indiceColore={indiceColore} onApri={apri} onCollega={setRataCollega} onSegnaEnte={preparaPagamentoEnte} />)}{!rateFiltrate.some((r) => r.stato_agenda !== "pagata") && <p className="py-12 text-center text-sm text-muted-foreground">Nessuna rata futura da mostrare.</p>}</>}</div><aside className="min-w-0 space-y-4"><GraficoUscite mesi={mesi} conti={contiFiltro} /><CoperturaConti coperture={coperture} /><p className="rounded-md border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">Legenda:</strong> bordo tratteggiato = data stimata: ricavata dagli addebiti passati o da un piano non ancora caricato. Se la rata cade nel weekend si mostra il giorno reale di addebito.</p></aside></div></TabsContent>
+      <TabsContent value="contratti" className="mt-5"><TabContratti contratti={contratti} agenda={agenda} finanziamenti={finanziamenti} conti={contiFiltro} contoSelezionato={conto} espanso={contrattoEspanso} onEspanso={setContrattoEspanso} onApriFinanziamento={setFinanziamentoAperto} onElimina={setDeleteTarget} uscitaFissa={uscitaFissa} /></TabsContent>
+      <TabsContent value="pagate" className="mt-5"><TabPagate rate={rateFiltrate} /></TabsContent>
+    </Tabs>
+    <ScadenziarioDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreated={(id) => { setTab("contratti"); setContrattoEspanso(id); }} /><FinanziamentoSheet contratto={finanziamentoAperto} onOpenChange={(v) => !v && setFinanziamentoAperto(null)} /><CollegaMovimentoDialog rata={rataCollega ? rataPerDialog(rataCollega) : null} onOpenChange={(v) => !v && setRataCollega(null)} />
+    <Dialog open={Boolean(rataEnte)} onOpenChange={(v) => !v && setRataEnte(null)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Segna pagata secondo l'ente</DialogTitle><DialogDescription>Registra il pagamento anche se non è ancora presente un movimento bancario collegato.</DialogDescription></DialogHeader><div className="space-y-3"><div className="space-y-1.5"><Label>Data del pagamento</Label><Input type="date" value={dataEnte} onChange={(e) => setDataEnte(e.target.value)} max={format(addDays(parseISO(oggiISO()), 1), "yyyy-MM-dd")} /></div><div className="space-y-1.5"><Label>Nota</Label><Textarea value={notaEnte} onChange={(e) => setNotaEnte(e.target.value)} rows={2} /></div></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setRataEnte(null)}>Annulla</Button><Button onClick={segna} disabled={segnaEnte.isPending}>Conferma</Button></div></DialogContent></Dialog>
+    <DeleteConfirmDialog open={Boolean(deleteTarget)} onOpenChange={(v) => !v && setDeleteTarget(null)} onConfirm={async () => { if (!deleteTarget) return; await elimina.mutateAsync(deleteTarget); setDeleteTarget(null); toast({ title: "Contratto eliminato" }); }} isLoading={elimina.isPending} title="Elimina contratto" description="Tutte le rate associate verranno eliminate. Questa azione non può essere annullata." />
+  </div>;
 }

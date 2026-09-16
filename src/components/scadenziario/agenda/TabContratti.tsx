@@ -1,0 +1,38 @@
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+import type { ScadenziarioWithRate } from "@/hooks/useScadenziario";
+import type { Finanziamento } from "@/hooks/useFinanziamenti";
+import type { ScadenzaAgenda } from "@/hooks/useScadenzeAgenda";
+import { RateTable } from "@/components/scadenziario/RateTable";
+import { fmtData, fmtEur, iniziali } from "@/components/finanziamenti/utils";
+import type { ContoFiltro } from "./FiltroConti";
+import { classeColoreConto } from "./calcoli";
+
+interface Props { contratti: ScadenziarioWithRate[]; agenda: ScadenzaAgenda[]; finanziamenti: Finanziamento[]; conti: ContoFiltro[]; contoSelezionato: string; espanso: string | null; onEspanso: (id: string | null) => void; onApriFinanziamento: (c: Finanziamento) => void; onElimina: (id: string) => void; uscitaFissa: number }
+
+export function TabContratti({ contratti, agenda, finanziamenti, conti, contoSelezionato, espanso, onEspanso, onApriFinanziamento, onElimina, uscitaFissa }: Props) {
+  const [completati, setCompletati] = useState(false);
+  const indice = (id: string | null | undefined) => Math.max(0, conti.findIndex((c) => c.id === id));
+  const righe = useMemo(() => contratti.filter((c) => c.stato === "attivo" || (completati && c.scadenze_rate?.length > 0 && c.scadenze_rate.every((r) => r.stato === "pagata"))).map((c) => {
+    const rate = c.scadenze_rate ?? []; const fin = finanziamenti.find((f) => f.id === c.id); const agendaContratto = agenda.filter((r) => r.scadenziario_id === c.id);
+    const prossima = agendaContratto.filter((r) => r.stato_agenda !== "pagata").sort((a, b) => a.data_addebito.localeCompare(b.data_addebito))[0];
+    const scadute = agendaContratto.filter((r) => r.stato_agenda === "scaduta").length; const pagate = rate.filter((r) => r.stato === "pagata").length;
+    const completo = rate.length > 0 && pagate === rate.length; const contoId = fin?.conto_id ?? prossima?.conto_id ?? null;
+    return { c, fin, prossima, scadute, pagate, completo, contoId };
+  }).filter((r) => (completati || !r.completo) && (contoSelezionato === "tutti" || r.contoId === contoSelezionato)).sort((a, b) => Number(b.scadute > 0) - Number(a.scadute > 0) || (a.prossima?.data_addebito ?? "9999").localeCompare(b.prossima?.data_addebito ?? "9999")), [contratti, agenda, finanziamenti, completati, contoSelezionato]);
+
+  return <div className="space-y-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-muted-foreground">Uscita fissa per rate: circa <strong className="text-foreground">{fmtEur(uscitaFissa)}</strong> al mese</p><div className="flex items-center gap-2"><Switch id="mostra-completati" checked={completati} onCheckedChange={setCompletati} /><Label htmlFor="mostra-completati">Mostra completati</Label></div></div>
+    <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead className="w-9" /><TableHead>Contratto</TableHead><TableHead>Conto</TableHead><TableHead>Rata</TableHead><TableHead>Avanzamento</TableHead><TableHead>Resta da pagare</TableHead><TableHead>Prossima</TableHead><TableHead>Stato</TableHead><TableHead className="w-10" /></TableRow></TableHeader><TableBody>
+      {righe.map(({ c, fin, prossima, scadute, pagate }) => { const aperto = espanso === c.id; const totale = c.scadenze_rate?.length ?? 0; const stimato = fin?.origine_piano === "stimato"; const nome = prossima?.nome_visualizzato ?? fin?.nome ?? c.numero_contratto; const ente = prossima?.ente ?? c.societa_finanziaria; const contoId = fin?.conto_id ?? prossima?.conto_id; const contoNome = fin?.nome_conto ?? prossima?.nome_conto;
+        const stato = scadute ? { t: `${scadute} rate scadute`, c: "border-destructive/40 bg-destructive/10 text-destructive" } : stimato ? { t: "Piano da caricare", c: "border-dashed border-warning text-warning" } : fin?.da_verificare ? { t: "Da verificare", c: "border-warning/40 bg-warning/10 text-warning" } : totale - pagate === 1 ? { t: "Ultima rata", c: "border-primary/40 bg-primary/10 text-primary" } : { t: "In regola", c: "border-success/40 bg-success/10 text-success" };
+        return <><TableRow key={c.id} className="cursor-pointer" onClick={() => fin ? onApriFinanziamento(fin) : onEspanso(aperto ? null : c.id)}><TableCell><Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onEspanso(aperto ? null : c.id); }} aria-label={aperto ? "Chiudi rate" : "Apri rate"}>{aperto ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</Button></TableCell><TableCell><div className="flex min-w-[190px] items-center gap-2"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs font-semibold text-primary">{iniziali(ente)}</div><div><p className="font-medium">{nome}</p><p className="text-xs text-muted-foreground">{[ente, prossima?.beneficiario ?? fin?.beneficiario, prossima?.riferimento ?? c.numero_contratto].filter(Boolean).join(" · ")}</p></div></div></TableCell><TableCell><span className="flex items-center gap-1.5 whitespace-nowrap text-sm"><span className={cn("h-2.5 w-2.5 rounded-sm", classeColoreConto(indice(contoId)))} />{contoNome ?? "—"}</span></TableCell><TableCell className="whitespace-nowrap tabular-nums">{fmtEur(fin?.importo_rata ?? prossima?.importo ?? 0)}</TableCell><TableCell className="min-w-[150px]">{stimato ? <><div className="h-2 rounded-full border border-dashed border-warning" /><p className="mt-1 text-xs text-muted-foreground">{pagate} pagate · totale sconosciuto</p></> : <><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary" style={{ width: `${totale ? pagate / totale * 100 : 0}%` }} /></div><p className="mt-1 text-xs text-muted-foreground">{pagate} di {totale} pagate</p></>}</TableCell><TableCell className="whitespace-nowrap tabular-nums">{stimato ? "—" : fmtEur(fin?.residuo_da_pagare ?? Math.max(c.importo_totale - (c.scadenze_rate ?? []).filter((r) => r.stato === "pagata").reduce((s, r) => s + Number(r.importo ?? 0), 0), 0))}{fin && fin.residuo_capitale !== fin.residuo_da_pagare && <p className="text-xs text-muted-foreground">di cui capitale {fmtEur(fin.residuo_capitale)}</p>}</TableCell><TableCell className="whitespace-nowrap">{prossima ? <>{(prossima.stimata || prossima.piano_stimato) && "~"}{fmtData(prossima.data_addebito)}</> : "—"}</TableCell><TableCell><Badge variant="outline" className={stato.c}>{stato.t}</Badge></TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onElimina(c.id); }} aria-label="Elimina contratto"><Trash2 className="h-4 w-4" /></Button></TableCell></TableRow>{aperto && <TableRow key={`${c.id}-rate`}><TableCell colSpan={9} className="bg-muted/30 p-4"><RateTable rate={[...(c.scadenze_rate ?? [])]} /></TableCell></TableRow>}</>;
+      })}{!righe.length && <TableRow><TableCell colSpan={9} className="py-12 text-center text-muted-foreground">Nessun contratto da mostrare.</TableCell></TableRow>}
+    </TableBody></Table></div></CardContent></Card></div>;
+}

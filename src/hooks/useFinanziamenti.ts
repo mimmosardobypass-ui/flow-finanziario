@@ -7,7 +7,7 @@ const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 const n0 = (v: unknown) => Number(v ?? 0);
 
 export function invalidaFinanziamenti(qc: QueryClient) {
-  ["finanziamenti", "scadenziario", "scadenze_rate_unpaid", "transactions"].forEach((k) =>
+  ["finanziamenti", "scadenziario", "scadenze_rate_unpaid", "scadenze-agenda", "transactions"].forEach((k) =>
     qc.invalidateQueries({ queryKey: [k] }),
   );
 }

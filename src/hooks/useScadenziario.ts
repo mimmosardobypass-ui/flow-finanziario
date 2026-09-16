@@ -13,6 +13,12 @@ export interface Scadenziario {
   data_prima_scadenza: string;
   modalita_importo: string;
   created_at: string;
+  nome?: string | null;
+  stato?: string;
+  origine_piano?: string | null;
+  beneficiario?: string | null;
+  conto_id?: string | null;
+  importo_rata?: number | null;
 }
 
 export interface ScadenzaRata {
@@ -134,6 +140,7 @@ export function useCreateScadenziario() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scadenziario"] });
       queryClient.invalidateQueries({ queryKey: ["scadenze_rate_unpaid"] });
+      queryClient.invalidateQueries({ queryKey: ["scadenze-agenda"] });
     },
   });
 }
@@ -152,6 +159,7 @@ export function useUpdateRata() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scadenziario"] });
+      queryClient.invalidateQueries({ queryKey: ["scadenze-agenda"] });
     },
   });
 }
@@ -187,6 +195,7 @@ export function useDeleteScadenziario() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scadenziario"] });
       queryClient.invalidateQueries({ queryKey: ["scadenze_rate_unpaid"] });
+      queryClient.invalidateQueries({ queryKey: ["scadenze-agenda"] });
     },
   });
 }

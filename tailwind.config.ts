@@ -39,6 +39,13 @@ export default {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
         },
+        account: {
+          1: "hsl(var(--account-1))",
+          2: "hsl(var(--account-2))",
+          3: "hsl(var(--account-3))",
+          4: "hsl(var(--account-4))",
+          5: "hsl(var(--account-5))",
+        },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
