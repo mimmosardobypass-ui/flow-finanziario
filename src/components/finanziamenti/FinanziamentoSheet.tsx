@@ -43,7 +43,7 @@ import {
   type Finanziamento,
   type RataFinanziamento,
 } from "@/hooks/useFinanziamenti";
-import { fmtEur, fmtData, iniziali, titoloContratto, tronca, oggiISO } from "./utils";
+import { fmtEur, fmtNum, fmtData, iniziali, titoloContratto, tronca, oggiISO } from "./utils";
 import { AbbinaRateDialog } from "./AbbinaRateDialog";
 import { CollegaMovimentoDialog } from "./CollegaMovimentoDialog";
 import { ContrattoTab } from "./ContrattoTab";
@@ -114,7 +114,7 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
   return (
     <>
       <Sheet open={!!contratto} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-[760px]">
+        <SheetContent className="w-full overflow-y-auto sm:max-w-[900px]">
           <SheetHeader className="space-y-3 text-left">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
@@ -137,15 +137,25 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Debito residuo</p>
+                <p className="text-xs text-muted-foreground">Da pagare</p>
                 <p className="font-semibold text-foreground">{fmtEur(contratto.residuo_da_pagare)}</p>
+                {contratto.residuo_capitale > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    di cui capitale {fmtEur(contratto.residuo_capitale)}
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Prossima rata</p>
-                <p className="font-semibold text-foreground">
+                <p className="flex flex-wrap items-center gap-1.5 font-semibold text-foreground">
                   {contratto.prossima_scadenza
                     ? `${fmtEur(contratto.prossima_importo)} · ${fmtData(contratto.prossima_scadenza)}`
                     : "—"}
+                  {contratto.rate_scadute > 0 && (
+                    <Badge variant="outline" className="border-destructive/40 bg-destructive/10 text-destructive">
+                      {contratto.rate_scadute} scadute
+                    </Badge>
+                  )}
                 </p>
               </div>
               <div>
@@ -212,16 +222,17 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                   </div>
                 </div>
               ) : (
+                <div className="-mx-6 overflow-x-auto px-6">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10">#</TableHead>
                       <TableHead>Scadenza</TableHead>
-                      <TableHead className="text-right">Rata</TableHead>
+                      <TableHead className="whitespace-nowrap text-right">Rata</TableHead>
                       <TableHead>Stato</TableHead>
-                      <TableHead>Pagata il</TableHead>
+                      <TableHead className="whitespace-nowrap">Pagata il</TableHead>
                       <TableHead>Movimento</TableHead>
-                      <TableHead className="text-right">Spese</TableHead>
+                      <TableHead className="whitespace-nowrap text-right">Spese</TableHead>
                       <TableHead className="w-10" />
                     </TableRow>
                   </TableHeader>
@@ -244,11 +255,16 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                               <span className="ml-1 text-xs text-primary">prossima</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="whitespace-nowrap text-right">
                             <div>{fmtEur(r.importo)}</div>
-                            {(r.quota_interessi ?? 0) > 0 && (
-                              <div className="text-xs text-muted-foreground">
-                                {fmtEur(r.quota_capitale)} + {fmtEur(r.quota_interessi)} int.
+                            {((r.quota_capitale ?? 0) > 0 || (r.quota_interessi ?? 0) > 0) && (
+                              <div className="text-right text-xs text-muted-foreground">
+                                {(r.quota_capitale ?? 0) > 0 && (
+                                  <div>cap. {fmtNum(r.quota_capitale)}</div>
+                                )}
+                                {(r.quota_interessi ?? 0) > 0 && (
+                                  <div>int. {fmtNum(r.quota_interessi)}</div>
+                                )}
                               </div>
                             )}
                           </TableCell>
@@ -270,10 +286,19 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                                 </div>
                               )}
                           </TableCell>
-                          <TableCell className="max-w-[180px]">
+                          <TableCell className="min-w-[160px]">
                             {mov ? (
                               <>
-                                <p className="truncate text-sm">{tronca(mov.description, 34)}</p>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <p className="cursor-help truncate text-sm">
+                                      {tronca(mov.description, 34)}
+                                    </p>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs break-words">
+                                    {mov.description}
+                                  </TooltipContent>
+                                </Tooltip>
                                 <p className="text-xs text-muted-foreground">
                                   {mov.conto_nome ?? "—"}
                                   {r.confidenza ? ` · confidenza ${r.confidenza}` : ""}
@@ -283,7 +308,7 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                               "—"
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="whitespace-nowrap text-right">
                             {speseMov.length > 0 ? (
                               <Tooltip>
                                 <TooltipTrigger asChild>
