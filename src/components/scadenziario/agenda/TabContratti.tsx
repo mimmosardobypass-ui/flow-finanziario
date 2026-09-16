@@ -20,7 +20,7 @@ interface Props { contratti: ScadenziarioWithRate[]; agenda: ScadenzaAgenda[]; f
 export function TabContratti({ contratti, agenda, finanziamenti, conti, contoSelezionato, espanso, onEspanso, onApriFinanziamento, onElimina, uscitaFissa }: Props) {
   const [completati, setCompletati] = useState(false);
   const indice = (id: string | null | undefined) => Math.max(0, conti.findIndex((c) => c.id === id));
-  const righe = useMemo(() => contratti.map((c) => {
+  const righe = useMemo(() => contratti.filter((c) => c.stato === "attivo" || (completati && c.scadenze_rate?.length > 0 && c.scadenze_rate.every((r) => r.stato === "pagata"))).map((c) => {
     const rate = c.scadenze_rate ?? []; const fin = finanziamenti.find((f) => f.id === c.id); const agendaContratto = agenda.filter((r) => r.scadenziario_id === c.id);
     const prossima = agendaContratto.filter((r) => r.stato_agenda !== "pagata").sort((a, b) => a.data_addebito.localeCompare(b.data_addebito))[0];
     const scadute = agendaContratto.filter((r) => r.stato_agenda === "scaduta").length; const pagate = rate.filter((r) => r.stato === "pagata").length;

@@ -13,6 +13,12 @@ export interface Scadenziario {
   data_prima_scadenza: string;
   modalita_importo: string;
   created_at: string;
+  nome?: string | null;
+  stato?: string;
+  origine_piano?: string | null;
+  beneficiario?: string | null;
+  conto_id?: string | null;
+  importo_rata?: number | null;
 }
 
 export interface ScadenzaRata {
