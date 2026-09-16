@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { format } from "date-fns";
 
 const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 const n0 = (v: unknown) => Number(v ?? 0);
@@ -215,13 +216,23 @@ export function useFinanziamentoDettaglio(scadenziarioId: string | null) {
       const rataIds = rate.map((r) => r.id);
 
       const movimenti: Record<string, MovimentoRata> = {};
+      const spese_movimenti: Record<string, MovimentoRata[]> = {};
       if (rataIds.length) {
         const { data: tx, error: txErr } = await supabase
           .from("transactions")
           .select("id, rata_id, description, date, amount, conti(nome_conto)")
           .in("rata_id", rataIds)
-          .is("deleted_at", null);
+          .is("deleted_at", null)
+          .order("date");
         if (txErr) throw txErr;
+
+        // Il movimento principale è quello indicato da rata.transaction_id:
+        // gli altri collegati alla stessa rata sono spese accessorie (commissioni).
+        const principaleDiRata = new Map<string, string>();
+        rate.forEach((r) => {
+          if (r.transaction_id) principaleDiRata.set(r.id, r.transaction_id);
+        });
+
         (tx ?? []).forEach((t) => {
           const row = t as unknown as {
             id: string;
@@ -231,8 +242,8 @@ export function useFinanziamentoDettaglio(scadenziarioId: string | null) {
             amount: number;
             conti: { nome_conto: string } | null;
           };
-          if (!row.rata_id || movimenti[row.rata_id]) return;
-          movimenti[row.rata_id] = {
+          if (!row.rata_id) return;
+          const mov: MovimentoRata = {
             id: row.id,
             rata_id: row.rata_id,
             description: row.description,
@@ -240,6 +251,12 @@ export function useFinanziamentoDettaglio(scadenziarioId: string | null) {
             amount: n0(row.amount),
             conto_nome: row.conti?.nome_conto ?? null,
           };
+          const principale = principaleDiRata.get(row.rata_id);
+          if (principale ? principale === row.id : !movimenti[row.rata_id]) {
+            movimenti[row.rata_id] = mov;
+          } else {
+            (spese_movimenti[row.rata_id] ??= []).push(mov);
+          }
         });
       }
 
