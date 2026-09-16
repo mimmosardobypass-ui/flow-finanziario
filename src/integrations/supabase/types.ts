@@ -17,6 +17,7 @@ export type Database = {
       categories: {
         Row: {
           created_at: string
+          entrata_ricorrente: boolean
           id: string
           name: string
           parent_id: string | null
@@ -25,6 +26,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          entrata_ricorrente?: boolean
           id?: string
           name: string
           parent_id?: string | null
@@ -33,6 +35,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          entrata_ricorrente?: boolean
           id?: string
           name?: string
           parent_id?: string | null
@@ -462,6 +465,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "scadenze_rate"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finanziamento_eventi_rata_id_fkey"
+            columns: ["rata_id"]
+            isOneToOne: false
+            referencedRelation: "v_scadenze_agenda"
+            referencedColumns: ["rata_id"]
           },
           {
             foreignKeyName: "finanziamento_eventi_scadenziario_id_fkey"
@@ -1153,6 +1163,13 @@ export type Database = {
             referencedRelation: "scadenze_rate"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "transactions_rata_id_fkey"
+            columns: ["rata_id"]
+            isOneToOne: false
+            referencedRelation: "v_scadenze_agenda"
+            referencedColumns: ["rata_id"]
+          },
         ]
       }
     }
@@ -1321,6 +1338,42 @@ export type Database = {
           },
         ]
       }
+      v_entrate_previste: {
+        Row: {
+          categoria: string | null
+          category_id: string | null
+          conto_id: string | null
+          importo_previsto: number | null
+          nome_conto: string | null
+          occorrenze: number | null
+          prossima_data: string | null
+          ultima_data: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "v_conti_riepilogo"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_esposizione_controparti: {
         Row: {
           a_scadere: number | null
@@ -1470,6 +1523,89 @@ export type Database = {
           user_id: string | null
         }
         Relationships: []
+      }
+      v_scadenze_agenda: {
+        Row: {
+          beneficiario: string | null
+          conto_id: string | null
+          data_addebito: string | null
+          data_pagamento: string | null
+          data_scadenza: string | null
+          ente: string | null
+          fonte_pagamento: string | null
+          giorni_alla_scadenza: number | null
+          giorni_ritardo: number | null
+          identificativo_conto: string | null
+          importo: number | null
+          importo_pagato: number | null
+          importo_previsto: number | null
+          nome_conto: string | null
+          nome_visualizzato: string | null
+          nota: string | null
+          numero_contratto: string | null
+          numero_rata: number | null
+          numero_rate: number | null
+          origine_piano: string | null
+          piano_stimato: boolean | null
+          rata_id: string | null
+          riferimento: string | null
+          scadenziario_id: string | null
+          societa_finanziaria: string | null
+          spese: number | null
+          spese_previste: number | null
+          stato: string | null
+          stato_agenda: string | null
+          stato_contratto: string | null
+          stimata: boolean | null
+          tipo: string | null
+          tipo_conto: string | null
+          transaction_id: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scadenze_rate_scadenziario_id_fkey"
+            columns: ["scadenziario_id"]
+            isOneToOne: false
+            referencedRelation: "scadenziario"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scadenze_rate_scadenziario_id_fkey"
+            columns: ["scadenziario_id"]
+            isOneToOne: false
+            referencedRelation: "v_finanziamenti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scadenze_rate_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scadenze_rate_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "v_movimenti_copertura"
+            referencedColumns: ["transaction_id"]
+          },
+          {
+            foreignKeyName: "scadenziario_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scadenziario_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "v_conti_riepilogo"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
