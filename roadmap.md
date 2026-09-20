@@ -7,3 +7,6 @@
 - [x] Creare tab Contratti e Pagate
 - [x] Riscrivere la pagina Scadenziario e collegare dialog/schede
 - [x] Verificare TypeScript e resa della pagina
+- [x] Creare calcoli e card Andamento finanziamenti
+- [x] Integrare grafico/tabella e rimuovere il grafico duplicato
+- [x] Verificare TypeScript e resa a più larghezze

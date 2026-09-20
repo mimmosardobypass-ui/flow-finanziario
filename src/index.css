@@ -40,6 +40,16 @@
     --account-4: 41 100% 46%;
     --account-5: 215 12% 55%;
 
+    --finance-1: 212 68% 50%;
+    --finance-2: 16 81% 56%;
+    --finance-3: 160 73% 40%;
+    --finance-4: 41 100% 46%;
+    --finance-5: 337 70% 70%;
+    --finance-6: 120 100% 26%;
+    --finance-7: 248 49% 44%;
+    --finance-8: 0 75% 59%;
+    --finance-other: 215 12% 55%;
+
     --border: 220 15% 88%;
     --input: 220 15% 88%;
     --ring: 215 70% 45%;
@@ -62,6 +72,15 @@
     --account-3: 160 73% 36%;
     --account-4: 40 100% 39%;
     --account-5: 215 12% 55%;
+    --finance-1: 212 77% 56%;
+    --finance-2: 16 69% 50%;
+    --finance-3: 160 73% 36%;
+    --finance-4: 40 100% 39%;
+    --finance-5: 337 62% 64%;
+    --finance-6: 120 72% 34%;
+    --finance-7: 248 48% 58%;
+    --finance-8: 0 68% 58%;
+    --finance-other: 215 12% 55%;
   }
 }
 

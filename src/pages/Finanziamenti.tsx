@@ -1,17 +1,7 @@
 import { useMemo, useState } from "react";
-import { addDays, addMonths, format, parseISO, startOfMonth } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
 import { AlertTriangle, HandCoins, Plus } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,15 +16,8 @@ import {
 import { AbbinaRateDialog } from "@/components/finanziamenti/AbbinaRateDialog";
 import { NuovoFinanziamentoDialog } from "@/components/finanziamenti/NuovoFinanziamentoDialog";
 import { FinanziamentoSheet } from "@/components/finanziamenti/FinanziamentoSheet";
+import { AndamentoFinanziamenti } from "@/components/finanziamenti/AndamentoFinanziamenti";
 import { fmtEur, fmtData, fmtMeseAnno, iniziali, titoloContratto } from "@/components/finanziamenti/utils";
-
-const COLORI = [
-  "hsl(var(--primary))",
-  "hsl(var(--success))",
-  "hsl(var(--warning))",
-  "hsl(var(--destructive))",
-  "hsl(var(--muted-foreground))",
-];
 
 type FiltroStato = "attivi" | "verificare" | "estinti";
 
@@ -108,32 +91,6 @@ export default function Finanziamenti() {
       return c.da_verificare;
     });
   }, [contratti, per, stato]);
-
-  // Grafico impegno mensile 24 mesi
-  const { datiGrafico, serie } = useMemo(() => {
-    const mesi: string[] = [];
-    for (let k = 1; k <= 24; k++) mesi.push(format(startOfMonth(addMonths(oggi, k)), "yyyy-MM"));
-    const nomi = new Map<string, string>();
-    attivi.forEach((c) => nomi.set(c.id, titoloContratto(c.societa_finanziaria, c.nome)));
-    const righe = mesi.map((m) => {
-      const riga: Record<string, string | number> = {
-        mese: format(parseISO(`${m}-01`), "MMM yy", { locale: it }),
-      };
-      nomi.forEach((nome) => (riga[nome] = 0));
-      rateAperte
-        .filter((r) => r.data_scadenza.slice(0, 7) === m)
-        .forEach((r) => {
-          const nome = nomi.get(r.scadenziario_id);
-          if (!nome) return;
-          riga[nome] = Number(riga[nome] ?? 0) + r.importo;
-        });
-      return riga;
-    });
-    const usate = [...nomi.values()].filter((nome) =>
-      righe.some((r) => Number(r[nome] ?? 0) > 0),
-    );
-    return { datiGrafico: righe, serie: usate };
-  }, [attivi, rateAperte, oggi]);
 
   return (
     <div className="space-y-6">
@@ -254,6 +211,13 @@ export default function Finanziamenti() {
         </div>
       </div>
 
+      <AndamentoFinanziamenti
+        contratti={contratti}
+        contrattiFiltrati={elenco}
+        rate={rateAperte}
+        oggi={oggiISO}
+      />
+
       {/* Elenco contratti */}
       <Card>
         <CardContent className="p-0">
@@ -357,48 +321,7 @@ export default function Finanziamenti() {
       </Card>
 
       {/* Pannelli */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Impegno mensile nei prossimi 24 mesi</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {serie.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                Nessuna rata futura da mostrare.
-              </p>
-            ) : (
-              <div className="h-[280px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={datiGrafico}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="mese" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `€${v}`} />
-                    <Tooltip
-                      formatter={(v: number) => fmtEur(v)}
-                      contentStyle={{
-                        background: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: 8,
-                        fontSize: 12,
-                      }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {serie.map((nome, idx) => (
-                      <Bar
-                        key={nome}
-                        dataKey={nome}
-                        stackId="rate"
-                        fill={COLORI[idx % COLORI.length]}
-                      />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
+      <div>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">In scadenza nei prossimi 30 giorni</CardTitle>
