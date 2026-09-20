@@ -59,7 +59,9 @@ type StatoRata = { testo: string; classe: string };
 
 function statoRata(r: RataFinanziamento): StatoRata {
   const oggi = oggiISO();
-  if (r.stato === "pagata") {
+  if (r.stato_effettivo === "parziale")
+    return { testo: "Parziale", classe: "border-warning/40 bg-warning/10 text-warning" };
+  if (r.stato_effettivo === "pagata" || r.stato === "pagata") {
     if (r.fonte_pagamento === "ente")
       return { testo: "Senza movimento", classe: "border-warning/40 bg-warning/10 text-warning" };
     const ritardo =
