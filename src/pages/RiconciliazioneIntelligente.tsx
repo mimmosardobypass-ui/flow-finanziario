@@ -783,6 +783,9 @@ export default function RiconciliazioneIntelligente() {
 
           {/* PIANI A RATE PAYPAL */}
           <PianiRateCard />
+
+          {/* RATE DI FINANZIAMENTI E DILAZIONI */}
+          <RateCumulativeCard />
         </TabsContent>
 
 
