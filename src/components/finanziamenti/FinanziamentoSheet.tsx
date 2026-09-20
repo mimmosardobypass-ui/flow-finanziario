@@ -39,6 +39,7 @@ import {
   useFinanziamentoDettaglio,
   useProposteRate,
   useScollegaRata,
+  useScollegaPagamentoRata,
   useSegnaRataPagataEnte,
   type Finanziamento,
   type RataFinanziamento,
