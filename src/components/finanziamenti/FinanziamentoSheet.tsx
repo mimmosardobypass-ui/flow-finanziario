@@ -47,6 +47,7 @@ import {
 import { fmtEur, fmtNum, fmtData, iniziali, titoloContratto, tronca, oggiISO } from "./utils";
 import { AbbinaRateDialog } from "./AbbinaRateDialog";
 import { CollegaMovimentoDialog } from "./CollegaMovimentoDialog";
+import { ImputaPagamentoDialog } from "./ImputaPagamentoDialog";
 import { ContrattoTab } from "./ContrattoTab";
 import { VerificaTab } from "./VerificaTab";
 import { NuovoFinanziamentoDialog } from "./NuovoFinanziamentoDialog";
