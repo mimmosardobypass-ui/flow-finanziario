@@ -282,6 +282,11 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                             >
                               {st.testo}
                             </Badge>
+                            {r.stato_effettivo === "parziale" && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {fmtEur(r.imputato)} di {fmtEur(r.importo)}
+                              </p>
+                            )}
                             {r.nota && (
                               <p className="mt-1 truncate text-xs text-muted-foreground" title={r.nota}>
                                 {r.nota}
