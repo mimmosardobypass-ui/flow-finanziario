@@ -82,6 +82,7 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
   const { data: proposte = [] } = useProposteRate(contratto?.id ?? null, !!contratto);
   const scollega = useScollegaRata();
   const segnaEnte = useSegnaRataPagataEnte();
+  const scollegaPagamento = useScollegaPagamentoRata();
 
   const [abbinaAperto, setAbbinaAperto] = useState(false);
   const [caricaPiano, setCaricaPiano] = useState(false);
