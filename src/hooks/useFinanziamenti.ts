@@ -236,7 +236,7 @@ export function useFinanziamentoDettaglio(scadenziarioId: string | null) {
 
       const [rateRes, eventiRes, regoleRes] = await Promise.all([
         supabase
-          .from("scadenze_rate")
+          .from("v_rate_piano")
           .select("*")
           .eq("scadenziario_id", scadenziarioId)
           .order("numero_rata"),
