@@ -470,6 +470,13 @@ export type Database = {
             foreignKeyName: "finanziamento_eventi_rata_id_fkey"
             columns: ["rata_id"]
             isOneToOne: false
+            referencedRelation: "v_rate_piano"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finanziamento_eventi_rata_id_fkey"
+            columns: ["rata_id"]
+            isOneToOne: false
             referencedRelation: "v_scadenze_agenda"
             referencedColumns: ["rata_id"]
           },
@@ -507,6 +514,8 @@ export type Database = {
         Row: {
           attiva: boolean
           confidenza: string
+          consenti_cumulativi: boolean
+          consenti_parziali: boolean
           conto_id: string | null
           created_at: string
           giorni_dopo: number
@@ -514,6 +523,7 @@ export type Database = {
           id: string
           importo_max: number | null
           importo_min: number | null
+          max_rate_cumulate: number
           note: string | null
           ruolo: string
           scadenziario_id: string
@@ -523,6 +533,8 @@ export type Database = {
         Insert: {
           attiva?: boolean
           confidenza?: string
+          consenti_cumulativi?: boolean
+          consenti_parziali?: boolean
           conto_id?: string | null
           created_at?: string
           giorni_dopo?: number
@@ -530,6 +542,7 @@ export type Database = {
           id?: string
           importo_max?: number | null
           importo_min?: number | null
+          max_rate_cumulate?: number
           note?: string | null
           ruolo?: string
           scadenziario_id: string
@@ -539,6 +552,8 @@ export type Database = {
         Update: {
           attiva?: boolean
           confidenza?: string
+          consenti_cumulativi?: boolean
+          consenti_parziali?: boolean
           conto_id?: string | null
           created_at?: string
           giorni_dopo?: number
@@ -546,6 +561,7 @@ export type Database = {
           id?: string
           importo_max?: number | null
           importo_min?: number | null
+          max_rate_cumulate?: number
           note?: string | null
           ruolo?: string
           scadenziario_id?: string
@@ -630,6 +646,75 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "categories"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      rate_pagamenti: {
+        Row: {
+          created_at: string
+          id: string
+          importo_imputato: number
+          note: string | null
+          rata_id: string
+          ruolo: string
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          importo_imputato: number
+          note?: string | null
+          rata_id: string
+          ruolo?: string
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          importo_imputato?: number
+          note?: string | null
+          rata_id?: string
+          ruolo?: string
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rate_pagamenti_rata_id_fkey"
+            columns: ["rata_id"]
+            isOneToOne: false
+            referencedRelation: "scadenze_rate"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rate_pagamenti_rata_id_fkey"
+            columns: ["rata_id"]
+            isOneToOne: false
+            referencedRelation: "v_rate_piano"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rate_pagamenti_rata_id_fkey"
+            columns: ["rata_id"]
+            isOneToOne: false
+            referencedRelation: "v_scadenze_agenda"
+            referencedColumns: ["rata_id"]
+          },
+          {
+            foreignKeyName: "rate_pagamenti_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rate_pagamenti_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "v_movimenti_copertura"
+            referencedColumns: ["transaction_id"]
           },
         ]
       }
@@ -1167,6 +1252,13 @@ export type Database = {
             foreignKeyName: "transactions_rata_id_fkey"
             columns: ["rata_id"]
             isOneToOne: false
+            referencedRelation: "v_rate_piano"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_rata_id_fkey"
+            columns: ["rata_id"]
+            isOneToOne: false
             referencedRelation: "v_scadenze_agenda"
             referencedColumns: ["rata_id"]
           },
@@ -1524,6 +1616,68 @@ export type Database = {
         }
         Relationships: []
       }
+      v_rate_piano: {
+        Row: {
+          confidenza: string | null
+          created_at: string | null
+          da_pagamento_cumulativo: boolean | null
+          data_pagamento: string | null
+          data_scadenza: string | null
+          debito_residuo: number | null
+          fonte_pagamento: string | null
+          id: string | null
+          importo: number | null
+          importo_pagato: number | null
+          imputato: number | null
+          movimenti: Json | null
+          n_movimenti: number | null
+          nota: string | null
+          numero_rata: number | null
+          piano_nome: string | null
+          quota_capitale: number | null
+          quota_interessi: number | null
+          residuo_rata: number | null
+          scadenziario_id: string | null
+          societa_finanziaria: string | null
+          spese: number | null
+          stato: string | null
+          stato_effettivo: string | null
+          stimata: boolean | null
+          tentativi_falliti: number | null
+          transaction_id: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scadenze_rate_scadenziario_id_fkey"
+            columns: ["scadenziario_id"]
+            isOneToOne: false
+            referencedRelation: "scadenziario"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scadenze_rate_scadenziario_id_fkey"
+            columns: ["scadenziario_id"]
+            isOneToOne: false
+            referencedRelation: "v_finanziamenti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scadenze_rate_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scadenze_rate_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "v_movimenti_copertura"
+            referencedColumns: ["transaction_id"]
+          },
+        ]
+      }
       v_scadenze_agenda: {
         Row: {
           beneficiario: string | null
@@ -1872,6 +2026,15 @@ export type Database = {
         }
         Returns: Json
       }
+      imputa_pagamento_rate: {
+        Args: {
+          p_confidenza?: string
+          p_rata_ids: string[]
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       paga_documenti_contanti: {
         Args: {
           p_conto_id?: string
@@ -1932,6 +2095,14 @@ export type Database = {
         Args: { p_fattura_id: string }
         Returns: undefined
       }
+      scollega_pagamento_rata: {
+        Args: {
+          p_rata_id?: string
+          p_transaction_id?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       scollega_rata_finanziamento: {
         Args: { p_rata_id: string; p_user_id: string }
         Returns: undefined
@@ -1950,6 +2121,29 @@ export type Database = {
         Args: { p_fattura_id: string; p_user_id: string }
         Returns: string
       }
+      trova_pagamenti_cumulativi: {
+        Args: { p_scadenziario_id?: string; p_user_id: string }
+        Returns: {
+          ambiguo: boolean
+          avviso: string
+          con_acconto: number
+          confidenza: string
+          conto: string
+          data: string
+          descrizione: string
+          importo: number
+          importo_imputabile: number
+          n_rate: number
+          piano: string
+          rate_chiuse: number
+          residuo_non_imputato: number
+          righe: Json
+          scadenziario_id: string
+          scarto_max_giorni: number
+          tipo: string
+          transaction_id: string
+        }[]
+      }
       trova_rate_finanziamenti: {
         Args: { p_scadenziario_id?: string; p_user_id: string }
         Returns: {
@@ -1965,6 +2159,25 @@ export type Database = {
           rata_id: string
           scadenziario_id: string
           transaction_id: string
+        }[]
+      }
+      trova_rate_per_movimento: {
+        Args: {
+          p_scadenziario_id?: string
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: {
+          data_scadenza: string
+          gia_imputato: number
+          importo: number
+          numero_rata: number
+          piano: string
+          preselezionata: boolean
+          quota_proposta: number
+          rata_id: string
+          residuo: number
+          scadenziario_id: string
         }[]
       }
     }

@@ -106,6 +106,19 @@ export function useFinanziamenti() {
   });
 }
 
+/** Movimento imputato a una rata (dalla colonna jsonb `movimenti` di v_rate_piano). */
+export interface MovimentoImputato {
+  transaction_id: string;
+  data: string | null;
+  descrizione: string | null;
+  conto: string | null;
+  importo_movimento: number;
+  importo_imputato: number;
+  ruolo: string;
+  cumulativo: boolean;
+  rate_coperte: number;
+}
+
 export interface RataFinanziamento {
   id: string;
   scadenziario_id: string;
@@ -125,6 +138,30 @@ export interface RataFinanziamento {
   fonte_pagamento: string | null;
   confidenza: string | null;
   nota: string | null;
+  imputato: number;
+  residuo_rata: number;
+  stato_effettivo: string;
+  n_movimenti: number;
+  da_pagamento_cumulativo: boolean;
+  movimenti_imputati: MovimentoImputato[];
+}
+
+function mapMovimentiImputati(v: unknown): MovimentoImputato[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => {
+    const m = (x ?? {}) as Record<string, unknown>;
+    return {
+      transaction_id: String(m.transaction_id ?? ""),
+      data: (m.data as string | null) ?? null,
+      descrizione: (m.descrizione as string | null) ?? null,
+      conto: (m.conto as string | null) ?? null,
+      importo_movimento: n0(m.importo_movimento),
+      importo_imputato: n0(m.importo_imputato),
+      ruolo: (m.ruolo as string) ?? "rata",
+      cumulativo: !!m.cumulativo,
+      rate_coperte: n0(m.rate_coperte),
+    };
+  });
 }
 
 function mapRata(r: Record<string, unknown>): RataFinanziamento {
@@ -138,6 +175,12 @@ function mapRata(r: Record<string, unknown>): RataFinanziamento {
     spese: n0(r.spese),
     tentativi_falliti: n0(r.tentativi_falliti),
     stimata: !!r.stimata,
+    imputato: n0(r.imputato),
+    residuo_rata: n0(r.residuo_rata),
+    stato_effettivo: (r.stato_effettivo as string) ?? (r.stato as string) ?? "non_pagata",
+    n_movimenti: n0(r.n_movimenti),
+    da_pagamento_cumulativo: !!r.da_pagamento_cumulativo,
+    movimenti_imputati: mapMovimentiImputati(r.movimenti),
   };
 }
 
@@ -193,7 +236,7 @@ export function useFinanziamentoDettaglio(scadenziarioId: string | null) {
 
       const [rateRes, eventiRes, regoleRes] = await Promise.all([
         supabase
-          .from("scadenze_rate")
+          .from("v_rate_piano")
           .select("*")
           .eq("scadenziario_id", scadenziarioId)
           .order("numero_rata"),
@@ -754,5 +797,182 @@ export function useMovimentiCandidati(rataId: string | null, query: string) {
       });
     },
     enabled: !!user && !!rataId,
+  });
+}
+
+/* ---------- Imputazione di un pagamento su più rate ---------- */
+
+export interface RataPerMovimento {
+  rata_id: string;
+  scadenziario_id: string;
+  piano: string | null;
+  numero_rata: number;
+  data_scadenza: string | null;
+  importo: number;
+  gia_imputato: number;
+  residuo: number;
+  quota_proposta: number;
+  preselezionata: boolean;
+}
+
+/** Rate aperte imputabili a un movimento. */
+export function useRatePerMovimento(transactionId: string | null, scadenziarioId?: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["finanziamenti", "rate-per-movimento", user?.id, transactionId, scadenziarioId ?? "tutti"],
+    queryFn: async () => {
+      if (!user || !transactionId) return [] as RataPerMovimento[];
+      const { data, error } = await supabase.rpc("trova_rate_per_movimento", {
+        p_user_id: user.id,
+        p_transaction_id: transactionId,
+        ...(scadenziarioId ? { p_scadenziario_id: scadenziarioId } : {}),
+      });
+      if (error) throw error;
+      return (data ?? []).map((r) => ({
+        ...r,
+        numero_rata: n0(r.numero_rata),
+        importo: n0(r.importo),
+        gia_imputato: n0(r.gia_imputato),
+        residuo: n0(r.residuo),
+        quota_proposta: n0(r.quota_proposta),
+        preselezionata: !!r.preselezionata,
+      })) as RataPerMovimento[];
+    },
+    enabled: !!user && !!transactionId,
+  });
+}
+
+export interface EsitoImputazione {
+  importo_movimento: number;
+  imputato_ora: number;
+  residuo_non_imputato: number;
+}
+
+export function useImputaPagamentoRate() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      transaction_id,
+      rata_ids,
+      confidenza = "manuale",
+    }: {
+      transaction_id: string;
+      rata_ids: string[];
+      confidenza?: string;
+    }) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase.rpc("imputa_pagamento_rate", {
+        p_user_id: user.id,
+        p_transaction_id: transaction_id,
+        p_rata_ids: rata_ids,
+        p_confidenza: confidenza,
+      });
+      if (error) throw error;
+      const r = (data ?? {}) as Record<string, unknown>;
+      return {
+        importo_movimento: n0(r.importo_movimento),
+        imputato_ora: n0(r.imputato_ora),
+        residuo_non_imputato: n0(r.residuo_non_imputato),
+      } as EsitoImputazione;
+    },
+    onSuccess: () => invalidaFinanziamenti(qc),
+  });
+}
+
+export function useScollegaPagamentoRata() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      rata_id = null,
+      transaction_id = null,
+    }: { rata_id?: string | null; transaction_id?: string | null }) => {
+      if (!user) throw new Error("Non autenticato");
+      const { error } = await supabase.rpc("scollega_pagamento_rata", {
+        p_user_id: user.id,
+        ...(rata_id ? { p_rata_id: rata_id } : {}),
+        ...(transaction_id ? { p_transaction_id: transaction_id } : {}),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => invalidaFinanziamenti(qc),
+  });
+}
+
+/* ---------- Proposte di pagamenti cumulativi ---------- */
+
+export interface RigaCumulativa {
+  rata_id: string;
+  numero_rata: number;
+  scadenza: string | null;
+  residuo: number;
+  quota: number;
+  chiude: boolean;
+}
+
+export interface PagamentoCumulativo {
+  transaction_id: string;
+  data: string;
+  importo: number;
+  descrizione: string | null;
+  conto: string | null;
+  scadenziario_id: string;
+  piano: string | null;
+  n_rate: number;
+  rate_chiuse: number;
+  con_acconto: number;
+  importo_imputabile: number;
+  residuo_non_imputato: number;
+  scarto_max_giorni: number;
+  tipo: string;
+  confidenza: string;
+  ambiguo: boolean;
+  avviso: string | null;
+  righe: RigaCumulativa[];
+}
+
+function mapRigheCumulative(v: unknown): RigaCumulativa[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => {
+    const r = (x ?? {}) as Record<string, unknown>;
+    return {
+      rata_id: String(r.rata_id ?? ""),
+      numero_rata: n0(r.numero_rata),
+      scadenza: (r.scadenza as string | null) ?? null,
+      residuo: n0(r.residuo),
+      quota: n0(r.quota),
+      chiude: !!r.chiude,
+    };
+  });
+}
+
+/** Cerca i movimenti che coprono più rate (o parte di una rata). */
+export function useTrovaPagamentiCumulativi() {
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (scadenziarioId?: string | null) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase.rpc("trova_pagamenti_cumulativi", {
+        p_user_id: user.id,
+        ...(scadenziarioId ? { p_scadenziario_id: scadenziarioId } : {}),
+      });
+      if (error) throw error;
+      return (data ?? [])
+        .map((r) => ({
+          ...r,
+          importo: n0(r.importo),
+          n_rate: n0(r.n_rate),
+          rate_chiuse: n0(r.rate_chiuse),
+          con_acconto: n0(r.con_acconto),
+          importo_imputabile: n0(r.importo_imputabile),
+          residuo_non_imputato: n0(r.residuo_non_imputato),
+          scarto_max_giorni: n0(r.scarto_max_giorni),
+          ambiguo: !!r.ambiguo,
+          avviso: (r.avviso as string | null) ?? null,
+          righe: mapRigheCumulative(r.righe),
+        }))
+        .sort((a, b) => (b.data ?? "").localeCompare(a.data ?? "")) as PagamentoCumulativo[];
+    },
   });
 }

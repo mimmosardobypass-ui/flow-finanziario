@@ -39,6 +39,7 @@ import {
   useFinanziamentoDettaglio,
   useProposteRate,
   useScollegaRata,
+  useScollegaPagamentoRata,
   useSegnaRataPagataEnte,
   type Finanziamento,
   type RataFinanziamento,
@@ -46,6 +47,7 @@ import {
 import { fmtEur, fmtNum, fmtData, iniziali, titoloContratto, tronca, oggiISO } from "./utils";
 import { AbbinaRateDialog } from "./AbbinaRateDialog";
 import { CollegaMovimentoDialog } from "./CollegaMovimentoDialog";
+import { ImputaPagamentoDialog } from "./ImputaPagamentoDialog";
 import { ContrattoTab } from "./ContrattoTab";
 import { VerificaTab } from "./VerificaTab";
 import { NuovoFinanziamentoDialog } from "./NuovoFinanziamentoDialog";
@@ -59,7 +61,9 @@ type StatoRata = { testo: string; classe: string };
 
 function statoRata(r: RataFinanziamento): StatoRata {
   const oggi = oggiISO();
-  if (r.stato === "pagata") {
+  if (r.stato_effettivo === "parziale")
+    return { testo: "Parziale", classe: "border-warning/40 bg-warning/10 text-warning" };
+  if (r.stato_effettivo === "pagata" || r.stato === "pagata") {
     if (r.fonte_pagamento === "ente")
       return { testo: "Senza movimento", classe: "border-warning/40 bg-warning/10 text-warning" };
     const ritardo =
@@ -80,10 +84,12 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
   const { data: proposte = [] } = useProposteRate(contratto?.id ?? null, !!contratto);
   const scollega = useScollegaRata();
   const segnaEnte = useSegnaRataPagataEnte();
+  const scollegaPagamento = useScollegaPagamentoRata();
 
   const [abbinaAperto, setAbbinaAperto] = useState(false);
   const [caricaPiano, setCaricaPiano] = useState(false);
   const [rataDaCollegare, setRataDaCollegare] = useState<RataFinanziamento | null>(null);
+  const [rataDaImputare, setRataDaImputare] = useState<RataFinanziamento | null>(null);
   const [rataDaScollegare, setRataDaScollegare] = useState<RataFinanziamento | null>(null);
   const [rataEnte, setRataEnte] = useState<RataFinanziamento | null>(null);
   const [dataEnte, setDataEnte] = useState(oggiISO());
@@ -280,6 +286,11 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                             >
                               {st.testo}
                             </Badge>
+                            {r.stato_effettivo === "parziale" && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {fmtEur(r.imputato)} di {fmtEur(r.importo)}
+                              </p>
+                            )}
                             {r.nota && (
                               <p className="mt-1 truncate text-xs text-muted-foreground" title={r.nota}>
                                 {r.nota}
@@ -321,22 +332,32 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                             ) : null}
                           </TableCell>
                           <TableCell className="hidden px-2 sm:table-cell">
-                            {mov ? (
-                              <div className="min-w-0">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <p className="cursor-help truncate text-sm">
-                                      {mov.description}
+                            {r.movimenti_imputati.length > 0 ? (
+                              <div className="min-w-0 space-y-1.5">
+                                {r.movimenti_imputati.map((m) => (
+                                  <div key={m.transaction_id} className="min-w-0">
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <p className="cursor-help truncate text-sm">
+                                          {m.descrizione ?? "—"}
+                                        </p>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="max-w-xs break-words">
+                                        {m.descrizione ?? "—"}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                    <p className="truncate text-xs text-muted-foreground">
+                                      {[m.conto ?? "—", fmtData(m.data)].join(" · ")}
+                                      {r.confidenza ? ` · confidenza ${r.confidenza}` : ""}
                                     </p>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-xs break-words">
-                                    {mov.description}
-                                  </TooltipContent>
-                                </Tooltip>
-                                <p className="truncate text-xs text-muted-foreground">
-                                  {mov.conto_nome ?? "—"}
-                                  {r.confidenza ? ` · confidenza ${r.confidenza}` : ""}
-                                </p>
+                                    {m.cumulativo && (
+                                      <p className="truncate text-xs text-muted-foreground">
+                                        quota {fmtEur(m.importo_imputato)} di un pagamento da{" "}
+                                        {fmtEur(m.importo_movimento)}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
                             ) : (
                               "—"
@@ -350,6 +371,19 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setRataDaImputare(r)}>
+                                  Imputa pagamento
+                                </DropdownMenuItem>
+                                {r.movimenti_imputati.length > 0 && (
+                                  <DropdownMenuItem
+                                    onClick={async () => {
+                                      await scollegaPagamento.mutateAsync({ rata_id: r.id });
+                                      toast.success("Pagamento scollegato dalla rata");
+                                    }}
+                                  >
+                                    Scollega pagamento
+                                  </DropdownMenuItem>
+                                )}
                                 {r.stato === "pagata" && mov && (
                                   <DropdownMenuItem onClick={() => setRataDaScollegare(r)}>
                                     Scollega movimento
@@ -374,6 +408,7 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
+
                         </TableRow>
                       );
                     })}
@@ -431,6 +466,14 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
         onOpenChange={setCaricaPiano}
         contrattoId={contratto.id}
       />
+
+      <ImputaPagamentoDialog
+        open={!!rataDaImputare}
+        onOpenChange={(v) => !v && setRataDaImputare(null)}
+        rata={rataDaImputare}
+        scadenziarioId={contratto.id}
+      />
+
 
       <CollegaMovimentoDialog
         rata={rataDaCollegare}
