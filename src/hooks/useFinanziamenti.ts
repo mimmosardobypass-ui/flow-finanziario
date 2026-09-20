@@ -106,6 +106,19 @@ export function useFinanziamenti() {
   });
 }
 
+/** Movimento imputato a una rata (dalla colonna jsonb `movimenti` di v_rate_piano). */
+export interface MovimentoImputato {
+  transaction_id: string;
+  data: string | null;
+  descrizione: string | null;
+  conto: string | null;
+  importo_movimento: number;
+  importo_imputato: number;
+  ruolo: string;
+  cumulativo: boolean;
+  rate_coperte: number;
+}
+
 export interface RataFinanziamento {
   id: string;
   scadenziario_id: string;
@@ -125,6 +138,30 @@ export interface RataFinanziamento {
   fonte_pagamento: string | null;
   confidenza: string | null;
   nota: string | null;
+  imputato: number;
+  residuo_rata: number;
+  stato_effettivo: string;
+  n_movimenti: number;
+  da_pagamento_cumulativo: boolean;
+  movimenti_imputati: MovimentoImputato[];
+}
+
+function mapMovimentiImputati(v: unknown): MovimentoImputato[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => {
+    const m = (x ?? {}) as Record<string, unknown>;
+    return {
+      transaction_id: String(m.transaction_id ?? ""),
+      data: (m.data as string | null) ?? null,
+      descrizione: (m.descrizione as string | null) ?? null,
+      conto: (m.conto as string | null) ?? null,
+      importo_movimento: n0(m.importo_movimento),
+      importo_imputato: n0(m.importo_imputato),
+      ruolo: (m.ruolo as string) ?? "rata",
+      cumulativo: !!m.cumulativo,
+      rate_coperte: n0(m.rate_coperte),
+    };
+  });
 }
 
 function mapRata(r: Record<string, unknown>): RataFinanziamento {
@@ -138,6 +175,12 @@ function mapRata(r: Record<string, unknown>): RataFinanziamento {
     spese: n0(r.spese),
     tentativi_falliti: n0(r.tentativi_falliti),
     stimata: !!r.stimata,
+    imputato: n0(r.imputato),
+    residuo_rata: n0(r.residuo_rata),
+    stato_effettivo: (r.stato_effettivo as string) ?? (r.stato as string) ?? "non_pagata",
+    n_movimenti: n0(r.n_movimenti),
+    da_pagamento_cumulativo: !!r.da_pagamento_cumulativo,
+    movimenti_imputati: mapMovimentiImputati(r.movimenti),
   };
 }
 
