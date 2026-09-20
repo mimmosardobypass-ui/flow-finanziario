@@ -86,6 +86,7 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
   const [abbinaAperto, setAbbinaAperto] = useState(false);
   const [caricaPiano, setCaricaPiano] = useState(false);
   const [rataDaCollegare, setRataDaCollegare] = useState<RataFinanziamento | null>(null);
+  const [rataDaImputare, setRataDaImputare] = useState<RataFinanziamento | null>(null);
   const [rataDaScollegare, setRataDaScollegare] = useState<RataFinanziamento | null>(null);
   const [rataEnte, setRataEnte] = useState<RataFinanziamento | null>(null);
   const [dataEnte, setDataEnte] = useState(oggiISO());
