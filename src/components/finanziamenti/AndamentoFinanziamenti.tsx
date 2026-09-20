@@ -169,7 +169,7 @@ export function AndamentoFinanziamenti({ contratti, contrattiFiltrati, rate, ogg
 
   const ultimaData = useMemo(() => {
     const date = rateFiltrate.map((r) => r.data_scadenza).filter(Boolean).sort();
-    return date.at(-1) ?? meseISO(base);
+    return date.length > 0 ? date[date.length - 1] : meseISO(base);
   }, [base, rateFiltrate]);
   const mesiTutto = Math.max(1, differenceInCalendarMonths(startOfMonth(parseISO(ultimaData)), base) + 1);
   const numeroMesi = periodo === "tutto" ? mesiTutto : periodo;
