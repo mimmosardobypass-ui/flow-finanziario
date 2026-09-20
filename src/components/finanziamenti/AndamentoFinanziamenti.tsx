@@ -174,8 +174,8 @@ export function AndamentoFinanziamenti({ contratti, contrattiFiltrati, rate, ogg
   const mesiTutto = Math.max(1, differenceInCalendarMonths(startOfMonth(parseISO(ultimaData)), base) + 1);
   const numeroMesi = periodo === "tutto" ? mesiTutto : periodo;
 
-  const dati = useMemo(() => {
-    const righe: RigaMese[] = Array.from({ length: numeroMesi }, (_, indice) => {
+  const datiCompleti = useMemo(() => {
+    const righe: RigaMese[] = Array.from({ length: mesiTutto }, (_, indice) => {
       const data = addMonths(base, indice);
       const riga: RigaMese = {
         mese: meseISO(data),
@@ -205,14 +205,16 @@ export function AndamentoFinanziamenti({ contratti, contrattiFiltrati, rate, ogg
       riga.cambia = serie.some((s) => Number(riga[s.key] ?? 0) !== Number(righe[indice - 1][s.key] ?? 0));
     });
     return righe;
-  }, [base, contrattiFiltrati, indiceColore, numeroMesi, oggi, rateFiltrate, serie]);
+  }, [base, contrattiFiltrati, indiceColore, mesiTutto, oggi, rateFiltrate, serie]);
+
+  const dati = useMemo(() => datiCompleti.slice(0, numeroMesi), [datiCompleti, numeroMesi]);
 
   const totale = dati.reduce((somma, riga) => somma + riga.totale, 0);
   const troppoDenso = larghezza > 0 && (larghezza - 90) / numeroMesi < 36;
   const periodoTesto = `da ${format(base, "MMMM yyyy", { locale: it })} a ${format(addMonths(base, numeroMesi - 1), "MMMM yyyy", { locale: it })}`;
-  const anni = useMemo(() => [...new Set(dati.map((r) => r.mese.slice(0, 4)))], [dati]);
-  const annoScelto = anno !== "tutti" && anni.includes(anno) ? anno : anni[0] ?? "tutti";
-  const righeAnno = annoScelto === "tutti" ? dati : dati.filter((r) => r.mese.startsWith(annoScelto));
+  const anni = useMemo(() => [...new Set(datiCompleti.map((r) => r.mese.slice(0, 4)))], [datiCompleti]);
+  const annoScelto = anno === "tutti" || anni.includes(anno) ? anno : anni[0] ?? "tutti";
+  const righeAnno = annoScelto === "tutti" ? datiCompleti : datiCompleti.filter((r) => r.mese.startsWith(annoScelto));
   const intervalloX = numeroMesi > 30 ? 2 : numeroMesi > 18 ? 1 : 0;
   const massimo = Math.max(0, ...dati.map((r) => r.totale));
   const passoY = Math.max(50, Math.ceil(maximoPasso(massimo) / 50) * 50);
@@ -329,7 +331,7 @@ export function AndamentoFinanziamenti({ contratti, contrattiFiltrati, rate, ogg
             )}
           </>
         ) : (
-          <VistaTabella dati={dati} serie={serie} anni={anni} anno={annoScelto} onAnnoChange={setAnno} righe={righeAnno} />
+          <VistaTabella dati={datiCompleti} serie={serie} anni={anni} anno={annoScelto} onAnnoChange={setAnno} righe={righeAnno} />
         )}
       </CardContent>
     </Card>
