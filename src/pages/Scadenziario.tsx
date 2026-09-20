@@ -30,7 +30,7 @@ import { calcolaCoperture, calcolaKpi, calcolaMesi, filtraConto, raggruppaAgenda
 const STORAGE_CONTO = "scadenziario-conto";
 
 function rataPerDialog(r: ScadenzaAgenda): RataFinanziamento {
-  return { id: r.rata_id, scadenziario_id: r.scadenziario_id, numero_rata: r.numero_rata, importo: r.importo, data_scadenza: r.data_scadenza, stato: r.stato, transaction_id: r.transaction_id, stimata: r.stimata, quota_capitale: null, quota_interessi: null, debito_residuo: null, data_pagamento: r.data_pagamento, importo_pagato: r.importo_pagato, spese: r.spese, tentativi_falliti: 0, fonte_pagamento: r.fonte_pagamento, confidenza: null, nota: r.nota };
+  return { id: r.rata_id, scadenziario_id: r.scadenziario_id, numero_rata: r.numero_rata, importo: r.importo, data_scadenza: r.data_scadenza, stato: r.stato, transaction_id: r.transaction_id, stimata: r.stimata, quota_capitale: null, quota_interessi: null, debito_residuo: null, data_pagamento: r.data_pagamento, importo_pagato: r.importo_pagato, spese: r.spese, tentativi_falliti: 0, fonte_pagamento: r.fonte_pagamento, confidenza: null, nota: r.nota, imputato: r.importo_pagato ?? 0, residuo_rata: Math.max(0, (r.importo ?? 0) - (r.importo_pagato ?? 0)), stato_effettivo: r.stato, n_movimenti: r.transaction_id ? 1 : 0, da_pagamento_cumulativo: false, movimenti_imputati: [] };
 }
 
 export default function Scadenziario() {
