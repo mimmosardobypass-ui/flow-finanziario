@@ -466,6 +466,14 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
         contrattoId={contratto.id}
       />
 
+      <ImputaPagamentoDialog
+        open={!!rataDaImputare}
+        onOpenChange={(v) => !v && setRataDaImputare(null)}
+        rata={rataDaImputare}
+        scadenziarioId={contratto.id}
+      />
+
+
       <CollegaMovimentoDialog
         rata={rataDaCollegare}
         onOpenChange={(v) => !v && setRataDaCollegare(null)}
