@@ -1,44 +1,38 @@
-# Scadenziario come agenda delle scadenze
+# Card Andamento nella pagina Finanziamenti
 
 ## Obiettivo
-Trasformare la pagina Scadenziario in una vista operativa centrata sulle rate imminenti, mantenendo il dialog di creazione e la gestione dei contratti già esistente. Nessuna modifica al database.
+Sostituire l’attuale grafico “Impegno mensile nei prossimi 24 mesi” con una sola card “Andamento”, collocata tra i filtri e l’elenco contratti, coordinata con i filtri Per/Stato e leggibile sia come grafico sia come tabella.
 
 ## Intervento
 
-1. **Nuovi dati agenda**
-   - Creare `useScadenzeAgenda` con tipi locali per `v_scadenze_agenda` e `v_entrate_previste`.
-   - Caricare solo contratti attivi, rate aperte e pagamenti degli ultimi 90 giorni, con ordinamento per data di addebito.
-   - Convertire sempre i campi numerici e usare la data locale italiana.
-   - Invalidare l’agenda dopo creazione/eliminazione/modifica rate e dopo tutte le operazioni sui finanziamenti richieste.
+1. **Dati e coerenza contabile**
+   - Riutilizzare le rate non pagate già caricate da `scadenze_rate` e i contratti da `v_finanziamenti`, senza modifiche al database.
+   - Estendere i dati delle rate solo quanto serve per distinguere contratto, piano stimato e scadenze arretrate.
+   - Applicare gli stessi filtri Per/Stato dell’elenco contratti prima di costruire grafico, riepiloghi e tabella.
+   - Nel mese corrente sommare sia le rate del mese sia tutte le rate non pagate già scadute, mantenendo separato il subtotale “già scaduti” per il tooltip.
 
-2. **Calcoli centralizzati**
-   - Creare funzioni pure per KPI, gruppi temporali, sei mesi di uscite, colori conto e copertura dei saldi.
-   - Considerare commissioni previste, entrate ricorrenti, saldo confermato/stimato, contanti, minimo previsto e giorno di scoperto.
-   - Applicare il filtro conto a agenda, KPI e grafico, lasciando “Conti da coprire” globale.
+2. **Calcoli dell’andamento**
+   - Creare funzioni pure per intervalli 12/24/36 mesi e Tutto, aggregazioni mensili/annuali, totali, media, mesi coperti e punti in cui l’impegno cambia.
+   - “Tutto” partirà dal mese corrente e terminerà al mese dell’ultima rata dei contratti filtrati.
+   - Ordinare stabilmente i contratti per debito residuo decrescente; assegnare i primi otto colori per id e raggruppare gli altri nella serie grigia “Altri”.
 
-3. **Nuova pagina Agenda**
-   - Intestazione con data odierna, quattro KPI, tab Agenda/Contratti/Pagate e filtro conto persistente.
-   - Gruppi Scadute, Questa settimana, Entro 30 giorni e mesi futuri espandibili.
-   - Righe rate accessibili con data, contratto, conto, importo, stato e menu azioni.
-   - Apertura della scheda Finanziamento per i finanziamenti; espansione del contratto per gli altri piani.
-   - Riutilizzo dei dialog esistenti per collegare movimenti e segnare rate pagate secondo l’ente.
+3. **Vista Grafico**
+   - Creare una card dedicata con titolo, sottotitolo dinamico, selettore Grafico/Tabella e controllo Periodo.
+   - Mostrare barre impilate compatte, griglia continua, asse Y con valori arrotondati, asse X diradato, tooltip completo e legenda permanente.
+   - Evidenziare sopra le colonne i totali dei mesi in cui l’impegno cambia; il comando “Importo su ogni mese” aggiungerà gli altri totali solo quando lo spazio lo consente.
+   - Disabilitare automaticamente quel comando nei periodi troppo densi, spiegandone il motivo nell’etichetta.
 
-4. **Pannelli di previsione**
-   - Grafico impilato dei prossimi sei mesi, interattivo e leggibile anche da tastiera.
-   - Pannello di copertura per conto con mini estratto cronologico, saldo minimo/finale e avvisi Coperto, Margine stretto, Non coperto, Saldo da confermare o Contanti.
-   - Legenda per date stimate e addebiti spostati dal fine settimana.
+4. **Vista Tabella**
+   - Generare i pulsanti anno dai dati realmente presenti, più “Tutti gli anni”.
+   - Per un singolo anno mostrare una riga per mese, una colonna per serie e i totali finali; evidenziare i mesi in cui l’impegno cambia.
+   - Per tutti gli anni mostrare una riga aggregata per anno, il numero di mesi e il totale complessivo.
+   - Mantenere importi allineati a destra con cifre tabulari e celle vuote indicate da un trattino.
 
-5. **Tab Contratti e Pagate**
-   - Tabella contratti attivi ordinata per urgenza, con riepilogo mensile, avanzamento, residuo, prossima rata, stato, espansione rate e cancellazione.
-   - Interruttore “Mostra completati” al posto della vecchia Cronologia.
-   - Pagamenti degli ultimi 90 giorni raggruppati per mese e ordinati per data decrescente.
-
-6. **Struttura e verifica**
-   - Suddividere la UI nei componenti richiesti sotto `src/components/scadenziario/agenda/`.
-   - Usare componenti shadcn, token semantici, modalità scura, layout mobile senza scorrimento orizzontale della pagina.
-   - Verificare TypeScript e la resa desktop/mobile della pagina; l’area contratti resta l’unica con scorrimento orizzontale interno.
+5. **Integrazione e pulizia**
+   - Inserire la card sotto i filtri e rimuovere il vecchio grafico dal pannello inferiore, lasciando lì solo “In scadenza nei prossimi 30 giorni”.
+   - Definire i colori richiesti come token del tema e usarli solo per pallini e segmenti, mai per il testo.
+   - Verificare il controllo TypeScript e la resa della card nei principali intervalli e filtri.
 
 ## Assunzioni
-- I colori fissi dei conti saranno rappresentati tramite classi CSS/token dedicati, senza colorare il testo.
-- “Apri contratto” per un piano non finanziario selezionerà la tab Contratti e ne aprirà la riga.
-- Il link “Imposta il saldo reale” porterà alla pagina Conti, come richiesto, senza cambiare quella pagina.
+- Con Stato “Estinti” il grafico sarà vuoto, perché la fonte richiesta comprende esclusivamente rate non pagate di contratti attivi.
+- La media mensile sarà il totale del periodo diviso per il numero di mesi visualizzati, inclusi gli eventuali mesi senza rate.
