@@ -328,22 +328,32 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                             ) : null}
                           </TableCell>
                           <TableCell className="hidden px-2 sm:table-cell">
-                            {mov ? (
-                              <div className="min-w-0">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <p className="cursor-help truncate text-sm">
-                                      {mov.description}
+                            {r.movimenti_imputati.length > 0 ? (
+                              <div className="min-w-0 space-y-1.5">
+                                {r.movimenti_imputati.map((m) => (
+                                  <div key={m.transaction_id} className="min-w-0">
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <p className="cursor-help truncate text-sm">
+                                          {m.descrizione ?? "—"}
+                                        </p>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="max-w-xs break-words">
+                                        {m.descrizione ?? "—"}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                    <p className="truncate text-xs text-muted-foreground">
+                                      {[m.conto ?? "—", fmtData(m.data)].join(" · ")}
+                                      {r.confidenza ? ` · confidenza ${r.confidenza}` : ""}
                                     </p>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-xs break-words">
-                                    {mov.description}
-                                  </TooltipContent>
-                                </Tooltip>
-                                <p className="truncate text-xs text-muted-foreground">
-                                  {mov.conto_nome ?? "—"}
-                                  {r.confidenza ? ` · confidenza ${r.confidenza}` : ""}
-                                </p>
+                                    {m.cumulativo && (
+                                      <p className="truncate text-xs text-muted-foreground">
+                                        quota {fmtEur(m.importo_imputato)} di un pagamento da{" "}
+                                        {fmtEur(m.importo_movimento)}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
                             ) : (
                               "—"
@@ -357,6 +367,19 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setRataDaImputare(r)}>
+                                  Imputa pagamento
+                                </DropdownMenuItem>
+                                {r.movimenti_imputati.length > 0 && (
+                                  <DropdownMenuItem
+                                    onClick={async () => {
+                                      await scollegaPagamento.mutateAsync({ rata_id: r.id });
+                                      toast.success("Pagamento scollegato dalla rata");
+                                    }}
+                                  >
+                                    Scollega pagamento
+                                  </DropdownMenuItem>
+                                )}
                                 {r.stato === "pagata" && mov && (
                                   <DropdownMenuItem onClick={() => setRataDaScollegare(r)}>
                                     Scollega movimento
@@ -381,6 +404,7 @@ export function FinanziamentoSheet({ contratto, onOpenChange }: Props) {
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
+
                         </TableRow>
                       );
                     })}
