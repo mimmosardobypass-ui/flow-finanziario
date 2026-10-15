@@ -1164,6 +1164,178 @@ export type Database = {
           },
         ]
       }
+      smartphone_articoli: {
+        Row: {
+          aliquota_iva: number | null
+          categoria: string
+          codice_articolo: string
+          costo_unitario: number
+          created_at: string
+          descrizione: string
+          documento_id: string
+          id: string
+          marca: string
+          modello: string
+          prezzo_previsto: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          aliquota_iva?: number | null
+          categoria?: string
+          codice_articolo: string
+          costo_unitario: number
+          created_at?: string
+          descrizione?: string
+          documento_id: string
+          id?: string
+          marca?: string
+          modello?: string
+          prezzo_previsto?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          aliquota_iva?: number | null
+          categoria?: string
+          codice_articolo?: string
+          costo_unitario?: number
+          created_at?: string
+          descrizione?: string
+          documento_id?: string
+          id?: string
+          marca?: string
+          modello?: string
+          prezzo_previsto?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smartphone_articoli_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "smartphone_documenti"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      smartphone_documenti: {
+        Row: {
+          created_at: string
+          data_documento: string
+          id: string
+          nome_file: string | null
+          numero: string
+          tipo: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_documento: string
+          id?: string
+          nome_file?: string | null
+          numero: string
+          tipo?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data_documento?: string
+          id?: string
+          nome_file?: string | null
+          numero?: string
+          tipo?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      smartphone_pezzi: {
+        Row: {
+          articolo_id: string
+          created_at: string
+          documento_id: string
+          id: string
+          imei: string | null
+          stato: string
+          user_id: string
+        }
+        Insert: {
+          articolo_id: string
+          created_at?: string
+          documento_id: string
+          id?: string
+          imei?: string | null
+          stato?: string
+          user_id: string
+        }
+        Update: {
+          articolo_id?: string
+          created_at?: string
+          documento_id?: string
+          id?: string
+          imei?: string | null
+          stato?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smartphone_pezzi_articolo_id_fkey"
+            columns: ["articolo_id"]
+            isOneToOne: false
+            referencedRelation: "smartphone_articoli"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smartphone_pezzi_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "smartphone_documenti"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      smartphone_vendite: {
+        Row: {
+          created_at: string
+          data_vendita: string
+          id: string
+          imei: string | null
+          pezzo_id: string
+          prezzo_previsto_al_momento: number | null
+          prezzo_vendita: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_vendita: string
+          id?: string
+          imei?: string | null
+          pezzo_id: string
+          prezzo_previsto_al_momento?: number | null
+          prezzo_vendita: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data_vendita?: string
+          id?: string
+          imei?: string | null
+          pezzo_id?: string
+          prezzo_previsto_al_momento?: number | null
+          prezzo_vendita?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smartphone_vendite_pezzo_id_fkey"
+            columns: ["pezzo_id"]
+            isOneToOne: true
+            referencedRelation: "smartphone_pezzi"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
@@ -2119,6 +2291,20 @@ export type Database = {
       }
       sincronizza_scadenziario_piano: {
         Args: { p_fattura_id: string; p_user_id: string }
+        Returns: string
+      }
+      smartphone_importa_documento: {
+        Args: { p_articoli: Json; p_documento: Json; p_user_id: string }
+        Returns: Json
+      }
+      smartphone_registra_vendita: {
+        Args: {
+          p_data: string
+          p_imei: string
+          p_pezzo_id: string
+          p_prezzo: number
+          p_user_id: string
+        }
         Returns: string
       }
       trova_pagamenti_cumulativi: {
