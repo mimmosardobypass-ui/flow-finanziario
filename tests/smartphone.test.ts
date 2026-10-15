@@ -24,7 +24,7 @@ describe("lettura carico", () => {
     expect(categoriaProposta("NOKIA 105")).toBe("Cellulare");
     expect(categoriaProposta("realme Note 70T")).toBe("Smartphone");
   });
-  test("4 articoli → 3 righe, 6 pezzi", () => { expect(c.righe.length).toBe(3); expect(c.righe.reduce((s, r) => s + r.quantita, 0)).toBe(5); });
+  test("4 righe file → 3 articoli, 5 pezzi", () => { expect(c.righe.length).toBe(3); expect(c.righe.reduce((s, r) => s + r.quantita, 0)).toBe(5); });
   test("titolo mancante", () => { expect(leggiTitolo("Altro testo")).toBeNull(); });
 });
 
