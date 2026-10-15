@@ -10,7 +10,7 @@ import { totali, ricarico, margine } from "@/lib/smartphone/calcoli";
 import { eur, pct, segnoEur } from "@/lib/smartphone/formato";
 import { esportaExcel, r1, r2 } from "@/lib/smartphone/esporta";
 import { fmtData, oggiISO } from "@/components/finanziamenti/utils";
-import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
+import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { messaggioErrore } from "@/lib/erroriDatabase";
 import { Riquadro } from "./ui";
 
