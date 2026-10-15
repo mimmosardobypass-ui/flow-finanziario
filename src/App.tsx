@@ -19,6 +19,7 @@ import Regole from "./pages/Regole";
 import RiconciliazioneIntelligente from "./pages/RiconciliazioneIntelligente";
 import FattureFornitori from "./pages/FattureFornitori";
 import ImportTransazioni from "./pages/ImportTransazioni";
+import Smartphone from "./pages/Smartphone";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
@@ -155,6 +156,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <FattureFornitori />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/smartphone"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Smartphone />
                   </Layout>
                 </ProtectedRoute>
               }
