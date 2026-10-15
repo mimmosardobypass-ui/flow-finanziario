@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.smartphone_vendite_stato() FROM public, anon, authenticated;

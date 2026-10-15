@@ -1,0 +1,1 @@
+- Smartphone section: pure parsing/formulas live in src/lib/smartphone (tested in tests/smartphone.test.ts with bun test); sale/import writes go through the smartphone_* RPCs so piece status stays consistent.

@@ -149,3 +149,16 @@
     font-weight: bold;
   }
 }
+
+/* Tabelle gestionali della sezione Smartphone */
+@layer components {
+  .tg-wrap { @apply w-full overflow-x-auto rounded-md border border-border; }
+  .tg { @apply w-full border-collapse text-[13px]; }
+  .tg thead th { @apply bg-primary text-primary-foreground font-semibold text-left px-2 py-1.5 whitespace-nowrap border-r border-primary-foreground/20; }
+  .tg tbody td { @apply px-2 py-1 border-r border-border align-middle; }
+  .tg tbody tr:nth-child(even) { @apply bg-muted/50; }
+  .tg tbody tr:hover { @apply bg-accent; }
+  .tg tfoot td { @apply bg-primary text-primary-foreground font-semibold px-2 py-1.5 border-r border-primary-foreground/20 whitespace-nowrap; }
+  .tg .num { @apply text-right tabular-nums whitespace-nowrap; }
+  .tg thead th.num { @apply text-right; }
+}
