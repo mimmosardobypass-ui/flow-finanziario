@@ -35,6 +35,7 @@ import {
   TransactionWithCategory,
 } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
+import { useContiRiepilogo } from "@/hooks/useConti";
 import { useRecalculateAllSuggestions } from "@/hooks/useReconciliationSuggestions";
 import { toast } from "@/hooks/use-toast";
 
@@ -163,6 +164,13 @@ export default function Transactions() {
     isFetchingNextPage,
   } = useFilteredTransactions(filters);
   const transactions = allTransactions;
+  const filtroClientSide =
+    filters.reconciliation === "with_documents" || filters.reconciliation === "partially_covered";
+  const { data: totaliServer } = useFilteredTotals(filters, !filtroClientSide);
+  const { data: contiRiepilogo = [] } = useContiRiepilogo();
+  const contoSelezionato = filters.contoId
+    ? contiRiepilogo.find((c) => c.id === filters.contoId)
+    : undefined;
   const { data: coperturaMap } = useMovimentiCopertura();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -301,12 +309,7 @@ export default function Transactions() {
   const isGiroconto = (t: TransactionWithCategory) =>
     !!(t as any).transfer_id || (t as any).reconciliation_type === "transfer";
 
-  const girocontiEsclusi = useMemo(
-    () => (includiGiroconti ? 0 : displayedTransactions.filter(isGiroconto).length),
-    [displayedTransactions, includiGiroconti],
-  );
-
-  const totals = useMemo(() => {
+  const totaliLocali = useMemo(() => {
     const base = includiGiroconti
       ? displayedTransactions
       : displayedTransactions.filter((t) => !isGiroconto(t));
@@ -320,8 +323,30 @@ export default function Transactions() {
       entrate,
       uscite,
       saldo: entrate - uscite,
+      conteggio: displayedTransactions.length,
+      girocontiEsclusi: includiGiroconti ? 0 : displayedTransactions.length - base.length,
     };
   }, [displayedTransactions, includiGiroconti]);
+
+  const totals = useMemo(() => {
+    if (filtroClientSide || !totaliServer) return totaliLocali;
+    return includiGiroconti
+      ? {
+          entrate: totaliServer.entrate,
+          uscite: totaliServer.uscite,
+          saldo: totaliServer.saldo,
+          conteggio: totaliServer.conteggio,
+          girocontiEsclusi: 0,
+        }
+      : {
+          entrate: totaliServer.entrateSenzaGiro,
+          uscite: totaliServer.usciteSenzaGiro,
+          saldo: totaliServer.saldoSenzaGiro,
+          conteggio: totaliServer.conteggio,
+          girocontiEsclusi: totaliServer.giroconti,
+        };
+  }, [filtroClientSide, totaliServer, totaliLocali, includiGiroconti]);
+  const girocontiEsclusi = totals.girocontiEsclusi;
 
   const [loadingAll, setLoadingAll] = useState(false);
   const handleLoadAll = async () => {
@@ -493,7 +518,7 @@ export default function Transactions() {
         <div className="space-y-2 print:hidden">
           <div className="flex flex-wrap gap-4 items-center text-sm">
             <span className="text-muted-foreground">
-              {displayedTransactions.length} transazion{displayedTransactions.length === 1 ? "e" : "i"}
+              {totals.conteggio} transazion{totals.conteggio === 1 ? "e" : "i"}
             </span>
             <span className="text-success font-medium">
               Entrate: +€{totals.entrate.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
@@ -504,6 +529,15 @@ export default function Transactions() {
             <span className={`font-bold ${totals.saldo >= 0 ? "text-success" : "text-destructive"}`}>
               Saldo: {totals.saldo >= 0 ? "+" : ""}€{totals.saldo.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
             </span>
+            {contoSelezionato && (
+              <span className="rounded-md border bg-muted/50 px-2.5 py-1">
+                <span className="text-muted-foreground">Saldo del conto: </span>
+                <span className={`font-semibold ${contoSelezionato.saldo_attuale >= 0 ? "text-success" : "text-destructive"}`}>
+                  {contoSelezionato.saldo_attuale.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                </span>
+                <span className="ml-1 text-xs text-muted-foreground">(include i giroconti)</span>
+              </span>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -524,7 +558,7 @@ export default function Transactions() {
             )}
           </div>
 
-          {hasNextPage && (
+          {filtroClientSide && hasNextPage && (
             <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
               <span>
