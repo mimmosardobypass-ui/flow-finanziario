@@ -15,6 +15,7 @@ import Scadenziario from "./pages/Scadenziario";
 import Conti from "./pages/Conti";
 import Bilancio from "./pages/Bilancio";
 import Finanziamenti from "./pages/Finanziamenti";
+import Rottamazioni from "./pages/Rottamazioni";
 import Regole from "./pages/Regole";
 import RiconciliazioneIntelligente from "./pages/RiconciliazioneIntelligente";
 import FattureFornitori from "./pages/FattureFornitori";
@@ -116,6 +117,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <Finanziamenti />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/rottamazioni"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Rottamazioni />
                   </Layout>
                 </ProtectedRoute>
               }

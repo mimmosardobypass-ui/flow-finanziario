@@ -17,6 +17,8 @@ interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   scadenziarioId?: string | null;
+  /** Se indicato, mostra solo le proposte dei piani di questo gruppo. */
+  gruppo?: "finanziamento" | "rottamazione";
 }
 
 const GRUPPI: { chiave: string; titolo: string; classe: string }[] = [
@@ -25,9 +27,14 @@ const GRUPPI: { chiave: string; titolo: string; classe: string }[] = [
   { chiave: "bassa", titolo: "Bassa", classe: "border-border bg-muted text-muted-foreground" },
 ];
 
-export function AbbinaRateDialog({ open, onOpenChange, scadenziarioId }: Props) {
-  const { data: proposte = [], isLoading } = useProposteRate(scadenziarioId ?? null, open);
+export function AbbinaRateDialog({ open, onOpenChange, scadenziarioId, gruppo }: Props) {
+  const { data: tutteProposte = [], isLoading } = useProposteRate(scadenziarioId ?? null, open);
   const { data: contratti = [] } = useFinanziamenti();
+  const proposte = useMemo(() => {
+    if (!gruppo) return tutteProposte;
+    const ids = new Set(contratti.filter((c) => c.gruppo === gruppo).map((c) => c.id));
+    return tutteProposte.filter((p) => ids.has(p.scadenziario_id));
+  }, [tutteProposte, contratti, gruppo]);
   const collega = useCollegaRata();
   const [selezione, setSelezione] = useState<Record<string, boolean>>({});
   const [inCorso, setInCorso] = useState(false);
