@@ -1051,6 +1051,7 @@ export type Database = {
           fido: number | null
           forma: string | null
           giorno_addebito: number | null
+          gruppo: string
           id: string
           importo_rata: number | null
           importo_totale: number
@@ -1085,6 +1086,7 @@ export type Database = {
           fido?: number | null
           forma?: string | null
           giorno_addebito?: number | null
+          gruppo?: string
           id?: string
           importo_rata?: number | null
           importo_totale: number
@@ -1119,6 +1121,7 @@ export type Database = {
           fido?: number | null
           forma?: string | null
           giorno_addebito?: number | null
+          gruppo?: string
           id?: string
           importo_rata?: number | null
           importo_totale?: number
@@ -1716,6 +1719,7 @@ export type Database = {
           fido: number | null
           forma: string | null
           giorno_addebito: number | null
+          gruppo: string | null
           id: string | null
           importo_rata: number | null
           importo_totale: number | null
