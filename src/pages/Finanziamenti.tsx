@@ -163,7 +163,12 @@ export default function Finanziamenti() {
   const oggi = new Date();
   const limite30 = format(addDays(oggi, 30), "yyyy-MM-dd");
   const oggiISO = format(oggi, "yyyy-MM-dd");
-  const prossime30 = rateAperte.filter(
+  const idsFinanziamenti = useMemo(() => new Set(finanziamenti.map((c) => c.id)), [finanziamenti]);
+  const rateAperteFinanziamenti = useMemo(
+    () => rateAperte.filter((r) => idsFinanziamenti.has(r.scadenziario_id)),
+    [rateAperte, idsFinanziamenti],
+  );
+  const prossime30 = rateAperteFinanziamenti.filter(
     (r) => r.data_scadenza >= oggiISO && r.data_scadenza <= limite30,
   );
   const totale30 = prossime30.reduce((s, r) => s + r.importo, 0);
