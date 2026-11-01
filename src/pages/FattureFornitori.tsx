@@ -40,18 +40,8 @@ import {
 import { useTransactions } from "@/hooks/useTransactions";
 import { RicevuteTab } from "@/components/fatture/RicevuteTab";
 import { SituazioneTab } from "@/components/fatture/SituazioneTab";
+import { EmesseTab, filtraEmesse } from "@/components/fatture/EmesseTab";
 import { PagamentiFattureCard } from "@/components/riconciliazione/PagamentiFattureCard";
-
-function EmesseTab() {
-  return (
-    <Card>
-      <CardContent className="py-16 text-center">
-        <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
-        <p className="text-sm text-muted-foreground">Nessuna fattura emessa nel registro</p>
-      </CardContent>
-    </Card>
-  );
-}
 
 const fmtEur = (n: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n || 0);
@@ -238,13 +228,15 @@ export default function FattureFornitori() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: docsPassivi = [] } = useDocumentiSaldi("passiva");
+  const { data: docsAttivi = [] } = useDocumentiSaldi("attiva");
   const trovati = useMemo(() => {
+    if (tab === "emesse") return filtraEmesse(docsAttivi, search).length;
     const q = search.trim().toLowerCase();
     if (!q) return docsPassivi.length;
     return docsPassivi.filter((d) =>
       `${d.controparte ?? ""} ${d.numero_documento ?? ""}`.toLowerCase().includes(q)
     ).length;
-  }, [docsPassivi, search]);
+  }, [docsPassivi, docsAttivi, search, tab]);
 
   const { data: fattureRaw = [], isLoading } = useFattureFornitori({
     stato,
@@ -344,7 +336,7 @@ export default function FattureFornitori() {
         </TabsContent>
 
         <TabsContent value="emesse">
-          <EmesseTab />
+          <EmesseTab search={search} />
         </TabsContent>
 
         {/* TAB FORNITORI */}

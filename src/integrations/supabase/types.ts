@@ -2007,6 +2007,14 @@ export type Database = {
         }
         Returns: Json
       }
+      conferma_incasso_fattura_emessa: {
+        Args: {
+          p_fattura_id: string
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       count_categorization_rule_matches: {
         Args: { p_rule_id: string; p_user_id: string }
         Returns: number
@@ -2198,6 +2206,25 @@ export type Database = {
         }
         Returns: Json
       }
+      import_fattura_sdi_attiva: {
+        Args: {
+          p_cliente: string
+          p_condizioni_pagamento: string
+          p_data_documento: string
+          p_data_notifica: string
+          p_data_scadenza: string
+          p_identificativo_sdi: string
+          p_imponibile: number
+          p_importo_scadenza: number
+          p_nome_file: string
+          p_numero_documento: string
+          p_piva_cliente: string
+          p_tipo: string
+          p_totale: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
       imputa_pagamento_rate: {
         Args: {
           p_confidenza?: string
@@ -2306,6 +2333,23 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      trova_incassi_fatture_emesse: {
+        Args: { p_fattura_id?: string; p_user_id: string }
+        Returns: {
+          cliente: string
+          conto: string
+          data_documento: string
+          data_movimento: string
+          descrizione: string
+          fattura_id: string
+          giorni: number
+          importo_movimento: number
+          nome_in_descrizione: boolean
+          numero_documento: string
+          residuo: number
+          transaction_id: string
+        }[]
       }
       trova_pagamenti_cumulativi: {
         Args: { p_scadenziario_id?: string; p_user_id: string }
