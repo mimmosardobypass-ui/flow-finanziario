@@ -64,8 +64,19 @@ export default function Finanziamenti() {
   const [per, setPer] = useState<string>("tutti");
   const [stato, setStato] = useState<FiltroStato>("attivi");
 
-  const attivi = contratti.filter((c) => c.stato === "attivo");
-  const daVerificare = contratti.filter((c) => c.da_verificare);
+  // L'elenco principale e tutti i riepiloghi considerano solo i finanziamenti;
+  // le rottamazioni hanno una sezione separata in fondo.
+  const finanziamenti = useMemo(
+    () => contratti.filter((c) => c.gruppo !== "rottamazione"),
+    [contratti],
+  );
+  const rottamazioni = useMemo(
+    () => contratti.filter((c) => c.gruppo === "rottamazione"),
+    [contratti],
+  );
+
+  const attivi = finanziamenti.filter((c) => c.stato === "attivo");
+  const daVerificare = finanziamenti.filter((c) => c.da_verificare);
 
   const debitoResiduo = attivi.reduce((s, c) => s + c.residuo_da_pagare, 0);
   const rateAlMese = attivi.reduce((s, c) => s + (c.importo_rata ?? 0), 0);
