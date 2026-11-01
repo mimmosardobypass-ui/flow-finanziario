@@ -317,7 +317,7 @@ export default function Finanziamenti() {
       <AndamentoFinanziamenti
         contratti={finanziamenti}
         contrattiFiltrati={elenco}
-        rate={rateAperte}
+        rate={rateAperteFinanziamenti}
         oggi={oggiISO}
       />
 
