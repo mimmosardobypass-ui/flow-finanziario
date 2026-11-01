@@ -102,7 +102,7 @@ export function useFilteredTransactions(filters: TransactionFilters) {
         filters.reconciliation !== "partially_covered"
       ) {
         if (filters.reconciliation === "not_reconciled") {
-          q = q.in("reconciliation_status", ["none", "suggested"]);
+          q = q.in("reconciliation_status", ["none", "suggested"]).is("rata_id", null);
         } else {
           q = q.eq("reconciliation_status", filters.reconciliation);
         }
