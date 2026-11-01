@@ -45,9 +45,11 @@ const eur = (n: number) =>
 function RicIndicator({
   status,
   copertura,
+  rataId,
 }: {
   status: string;
   copertura?: { coperto: number; residuo: number; documenti_collegati: number };
+  rataId?: string | null;
 }) {
   const docs = copertura?.documenti_collegati ?? 0;
   const residuo = copertura?.residuo ?? 0;
@@ -75,6 +77,9 @@ function RicIndicator({
       </span>
     );
     tooltip = `Coperto per ${eur(coperto)} su ${eur(coperto + residuo)}, restano ${eur(residuo)}`;
+  } else if (rataId) {
+    dot = <span className="block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: "#7c3aed" }} />;
+    tooltip = "Pagamento rata di finanziamento";
   } else {
     dot = <span className="block h-3.5 w-3.5 rounded-full border-2 border-muted-foreground" />;
     tooltip = "Non riconciliato";
@@ -251,7 +256,7 @@ export default function Transactions() {
     if (filters.reconciliation && filters.reconciliation !== "all") {
       queryParts.push(
         filters.reconciliation === "not_reconciled"
-          ? "reconciliation_status IN ('none', 'suggested')"
+          ? "reconciliation_status IN ('none', 'suggested') AND rata_id IS NULL"
           : `reconciliation_status = '${filters.reconciliation}'`
       );
     }
@@ -664,6 +669,7 @@ export default function Transactions() {
                         <RicIndicator
                           status={(transaction as any).reconciliation_status || "none"}
                           copertura={coperturaMap?.get(transaction.id)}
+                          rataId={transaction.rata_id}
                         />
                       </TableCell>
                       <TableCell className="print:hidden">
