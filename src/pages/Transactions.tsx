@@ -78,7 +78,7 @@ function RicIndicator({
     );
     tooltip = `Coperto per ${eur(coperto)} su ${eur(coperto + residuo)}, restano ${eur(residuo)}`;
   } else if (rataId) {
-    dot = <span className="block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: "#7c3aed" }} />;
+    dot = <span className="block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: "#12b76a" }} />;
     tooltip = "Pagamento rata di finanziamento";
   } else {
     dot = <span className="block h-3.5 w-3.5 rounded-full border-2 border-muted-foreground" />;
