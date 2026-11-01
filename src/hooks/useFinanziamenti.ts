@@ -61,6 +61,7 @@ export interface Finanziamento {
   data_fine: string | null;
   differenza_residuo_ente: number | null;
   da_verificare: boolean;
+  gruppo: string;
 }
 
 function mapFinanziamento(r: Record<string, unknown>): Finanziamento {
@@ -86,6 +87,7 @@ function mapFinanziamento(r: Record<string, unknown>): Finanziamento {
     differenza_residuo_ente: n(r.differenza_residuo_ente),
     da_verificare: !!r.da_verificare,
     stato: (r.stato as string) ?? "attivo",
+    gruppo: (r.gruppo as string) ?? "finanziamento",
   };
 }
 
