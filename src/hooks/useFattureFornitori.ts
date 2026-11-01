@@ -314,6 +314,7 @@ export function useImportFattureExcel() {
       let imported = 0;
       let skipped = 0;
       let linked = 0;
+      let emesse = 0;
       const errors: string[] = [];
 
       for (const row of rows) {
@@ -344,7 +345,8 @@ export function useImportFattureExcel() {
             continue;
           }
           const res = data as any;
-          if (res?.status === "skipped") skipped++;
+          if (res?.status === "skipped" && res?.reason === "fattura_emessa") emesse++;
+          else if (res?.status === "skipped") skipped++;
           else if (res?.status === "imported") {
             imported++;
             if (res?.transaction_id) linked++;
@@ -354,16 +356,132 @@ export function useImportFattureExcel() {
         }
       }
 
-      return { imported, skipped, linked, errors };
+      return { imported, skipped, linked, emesse, errors };
     },
     onSuccess: (r) => {
       toast.success(
-        `Importate ${r.imported} fatture · ${r.linked} già collegate a un pagamento · ${r.skipped} duplicate saltate`
+        `Importate ${r.imported} fatture · ${r.linked} già collegate a un pagamento · ${r.skipped} duplicate saltate` +
+          (r.emesse > 0 ? ` · ${r.emesse} fatture emesse ignorate: importale dalla scheda Emesse` : "")
       );
       qc.invalidateQueries({ queryKey: ["fatture-fornitori"] });
       qc.invalidateQueries({ queryKey: ["fornitori"] });
     },
     onError: (e: any) => toast.error(`Import fallito: ${e?.message ?? e}`),
+  });
+}
+
+function sdiToString(v: any): string {
+  if (typeof v === "number") return v.toFixed(0);
+  return String(v).trim().replace(/\.0+$/, "");
+}
+
+export function useImportFattureEmesseExcel() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      if (!user) throw new Error("Non autenticato");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: null });
+      let imported = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+      for (const row of rows) {
+        try {
+          const totale = row["Totale"];
+          if (totale === null || totale === undefined || totale === "") continue;
+          const sdi = row["Identificativo SDI"];
+          if (sdi === null || sdi === undefined || sdi === "") continue;
+          const { data, error } = await supabase.rpc("import_fattura_sdi_attiva", {
+            p_user_id: user.id,
+            p_numero_documento: row["Numero Documento"] ? String(row["Numero Documento"]) : null,
+            p_identificativo_sdi: sdiToString(sdi),
+            p_data_documento: parseDate(row["Data Documento"]) ?? new Date().toISOString().slice(0, 10),
+            p_data_notifica: parseDate(row["Data Notifica"]),
+            p_tipo: row["Tipo"] ?? "Fattura",
+            p_cliente: row["Mittente"] ?? "",
+            p_piva_cliente: row["P. Iva"] ? String(row["P. Iva"]) : null,
+            p_totale: Number(totale),
+            p_imponibile: row["Imponibile"] ? Number(row["Imponibile"]) : null,
+            p_condizioni_pagamento: row["Condizioni Pagamento Scadenza"] ?? null,
+            p_data_scadenza: parseDate(row["Scadenza"]),
+            p_importo_scadenza: row["Importo Scadenza"] ? Number(row["Importo Scadenza"]) : null,
+            p_nome_file: row["Nome File"] ?? null,
+          } as any);
+          if (error) { errors.push(error.message); continue; }
+          const res = data as any;
+          if (res?.status === "skipped") skipped++;
+          else if (res?.status === "imported") imported++;
+        } catch (e: any) {
+          errors.push(e?.message ?? "errore");
+        }
+      }
+      return { imported, skipped, errors };
+    },
+    onSuccess: (r) => {
+      toast.success(`Importate ${r.imported} fatture emesse · ${r.skipped} duplicate saltate`);
+      if (r.errors.length) toast.error(`${r.errors.length} righe con errore: ${r.errors[0]}`);
+      qc.invalidateQueries({ queryKey: ["documenti-saldi"] });
+      qc.invalidateQueries({ queryKey: ["fatture-fornitori"] });
+    },
+    onError: (e: any) => toast.error(`Import fallito: ${e?.message ?? e}`),
+  });
+}
+
+export interface IncassoProposta {
+  fattura_id: string;
+  cliente: string | null;
+  numero_documento: string | null;
+  data_documento: string | null;
+  residuo: number;
+  transaction_id: string;
+  data_movimento: string | null;
+  importo_movimento: number;
+  descrizione: string | null;
+  conto: string | null;
+  giorni: number | null;
+  nome_in_descrizione: boolean;
+}
+
+export function useIncassiFattureEmesse() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["incassi-fatture-emesse", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase.rpc("trova_incassi_fatture_emesse", { p_user_id: user.id });
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({
+        ...r,
+        residuo: Number(r.residuo ?? 0),
+        importo_movimento: Number(r.importo_movimento ?? 0),
+        nome_in_descrizione: !!r.nome_in_descrizione,
+      })) as IncassoProposta[];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useConfermaIncassoFatturaEmessa() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ fattura_id, transaction_id }: { fattura_id: string; transaction_id: string }) => {
+      if (!user) throw new Error("Non autenticato");
+      const { data, error } = await supabase.rpc("conferma_incasso_fattura_emessa", {
+        p_user_id: user.id, p_fattura_id: fattura_id, p_transaction_id: transaction_id,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Incasso confermato");
+      ["documenti-saldi", "fatture-fornitori", "transactions", "filtered-transactions",
+        "movimenti-copertura", "incassi-fatture-emesse"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+    },
+    onError: (e: any) => toast.error(`Conferma fallita: ${e?.message ?? e}`),
   });
 }
 
