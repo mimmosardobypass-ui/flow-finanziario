@@ -8,7 +8,8 @@ import { fmtEur, fmtData } from "@/components/finanziamenti/utils";
 
 export function FinanziamentiCard() {
   const navigate = useNavigate();
-  const { data: contratti = [] } = useFinanziamenti();
+  const { data: tutti = [] } = useFinanziamenti();
+  const contratti = tutti.filter((c) => c.gruppo !== "rottamazione");
 
   const attivi = contratti.filter((c) => c.stato === "attivo");
   const debito = attivi.reduce((s, c) => s + c.residuo_da_pagare, 0);

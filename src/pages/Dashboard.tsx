@@ -69,6 +69,7 @@ import { RecentTransactionsCard } from "@/components/dashboard/RecentTransaction
 import { PeriodComparisonCard } from "@/components/dashboard/PeriodComparisonCard";
 import { InsightsCard } from "@/components/dashboard/InsightsCard";
 import { FinanziamentiCard } from "@/components/dashboard/FinanziamentiCard";
+import { RottamazioniCard } from "@/components/dashboard/RottamazioniCard";
 
 // Custom Tooltip for the chart
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -386,7 +387,10 @@ export default function Dashboard() {
 
       {/* Finanziamenti */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <FinanziamentiCard />
+        <div className="space-y-4">
+          <FinanziamentiCard />
+          <RottamazioniCard />
+        </div>
       </div>
 
       {/* Recent Transactions */}
