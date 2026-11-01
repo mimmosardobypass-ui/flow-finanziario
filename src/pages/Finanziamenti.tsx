@@ -332,91 +332,62 @@ export default function Finanziamenti() {
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {elenco.map((c) => {
-                const perc = c.rate_totali ? (c.rate_pagate / c.rate_totali) * 100 : 0;
-                const percScadute = c.rate_totali ? (c.rate_scadute / c.rate_totali) * 100 : 0;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setAperto(c)}
-                    className="flex w-full flex-col gap-3 p-4 text-left transition-colors hover:bg-muted/50 md:flex-row md:items-center"
-                  >
-                    <div className="flex min-w-0 flex-1 items-center gap-3 md:max-w-[28%]">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                        {iniziali(c.societa_finanziaria)}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">
-                          {titoloContratto(c.societa_finanziaria, c.nome)}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {[
-                            c.beneficiario,
-                            [c.banca, c.nome_conto].filter(Boolean).join(" "),
-                            c.importo_rata ? `${fmtEur(c.importo_rata)}/mese` : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="min-w-0 flex-1 md:max-w-[24%]">
-                      {c.rate_totali === 0 ? (
-                        <>
-                          <div className="h-2 w-full rounded-full border border-dashed border-border" />
-                          <p className="mt-1 text-xs text-muted-foreground">Piano da caricare</p>
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
-                            <div className="bg-primary" style={{ width: `${perc}%` }} />
-                            <div className="bg-destructive/40" style={{ width: `${percScadute}%` }} />
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {c.rate_pagate}/{c.rate_totali} rate · fine {fmtMeseAnno(c.data_fine)}
-                          </p>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="md:w-[14%]">
-                      <p className="text-xs text-muted-foreground md:hidden">Residuo</p>
-                      <p className="text-sm font-semibold text-foreground">
-                        {fmtEur(c.residuo_da_pagare)}
-                      </p>
-                    </div>
-
-                    <div className="md:w-[16%]">
-                      <p className="text-xs text-muted-foreground">Prossima rata</p>
-                      {c.prossima_scadenza ? (
-                        <p className="text-sm text-foreground">
-                          {fmtEur(c.prossima_importo)} ·{" "}
-                          <span className={cn(c.prossima_stimata && "italic")}>
-                            {fmtData(c.prossima_scadenza)}
-                          </span>
-                          {c.prossima_stimata && (
-                            <span className="ml-1 text-xs text-muted-foreground">stimata</span>
-                          )}
-                        </p>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">—</p>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-1 md:w-[18%] md:justify-end">
-                      {pillsContratto(c).map((p) => (
-                        <Pill key={p.testo} testo={p.testo} classe={p.classe} />
-                      ))}
-                    </div>
-                  </button>
-                );
-              })}
+              {elenco.map((c) => (
+                <RigaContratto key={c.id} c={c} onApri={setAperto} />
+              ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Rottamazioni */}
+      {rottamazioni.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Rottamazioni</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">Debito residuo</p>
+                <p className="font-semibold text-foreground">{fmtEur(residuoRottamazioni)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Prossima rata</p>
+                <p className="font-semibold text-foreground">
+                  {prossimaRottamazione?.prossima_scadenza
+                    ? `${fmtEur(prossimaRottamazione.prossima_importo)} · ${fmtData(prossimaRottamazione.prossima_scadenza)}`
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Rate scadute non pagate</p>
+                <p
+                  className={cn(
+                    "font-semibold",
+                    rateScaduteRottamazioni > 0 ? "text-destructive" : "text-foreground",
+                  )}
+                >
+                  {rateScaduteRottamazioni}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                Rottamazione-quinquies: la tolleranza di 5 giorni vale solo per l'ultima rata. Due
+                rate non pagate, anche non consecutive, fanno decadere dal beneficio. Paga entro la
+                scadenza.
+              </p>
+            </div>
+            <div className="divide-y divide-border rounded-lg border border-border">
+              {rottamazioni.map((c) => (
+                <RigaContratto key={c.id} c={c} onApri={setAperto} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Pannelli */}
       <div>
