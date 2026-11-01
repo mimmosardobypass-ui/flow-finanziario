@@ -16,6 +16,7 @@ import Conti from "./pages/Conti";
 import Bilancio from "./pages/Bilancio";
 import Finanziamenti from "./pages/Finanziamenti";
 import Rottamazioni from "./pages/Rottamazioni";
+import BnB from "./pages/BnB";
 import Regole from "./pages/Regole";
 import RiconciliazioneIntelligente from "./pages/RiconciliazioneIntelligente";
 import FattureFornitori from "./pages/FattureFornitori";
@@ -117,6 +118,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <Finanziamenti />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/bnb"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <BnB />
                   </Layout>
                 </ProtectedRoute>
               }
