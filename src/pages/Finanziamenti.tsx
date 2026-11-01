@@ -90,18 +90,26 @@ export default function Finanziamenti() {
   const totale30 = prossime30.reduce((s, r) => s + r.importo, 0);
 
   const beneficiari = useMemo(
-    () => [...new Set(contratti.map((c) => c.beneficiario).filter(Boolean))] as string[],
-    [contratti],
+    () => [...new Set(finanziamenti.map((c) => c.beneficiario).filter(Boolean))] as string[],
+    [finanziamenti],
   );
 
   const elenco = useMemo(() => {
-    return contratti.filter((c) => {
+    return finanziamenti.filter((c) => {
       if (per !== "tutti" && c.beneficiario !== per) return false;
       if (stato === "attivi") return c.stato === "attivo";
       if (stato === "estinti") return c.stato === "estinto";
       return c.da_verificare;
     });
-  }, [contratti, per, stato]);
+  }, [finanziamenti, per, stato]);
+
+  // Riepilogo rottamazioni: debito residuo, prossima rata e rate scadute.
+  const rottamazioniAttive = rottamazioni.filter((c) => c.stato === "attivo");
+  const residuoRottamazioni = rottamazioniAttive.reduce((s, c) => s + c.residuo_da_pagare, 0);
+  const rateScaduteRottamazioni = rottamazioniAttive.reduce((s, c) => s + c.rate_scadute, 0);
+  const prossimaRottamazione = rottamazioniAttive
+    .filter((c) => c.prossima_scadenza && c.prossima_scadenza >= oggiISO)
+    .sort((a, b) => (a.prossima_scadenza ?? "").localeCompare(b.prossima_scadenza ?? ""))[0];
 
   return (
     <div className="space-y-6">
