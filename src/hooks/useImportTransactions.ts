@@ -169,6 +169,7 @@ export function useImportTransactions() {
 
       await queryClient.invalidateQueries({ queryKey: ["transactions"] });
       await queryClient.invalidateQueries({ queryKey: ["filtered-transactions"] });
+      await queryClient.invalidateQueries({ queryKey: ["transactions", "filtered-totals"] });
       await queryClient.invalidateQueries({ queryKey: ["categories"] });
 
       // Auto-generate reconciliation suggestions for imported transactions

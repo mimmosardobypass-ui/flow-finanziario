@@ -267,6 +267,7 @@ export function useApplyRuleToExisting() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["filtered-transactions"] });
+      qc.invalidateQueries({ queryKey: ["transactions", "filtered-totals"] });
       qc.invalidateQueries({ queryKey: ["rule_match_counts"] });
     },
   });

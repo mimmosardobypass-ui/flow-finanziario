@@ -27,6 +27,7 @@ import { DuplicatesDialog } from "@/components/DuplicatesDialog";
 
 import { ReconciliationSheet } from "@/components/ReconciliationSheet";
 import {
+  useFilteredTotals,
   useFilteredTransactions,
   TransactionFilters as FiltersType,
 } from "@/hooks/useFilteredTransactions";
